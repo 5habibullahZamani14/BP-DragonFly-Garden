@@ -88,6 +88,17 @@ const initializeDatabase = async () => {
     )
   `);
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS order_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      changed_by TEXT,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    )
+  `);
+
   await ensureColumn("categories", "display_order", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("menu_items", "description", "TEXT");
   await ensureColumn("menu_items", "is_available", "INTEGER NOT NULL DEFAULT 1");
@@ -99,6 +110,10 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");
+  await ensureColumn("order_status_history", "order_id", "INTEGER NOT NULL");
+  await ensureColumn("order_status_history", "status", "TEXT NOT NULL");
+  await ensureColumn("order_status_history", "changed_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumn("order_status_history", "changed_by", "TEXT");
 
   await run(`
     UPDATE tables
@@ -118,6 +133,8 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_order_items_order", "order_items", "order_id");
   await ensureIndex("idx_order_items_menu_item", "order_items", "menu_item_id");
   await ensureIndex("idx_tables_qr_code", "tables", "qr_code");
+  await ensureIndex("idx_order_status_history_order", "order_status_history", "order_id, changed_at DESC");
+  await ensureIndex("idx_order_status_history_status", "order_status_history", "status, changed_at DESC");
 
   console.log("Database schema ready");
 };

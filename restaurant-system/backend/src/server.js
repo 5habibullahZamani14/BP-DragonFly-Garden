@@ -3,6 +3,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const { errorHandler, notFoundHandler } = require("./middleware/validation");
+const { attachRoleMiddleware } = require("./middleware/role-based-access");
 const menuRoutes = require("./routes/menuRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const tableRoutes = require("./routes/tableRoutes");
@@ -15,6 +16,9 @@ const hasFrontendBuild = fs.existsSync(frontendDistPath);
 
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
+
+// Attach role information to all requests
+app.use(attachRoleMiddleware);
 
 app.use("/menu", menuRoutes);
 app.use("/orders", orderRoutes);

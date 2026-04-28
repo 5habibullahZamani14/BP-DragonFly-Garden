@@ -41,6 +41,8 @@ const {
   validateOrderQuery
 } = require("../middleware/validation");
 
+const { requireKitchenCrew, requireCustomerOrWaiter } = require("../middleware/role-based-access");
+
 /*
  * Define a POST route on the root path (/)
  * URL: POST /orders
@@ -77,13 +79,13 @@ router.get("/:id", validateOrderIdParam, asyncHandler(getOrder));
 /*
  * Define a PATCH route to update order status (/:id/status)
  * URL: PATCH /orders/123/status
- * Middleware chain: validateStatusUpdate → updateOrderStatus
- * First validates the status, then updates the order if valid
+ * Middleware chain: requireKitchenCrew → validateStatusUpdate → updateOrderStatus
+ * First checks that user is kitchen crew, validates the status, then updates the order
  * Request body should contain:
  *   - status: The new status (pending, confirmed, cooking, ready, or completed)
  * Returns a confirmation of the status update
  */
-router.patch("/:id/status", validateOrderIdParam, validateStatusUpdate, asyncHandler(updateOrderStatus));
+router.patch("/:id/status", requireKitchenCrew, validateOrderIdParam, validateStatusUpdate, asyncHandler(updateOrderStatus));
 
 /*
  * Export the router

@@ -1,16 +1,8 @@
 const db = require("../database/db");
 const printerService = require("../services/printerService");
 const { createHttpError } = require("../middleware/validation");
-
-const STATUS_TRANSITIONS = {
-  pending: ["confirmed"],
-  confirmed: ["cooking", "ready"],
-  cooking: ["ready"],
-  ready: ["completed"],
-  completed: []
-};
-
-const KITCHEN_VISIBLE_STATUSES = ["pending", "confirmed", "cooking", "ready"];
+const { ORDER_STATUS, STATUS_TRANSITIONS, KITCHEN_VISIBLE_STATUSES } = require("../constants/order-status");
+const { recordStatusChange, getStatusHistory } = require("../utils/order-status-history");
 
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -155,6 +147,9 @@ const createOrder = async (req, res) => {
         [orderInsert.lastID, item.menu_item_id, item.quantity, menuItem.price, item.notes]
       );
     }
+
+    // Record initial status in history
+    await recordStatusChange(orderInsert.lastID, ORDER_STATUS.PENDING, "system");
 
     await run("COMMIT");
 
@@ -322,11 +317,19 @@ const updateOrderStatus = async (req, res) => {
   }
 
   await run(`UPDATE orders SET status = ? WHERE id = ?`, [nextStatus, orderId]);
+  
+  // Record status change in history
+  await recordStatusChange(orderId, nextStatus, "kitchen_crew");
+  
   const updatedOrder = await fetchOrderById(orderId);
+  
+  // Include status history in response for kitchen crew
+  const statusHistory = await getStatusHistory(orderId);
 
   return res.json({
     message: "Order status updated successfully",
-    order: updatedOrder
+    order: updatedOrder,
+    status_history: statusHistory
   });
 };
 
