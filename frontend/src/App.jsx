@@ -2,54 +2,68 @@ import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
-const ORDER_STAGES = ["pending", "confirmed", "cooking", "ready", "completed"];
+
+const ORDER_STAGES = ["queue", "preparing", "ready"];
 const STATUS_ACTIONS = {
-  pending: ["confirmed"],
-  confirmed: ["cooking", "ready"],
-  cooking: ["ready"],
-  ready: ["completed"],
-  completed: []
+  queue: ["preparing"],
+  preparing: ["ready"],
+  ready: []
 };
+
+const TABLE_QR_PATTERN = /^table-\d+$/;
+const KITCHEN_QR_PATTERN = /^kitchen-crew-[a-z0-9_-]+$/i;
+
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD"
 });
 
 const formatCurrency = (value) => currencyFormatter.format(value);
-const apiUrl = (path) => `${API_BASE}${path}`;
+const apiUrl = (path, qrCode) => {
+  const base = `${API_BASE}${path}`;
+  if (!qrCode) {
+    return base;
+  }
+  const separator = path.includes("?") ? "&" : "?";
+  return `${base}${separator}qr_code=${encodeURIComponent(qrCode)}`;
+};
 
-const getUrlContext = () => {
+const detectRoleFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
+  const qrCode = (params.get("qr") || "").trim().toLowerCase();
 
-  return {
-    view: params.get("view") === "kitchen" ? "kitchen" : "customer",
-    tableId: params.get("table") || "1",
-    qrCode: params.get("qr") || ""
-  };
+  if (KITCHEN_QR_PATTERN.test(qrCode)) {
+    return { role: "kitchen", qrCode };
+  }
+
+  if (TABLE_QR_PATTERN.test(qrCode)) {
+    return { role: "customer", qrCode };
+  }
+
+  return { role: "landing", qrCode: "" };
 };
 
-const setUrlContext = (updates) => {
-  const url = new URL(window.location.href);
+function LandingView() {
+  return (
+    <section className="landing">
+      <p className="eyebrow">Welcome</p>
+      <h1>Restaurant Garden</h1>
+      <p className="hero-copy">
+        Please scan the QR code on your table to view the menu and place your order.
+      </p>
+      <p className="landing__hint">
+        If you'd rather order in person, just press the bell on your table and a waiter will come over.
+      </p>
+    </section>
+  );
+}
 
-  Object.entries(updates).forEach(([key, value]) => {
-    if (value === null || value === undefined || value === "") {
-      url.searchParams.delete(key);
-      return;
-    }
-
-    url.searchParams.set(key, value);
-  });
-
-  window.history.replaceState({}, "", url);
-};
-
-function CustomerView({ notify }) {
-  const initialContext = useMemo(() => getUrlContext(), []);
+function CustomerView({ qrCode, notify }) {
   const [menu, setMenu] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [cart, setCart] = useState([]);
-  const [tableId, setTableId] = useState(initialContext.tableId);
   const [tableInfo, setTableInfo] = useState(null);
+  const [tableError, setTableError] = useState(null);
   const [loadingMenu, setLoadingMenu] = useState(true);
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [activeOrder, setActiveOrder] = useState(null);
@@ -90,15 +104,11 @@ function CustomerView({ notify }) {
   }, [notify]);
 
   useEffect(() => {
-    if (!initialContext.qrCode) {
-      return;
-    }
-
     let cancelled = false;
 
     const resolveTable = async () => {
       try {
-        const response = await fetch(apiUrl(`/tables/qr/${encodeURIComponent(initialContext.qrCode)}`));
+        const response = await fetch(apiUrl(`/tables/qr/${encodeURIComponent(qrCode)}`));
         const data = await response.json();
 
         if (!response.ok) {
@@ -107,11 +117,11 @@ function CustomerView({ notify }) {
 
         if (!cancelled) {
           setTableInfo(data);
-          setTableId(String(data.id));
-          setUrlContext({ table: data.id, qr: data.qr_code });
+          setTableError(null);
         }
       } catch (error) {
         if (!cancelled) {
+          setTableError(error.message);
           notify("error", error.message);
         }
       }
@@ -122,16 +132,16 @@ function CustomerView({ notify }) {
     return () => {
       cancelled = true;
     };
-  }, [initialContext.qrCode, notify]);
+  }, [qrCode, notify]);
 
   useEffect(() => {
-    if (!activeOrder?.id || activeOrder.status === "completed") {
+    if (!activeOrder?.id || activeOrder.status === "ready") {
       return undefined;
     }
 
     const pollOrder = async () => {
       try {
-        const response = await fetch(apiUrl(`/orders/${activeOrder.id}`));
+        const response = await fetch(apiUrl(`/orders/${activeOrder.id}`, qrCode));
         const data = await response.json();
 
         if (!response.ok) {
@@ -148,12 +158,21 @@ function CustomerView({ notify }) {
     return () => window.clearInterval(intervalId);
   }, [activeOrder, notify]);
 
-  const categories = useMemo(() => ["All", ...new Set(menu.map((item) => item.category_name))], [menu]);
+  const categories = useMemo(
+    () => ["All", ...new Set(menu.map((item) => item.category_name))],
+    [menu]
+  );
   const filteredMenu = useMemo(
-    () => (selectedCategory === "All" ? menu : menu.filter((item) => item.category_name === selectedCategory)),
+    () =>
+      selectedCategory === "All"
+        ? menu
+        : menu.filter((item) => item.category_name === selectedCategory),
     [menu, selectedCategory]
   );
-  const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
+  const total = useMemo(
+    () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [cart]
+  );
 
   const addToCart = (item) => {
     setCart((currentCart) => {
@@ -161,7 +180,9 @@ function CustomerView({ notify }) {
 
       if (existing) {
         return currentCart.map((cartItem) =>
-          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+          cartItem.id === item.id
+            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            : cartItem
         );
       }
 
@@ -190,6 +211,11 @@ function CustomerView({ notify }) {
   };
 
   const placeOrder = async () => {
+    if (!tableInfo) {
+      notify("error", "Table QR code has not been verified yet.");
+      return;
+    }
+
     if (cart.length === 0) {
       notify("error", "Add at least one item before checkout.");
       return;
@@ -198,13 +224,11 @@ function CustomerView({ notify }) {
     setSubmittingOrder(true);
 
     try {
-      const response = await fetch(apiUrl("/orders"), {
+      const response = await fetch(apiUrl("/orders", qrCode), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          table_id: Number(tableId),
+          table_id: tableInfo.id,
           items: cart.map((item) => ({
             menu_item_id: item.id,
             quantity: item.quantity,
@@ -229,6 +253,17 @@ function CustomerView({ notify }) {
     }
   };
 
+  if (tableError && !tableInfo) {
+    return (
+      <section className="landing">
+        <p className="eyebrow">Invalid QR code</p>
+        <h1>We couldn't find your table</h1>
+        <p className="hero-copy">{tableError}</p>
+        <p className="landing__hint">Please scan the QR code on your table again, or ask a waiter for help.</p>
+      </section>
+    );
+  }
+
   return (
     <>
       <section className="hero-band">
@@ -241,26 +276,10 @@ function CustomerView({ notify }) {
         </div>
 
         <div className="hero-band__controls">
-          <label className="table-picker">
-            <span>Table</span>
-            <select
-              value={tableId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setTableId(value);
-                setUrlContext({ table: value, qr: tableInfo?.qr_code || null });
-              }}
-              disabled={Boolean(tableInfo)}
-            >
-              {[1, 2, 3, 4, 5].map((tableNumber) => (
-                <option key={tableNumber} value={tableNumber}>
-                  Table {tableNumber}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {tableInfo ? <p className="table-lock">Locked from {tableInfo.table_number} QR</p> : null}
+          <div className="table-lock-card">
+            <span className="section-label">Table</span>
+            <strong>{tableInfo ? tableInfo.table_number : "Verifying..."}</strong>
+          </div>
         </div>
       </section>
 
@@ -271,14 +290,21 @@ function CustomerView({ notify }) {
               <p className="section-label">Current order</p>
               <h2>Order #{activeOrder.id}</h2>
             </div>
-            <p className={`status-badge status-badge--${activeOrder.status}`}>{activeOrder.status}</p>
+            <p className={`status-badge status-badge--${activeOrder.status}`}>
+              {activeOrder.status}
+            </p>
           </div>
 
           <div className="status-track">
             {ORDER_STAGES.map((stage) => {
               const activeIndex = ORDER_STAGES.indexOf(activeOrder.status);
               const stageIndex = ORDER_STAGES.indexOf(stage);
-              const state = activeIndex > stageIndex ? "done" : activeIndex === stageIndex ? "live" : "next";
+              const state =
+                activeIndex > stageIndex
+                  ? "done"
+                  : activeIndex === stageIndex
+                  ? "live"
+                  : "next";
 
               return (
                 <div key={stage} className={`status-step status-step--${state}`}>
@@ -333,7 +359,11 @@ function CustomerView({ notify }) {
 
                 <div className="menu-card__footer">
                   <strong>{formatCurrency(item.price)}</strong>
-                  <button type="button" className="action-button" onClick={() => addToCart(item)}>
+                  <button
+                    type="button"
+                    className="action-button"
+                    onClick={() => addToCart(item)}
+                  >
                     Add
                   </button>
                 </div>
@@ -348,7 +378,9 @@ function CustomerView({ notify }) {
               <p className="section-label">Checkout</p>
               <h2>Your cart</h2>
             </div>
-            <p className="cart-count">{cart.reduce((count, item) => count + item.quantity, 0)} items</p>
+            <p className="cart-count">
+              {cart.reduce((count, item) => count + item.quantity, 0)} items
+            </p>
           </div>
 
           {cart.length === 0 ? (
@@ -366,11 +398,17 @@ function CustomerView({ notify }) {
                   </div>
 
                   <div className="quantity-controls">
-                    <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)}>
+                    <button
+                      type="button"
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                    >
                       -
                     </button>
                     <span>{item.quantity}</span>
-                    <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)}>
+                    <button
+                      type="button"
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    >
                       +
                     </button>
                   </div>
@@ -398,7 +436,7 @@ function CustomerView({ notify }) {
             <button
               type="button"
               className="checkout-button"
-              disabled={submittingOrder || cart.length === 0}
+              disabled={submittingOrder || cart.length === 0 || !tableInfo}
               onClick={placeOrder}
             >
               {submittingOrder ? "Sending order..." : "Submit order"}
@@ -410,9 +448,8 @@ function CustomerView({ notify }) {
   );
 }
 
-function KitchenView({ notify }) {
+function KitchenView({ qrCode, notify }) {
   const [orders, setOrders] = useState([]);
-  const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -423,26 +460,14 @@ function KitchenView({ notify }) {
     }
 
     try {
-      const [ordersResponse, tablesResponse] = await Promise.all([
-        fetch(apiUrl("/orders/kitchen")),
-        fetch(apiUrl("/tables"))
-      ]);
+      const response = await fetch(apiUrl("/orders/kitchen", qrCode));
+      const data = await response.json();
 
-      const [ordersData, tablesData] = await Promise.all([
-        ordersResponse.json(),
-        tablesResponse.json()
-      ]);
-
-      if (!ordersResponse.ok) {
-        throw new Error(ordersData.error || "Unable to load kitchen orders");
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to load kitchen orders");
       }
 
-      if (!tablesResponse.ok) {
-        throw new Error(tablesData.error || "Unable to load tables");
-      }
-
-      setOrders(ordersData);
-      setTables(tablesData);
+      setOrders(data);
       setHasLoadedOnce(true);
     } catch (error) {
       notify("error", error.message);
@@ -462,7 +487,7 @@ function KitchenView({ notify }) {
   }, []);
 
   const groupedOrders = useMemo(() => {
-    return ORDER_STAGES.slice(0, 4).map((status) => ({
+    return ORDER_STAGES.map((status) => ({
       status,
       orders: orders.filter((order) => order.status === status)
     }));
@@ -472,11 +497,9 @@ function KitchenView({ notify }) {
     setUpdatingOrderId(orderId);
 
     try {
-      const response = await fetch(apiUrl(`/orders/${orderId}/status`), {
+      const response = await fetch(apiUrl(`/orders/${orderId}/status`, qrCode), {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
 
@@ -503,23 +526,22 @@ function KitchenView({ notify }) {
           <p className="eyebrow">Kitchen board</p>
           <h1>Live service view</h1>
           <p className="hero-copy">
-            Watch incoming orders, advance each ticket, and print QR cards for table placement.
+            Watch incoming orders and advance each ticket from queue to ready.
           </p>
         </div>
 
         <div className="hero-band__controls hero-band__controls--stack">
-          <button type="button" className="action-button" onClick={loadKitchenData}>
+          <button type="button" className="action-button" onClick={() => loadKitchenData()}>
             Refresh board
           </button>
-          <a className="mode-link" href="/">
-            Open customer view
-          </a>
         </div>
       </section>
 
-      <section className="kitchen-layout">
+      <section className="kitchen-layout kitchen-layout--full">
         <div className="kitchen-board">
-          {loading && !hasLoadedOnce ? <p className="empty-state">Loading kitchen board...</p> : null}
+          {loading && !hasLoadedOnce ? (
+            <p className="empty-state">Loading kitchen board...</p>
+          ) : null}
 
           <div className="kitchen-columns">
             {groupedOrders.map((group) => (
@@ -530,7 +552,9 @@ function KitchenView({ notify }) {
                 </div>
 
                 <div className="kitchen-column__body">
-                  {group.orders.length === 0 ? <p className="empty-state">No orders</p> : null}
+                  {group.orders.length === 0 ? (
+                    <p className="empty-state">No orders</p>
+                  ) : null}
 
                   {group.orders.map((order) => (
                     <article key={order.id} className="ticket-card">
@@ -564,7 +588,7 @@ function KitchenView({ notify }) {
                             disabled={updatingOrderId === order.id}
                             onClick={() => updateStatus(order.id, status)}
                           >
-                            {status}
+                            Mark {status}
                           </button>
                         ))}
                       </div>
@@ -575,59 +599,37 @@ function KitchenView({ notify }) {
             ))}
           </div>
         </div>
-
-        <aside className="qr-panel">
-          <div className="panel-header">
-            <div>
-              <p className="section-label">Table QR</p>
-              <h2>Ready to print</h2>
-            </div>
-          </div>
-
-          <div className="qr-grid">
-            {tables.map((table) => (
-              <article key={table.id} className="qr-card">
-                <div className="qr-card__code" dangerouslySetInnerHTML={{ __html: table.qr_svg }} />
-                <h3>{table.table_number}</h3>
-                <a className="qr-link" href={table.ordering_url} target="_blank" rel="noreferrer">
-                  Open ordering link
-                </a>
-              </article>
-            ))}
-          </div>
-        </aside>
       </section>
     </>
   );
 }
 
 function App() {
-  const initialContext = useMemo(() => getUrlContext(), []);
+  const initial = useMemo(() => detectRoleFromUrl(), []);
   const [message, setMessage] = useState(null);
 
   const notify = (type, text) => {
     setMessage({ type, text });
   };
 
+  let body;
+  if (initial.role === "kitchen") {
+    body = <KitchenView qrCode={initial.qrCode} notify={notify} />;
+  } else if (initial.role === "customer") {
+    body = <CustomerView qrCode={initial.qrCode} notify={notify} />;
+  } else {
+    body = <LandingView />;
+  }
+
   return (
     <main className="app-shell">
-      <header className="mode-bar">
-        <a className={initialContext.view === "customer" ? "mode-link mode-link--active" : "mode-link"} href="/">
-          Customer
-        </a>
-        <a
-          className={initialContext.view === "kitchen" ? "mode-link mode-link--active" : "mode-link"}
-          href="/?view=kitchen"
-        >
-          Kitchen
-        </a>
-      </header>
-
       {message ? (
-        <section className={`message-strip message-strip--${message.type}`}>{message.text}</section>
+        <section className={`message-strip message-strip--${message.type}`}>
+          {message.text}
+        </section>
       ) : null}
 
-      {initialContext.view === "kitchen" ? <KitchenView notify={notify} /> : <CustomerView notify={notify} />}
+      {body}
     </main>
   );
 }

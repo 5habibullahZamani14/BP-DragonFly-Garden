@@ -4,11 +4,9 @@
  */
 
 const ORDER_STATUS = {
-  PENDING: "pending",        // Order placed, waiting to be confirmed by kitchen
-  CONFIRMED: "confirmed",    // Kitchen has confirmed receipt of order
-  COOKING: "cooking",        // Order is being prepared
-  READY: "ready",            // Order is ready for delivery
-  COMPLETED: "completed"     // Order has been served to customer
+  QUEUE: "queue",         // Order placed, waiting in the kitchen queue
+  PREPARING: "preparing", // Order is being prepared by the kitchen
+  READY: "ready"          // Order is done and ready to be served
 };
 
 /**
@@ -16,11 +14,9 @@ const ORDER_STATUS = {
  * Maps current status to array of allowed next statuses
  */
 const STATUS_TRANSITIONS = {
-  [ORDER_STATUS.PENDING]: [ORDER_STATUS.CONFIRMED],
-  [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.COOKING, ORDER_STATUS.READY],
-  [ORDER_STATUS.COOKING]: [ORDER_STATUS.READY],
-  [ORDER_STATUS.READY]: [ORDER_STATUS.COMPLETED],
-  [ORDER_STATUS.COMPLETED]: []
+  [ORDER_STATUS.QUEUE]: [ORDER_STATUS.PREPARING],
+  [ORDER_STATUS.PREPARING]: [ORDER_STATUS.READY],
+  [ORDER_STATUS.READY]: []
 };
 
 /**
@@ -28,22 +24,18 @@ const STATUS_TRANSITIONS = {
  * Kitchen should monitor all active orders
  */
 const KITCHEN_VISIBLE_STATUSES = [
-  ORDER_STATUS.PENDING,
-  ORDER_STATUS.CONFIRMED,
-  ORDER_STATUS.COOKING,
+  ORDER_STATUS.QUEUE,
+  ORDER_STATUS.PREPARING,
   ORDER_STATUS.READY
 ];
 
 /**
  * Statuses visible to customers/waiters
- * Customers should see all statuses for their orders
  */
 const CUSTOMER_VISIBLE_STATUSES = [
-  ORDER_STATUS.PENDING,
-  ORDER_STATUS.CONFIRMED,
-  ORDER_STATUS.COOKING,
-  ORDER_STATUS.READY,
-  ORDER_STATUS.COMPLETED
+  ORDER_STATUS.QUEUE,
+  ORDER_STATUS.PREPARING,
+  ORDER_STATUS.READY
 ];
 
 /**
@@ -64,11 +56,9 @@ const isValidTransition = (currentStatus, nextStatus) => {
  */
 const getStatusDescription = (status) => {
   const descriptions = {
-    [ORDER_STATUS.PENDING]: "Order received, awaiting kitchen confirmation",
-    [ORDER_STATUS.CONFIRMED]: "Kitchen has confirmed, preparation will start soon",
-    [ORDER_STATUS.COOKING]: "Your order is being prepared",
-    [ORDER_STATUS.READY]: "Your order is ready for pickup",
-    [ORDER_STATUS.COMPLETED]: "Order completed and served"
+    [ORDER_STATUS.QUEUE]: "Order received, waiting in the queue",
+    [ORDER_STATUS.PREPARING]: "Your order is being prepared",
+    [ORDER_STATUS.READY]: "Your order is ready to be served"
   };
   return descriptions[status] || status;
 };

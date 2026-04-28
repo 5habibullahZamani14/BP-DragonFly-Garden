@@ -1,4 +1,4 @@
-const ORDER_STATUSES = ["pending", "confirmed", "cooking", "ready", "completed"];
+const ORDER_STATUSES = ["queue", "preparing", "ready"];
 const MAX_ORDER_ITEMS = 25;
 const MAX_ITEM_QUANTITY = 99;
 const MAX_NOTES_LENGTH = 250;

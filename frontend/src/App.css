@@ -250,8 +250,48 @@
 
 .kitchen-columns {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.kitchen-layout--full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.landing {
+  margin: 0 32px 32px;
+  padding: 48px 32px;
+  border: 1px solid rgba(124, 87, 54, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 252, 248, 0.86);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(77, 52, 35, 0.08);
+  text-align: center;
+}
+
+.landing h1 {
+  margin: 8px 0 0;
+}
+
+.landing__hint {
+  margin: 18px 0 0;
+  color: #5d4b3e;
+  font-size: 0.95rem;
+}
+
+.table-lock-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 18px;
+  min-width: 150px;
+  border: 1px solid rgba(124, 87, 54, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 252, 248, 0.94);
+}
+
+.table-lock-card strong {
+  font-size: 1.2rem;
+  color: #231815;
 }
 
 .kitchen-column {

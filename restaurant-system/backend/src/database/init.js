@@ -115,11 +115,22 @@ const initializeDatabase = async () => {
   await ensureColumn("order_status_history", "changed_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
   await ensureColumn("order_status_history", "changed_by", "TEXT");
 
-  await run(`
-    UPDATE tables
-    SET table_number = COALESCE(table_number, name, 'Table ' || id)
-    WHERE table_number IS NULL OR TRIM(table_number) = ''
-  `);
+  const tableColumns = await all(`PRAGMA table_info(tables)`);
+  const hasLegacyNameColumn = tableColumns.some((column) => column.name === "name");
+
+  if (hasLegacyNameColumn) {
+    await run(`
+      UPDATE tables
+      SET table_number = COALESCE(table_number, name, 'Table ' || id)
+      WHERE table_number IS NULL OR TRIM(table_number) = ''
+    `);
+  } else {
+    await run(`
+      UPDATE tables
+      SET table_number = 'Table ' || id
+      WHERE table_number IS NULL OR TRIM(table_number) = ''
+    `);
+  }
 
   await run(`
     UPDATE tables

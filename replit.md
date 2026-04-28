@@ -28,3 +28,13 @@ Configured as a `vm` deployment (SQLite needs persistent local state):
 - `GET /menu` — Menu items.
 - `GET /tables`, `GET /tables/qr/:code` — Tables and QR lookups.
 - `GET /orders/kitchen`, `POST /orders`, `GET /orders/:id`, `PATCH /orders/:id/status` — Order operations.
+
+## Roles & Views (driven by QR code)
+The app has no manual role switcher — the user's view is decided entirely by the QR code embedded in the URL. The frontend forwards the QR code on every API call as `?qr_code=...` so the backend role middleware can authorize the request.
+
+- **Table QR (`?qr=table-N`)** → Customer/waiter ordering view, locked to that table. Used by both the customer (scanning their own table) and the waiter (scanning on behalf of a customer who rang the bell).
+- **Kitchen QR (`?qr=kitchen-crew-...`)** → Kitchen monitoring board. Shows queue/preparing/ready columns with per-order status update buttons. No menu, no QR-printing panel, no link out.
+- **No QR / unknown QR** → Friendly landing screen asking the visitor to scan the QR code on their table.
+
+## Order Status Lifecycle
+`queue` → `preparing` → `ready`. Set by the kitchen crew from the kitchen view. Customers see the same stages on their order tracker.

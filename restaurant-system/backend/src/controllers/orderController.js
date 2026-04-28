@@ -131,9 +131,9 @@ const createOrder = async (req, res) => {
     const orderInsert = await run(
       `
         INSERT INTO orders (table_id, status, total_price)
-        VALUES (?, 'pending', ?)
+        VALUES (?, ?, ?)
       `,
-      [tableId, totalPrice]
+      [tableId, ORDER_STATUS.QUEUE, totalPrice]
     );
 
     for (const item of items) {
@@ -149,7 +149,7 @@ const createOrder = async (req, res) => {
     }
 
     // Record initial status in history
-    await recordStatusChange(orderInsert.lastID, ORDER_STATUS.PENDING, "system");
+    await recordStatusChange(orderInsert.lastID, ORDER_STATUS.QUEUE, "system");
 
     await run("COMMIT");
 
