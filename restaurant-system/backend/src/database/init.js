@@ -103,6 +103,9 @@ const initializeDatabase = async () => {
   await ensureColumn("menu_items", "description", "TEXT");
   await ensureColumn("menu_items", "is_available", "INTEGER NOT NULL DEFAULT 1");
   await ensureColumn("menu_items", "image_url", "TEXT");
+  await ensureColumn("menu_items", "is_popular", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("menu_items", "is_promo", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("menu_items", "promo_label", "TEXT");
   await ensureColumn("tables", "table_number", "TEXT");
   await ensureColumn("tables", "qr_code", "TEXT");
   await ensureColumn("orders", "status", "TEXT NOT NULL DEFAULT 'pending'");

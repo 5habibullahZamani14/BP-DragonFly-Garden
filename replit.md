@@ -38,3 +38,13 @@ The app has no manual role switcher — the user's view is decided entirely by t
 
 ## Order Status Lifecycle
 `queue` → `preparing` → `ready`. Set by the kitchen crew from the kitchen view. Customers see the same stages on their order tracker.
+
+## Highlights: Popular item + Promotions
+Menu items carry three extra flags: `is_popular`, `is_promo`, and `promo_label`. The customer view uses them to make featured items pop:
+
+- **Spotlight card** at the top of the menu showcases the popular item with an animated gradient background, shimmer sweep, sparkles, and a dark CTA.
+- **Promo strip** lists every promo item as a horizontally scrollable green pill with its label (e.g. `NEW`, `20% OFF`).
+- **Menu card badges**: a pulsing orange "★ Popular" badge and/or a green promo badge sit on individual cards, which also get a colored gradient border.
+
+### Auto-pick the popular item ("the AI")
+`POST /menu/popular/recompute` runs a SQL aggregate over the last N days of orders, picks the top-N most-ordered items, clears `is_popular` on everything else, and sets it on the winner(s). Body params (all optional): `lookback_days` (default 7, 1–90) and `top` (default 1, 1–5). Returns the winner names and units sold. Hit this endpoint on a weekly schedule (cron / Task Scheduler / a setInterval in the backend) to keep the spotlight fresh automatically.

@@ -17,7 +17,7 @@ const router = express.Router();
  * getMenu: Retrieves all menu items with categories
  * getCategories: Retrieves all menu categories
  */
-const { getMenu, getCategories } = require("../controllers/menuController");
+const { getMenu, getCategories, recomputePopular } = require("../controllers/menuController");
 const { asyncHandler } = require("../middleware/validation");
 
 /*
@@ -35,6 +35,8 @@ router.get("/", asyncHandler(getMenu));
  * Returns all menu categories sorted by display order
  */
 router.get("/categories", asyncHandler(getCategories));
+
+router.post("/popular/recompute", asyncHandler(recomputePopular));
 
 /*
  * Export the router

@@ -34,17 +34,17 @@ const all = (sql, params = []) =>
   });
 
 const MENU_ITEMS = [
-  ["Coke", "Refreshing cola drink, chilled and served with ice", 3.5, "Drinks", 1, null],
-  ["Water", "Fresh filtered water, still or sparkling", 1.5, "Drinks", 1, null],
-  ["Cappuccino", "Rich espresso with steamed milk and foam", 4.5, "Drinks", 1, null],
-  ["Iced Coffee", "Cold brew coffee served over ice with cream", 4.0, "Drinks", 1, null],
-  ["Burger", "Juicy beef patty with lettuce, tomato, cheese, and sauce", 8.0, "Food", 1, null],
-  ["Caesar Salad", "Fresh romaine lettuce with parmesan and house-made dressing", 7.5, "Food", 1, null],
-  ["Chicken Sandwich", "Grilled chicken breast with avocado and fresh vegetables", 8.5, "Food", 1, null],
-  ["French Fries", "Crispy golden fries with salt and your choice of dip", 3.5, "Food", 1, null],
-  ["Chocolate Cake", "Rich, moist chocolate cake with creamy frosting", 5.5, "Desserts", 1, null],
-  ["Cheesecake", "Classic New York style cheesecake with berry topping", 6.0, "Desserts", 1, null],
-  ["Ice Cream", "Creamy ice cream, choose from vanilla, chocolate, or strawberry", 3.5, "Desserts", 1, null]
+  ["Coke", "Refreshing cola drink, chilled and served with ice", 3.5, "Drinks", 1, null, 0, 0, null],
+  ["Water", "Fresh filtered water, still or sparkling", 1.5, "Drinks", 1, null, 0, 0, null],
+  ["Cappuccino", "Rich espresso with steamed milk and foam", 4.5, "Drinks", 1, null, 0, 1, "NEW"],
+  ["Iced Coffee", "Cold brew coffee served over ice with cream", 4.0, "Drinks", 1, null, 0, 0, null],
+  ["Burger", "Juicy beef patty with lettuce, tomato, cheese, and sauce", 8.0, "Food", 1, null, 1, 0, null],
+  ["Caesar Salad", "Fresh romaine lettuce with parmesan and house-made dressing", 7.5, "Food", 1, null, 0, 0, null],
+  ["Chicken Sandwich", "Grilled chicken breast with avocado and fresh vegetables", 8.5, "Food", 1, null, 0, 1, "20% OFF"],
+  ["French Fries", "Crispy golden fries with salt and your choice of dip", 3.5, "Food", 1, null, 0, 0, null],
+  ["Chocolate Cake", "Rich, moist chocolate cake with creamy frosting", 5.5, "Desserts", 1, null, 0, 0, null],
+  ["Cheesecake", "Classic New York style cheesecake with berry topping", 6.0, "Desserts", 1, null, 0, 0, null],
+  ["Ice Cream", "Creamy ice cream, choose from vanilla, chocolate, or strawberry", 3.5, "Desserts", 1, null, 0, 0, null]
 ];
 
 const TABLES = Array.from({ length: 5 }, (_, index) => ({
@@ -61,17 +61,27 @@ const seedDatabase = async () => {
     await run(`INSERT INTO categories (name, display_order) VALUES ('Desserts', 3)`);
   }
 
-  for (const [name, description, price, categoryName, isAvailable, imageUrl] of MENU_ITEMS) {
+  for (const [
+    name,
+    description,
+    price,
+    categoryName,
+    isAvailable,
+    imageUrl,
+    isPopular,
+    isPromo,
+    promoLabel
+  ] of MENU_ITEMS) {
     const category = await get(`SELECT id FROM categories WHERE name = ?`, [categoryName]);
     const existingRows = await all(`SELECT id FROM menu_items WHERE name = ? ORDER BY id ASC`, [name]);
 
     if (existingRows.length === 0 && category) {
       await run(
         `
-          INSERT INTO menu_items (name, description, price, category_id, is_available, image_url)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO menu_items (name, description, price, category_id, is_available, image_url, is_popular, is_promo, promo_label)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [name, description, price, category.id, isAvailable, imageUrl]
+        [name, description, price, category.id, isAvailable, imageUrl, isPopular, isPromo, promoLabel]
       );
       continue;
     }
@@ -82,10 +92,10 @@ const seedDatabase = async () => {
       await run(
         `
           UPDATE menu_items
-          SET description = ?, price = ?, category_id = ?, image_url = ?, is_available = CASE WHEN id = ? THEN ? ELSE 0 END
+          SET description = ?, price = ?, category_id = ?, image_url = ?, is_popular = ?, is_promo = ?, promo_label = ?, is_available = CASE WHEN id = ? THEN ? ELSE 0 END
           WHERE name = ?
         `,
-        [description, price, category.id, imageUrl, canonicalId, isAvailable, name]
+        [description, price, category.id, imageUrl, isPopular, isPromo, promoLabel, canonicalId, isAvailable, name]
       );
     }
   }

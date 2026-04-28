@@ -169,6 +169,14 @@ function CustomerView({ qrCode, notify }) {
         : menu.filter((item) => item.category_name === selectedCategory),
     [menu, selectedCategory]
   );
+  const spotlightItem = useMemo(
+    () => menu.find((item) => item.is_popular) || null,
+    [menu]
+  );
+  const promoItems = useMemo(
+    () => menu.filter((item) => item.is_promo),
+    [menu]
+  );
   const total = useMemo(
     () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [cart]
@@ -324,6 +332,50 @@ function CustomerView({ qrCode, notify }) {
 
       <section className="content-grid">
         <div className="menu-panel">
+          {spotlightItem ? (
+            <article className="spotlight-card">
+              <div className="spotlight-card__shimmer" aria-hidden="true" />
+              <div className="spotlight-card__sparkles" aria-hidden="true">
+                <span /><span /><span /><span /><span />
+              </div>
+              <div className="spotlight-card__body">
+                <span className="spotlight-card__crown">★ This week's favorite</span>
+                <h2>{spotlightItem.name}</h2>
+                <p>{spotlightItem.description || "Loved by everyone this week."}</p>
+                <div className="spotlight-card__footer">
+                  <strong>{formatCurrency(spotlightItem.price)}</strong>
+                  <button
+                    type="button"
+                    className="spotlight-card__cta"
+                    onClick={() => addToCart(spotlightItem)}
+                  >
+                    Add to cart
+                  </button>
+                </div>
+              </div>
+            </article>
+          ) : null}
+
+          {promoItems.length > 0 ? (
+            <div className="promo-strip">
+              <span className="promo-strip__label">Today's promos</span>
+              <div className="promo-strip__track">
+                {promoItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="promo-pill"
+                    onClick={() => addToCart(item)}
+                  >
+                    <span className="promo-pill__tag">{item.promo_label || "PROMO"}</span>
+                    <span className="promo-pill__name">{item.name}</span>
+                    <span className="promo-pill__price">{formatCurrency(item.price)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="panel-header">
             <div>
               <p className="section-label">Menu</p>
@@ -347,28 +399,43 @@ function CustomerView({ qrCode, notify }) {
           {loadingMenu ? <p className="empty-state">Loading menu...</p> : null}
 
           <div className="menu-grid">
-            {filteredMenu.map((item) => (
-              <article key={item.id} className="menu-card">
-                <div>
-                  <p className="menu-card__category">{item.category_name}</p>
-                  <h3>{item.name}</h3>
-                  <p className="menu-card__description">
-                    {item.description || "Chef special prepared fresh to order."}
-                  </p>
-                </div>
+            {filteredMenu.map((item) => {
+              const cardClasses = ["menu-card"];
+              if (item.is_popular) cardClasses.push("menu-card--popular");
+              if (item.is_promo) cardClasses.push("menu-card--promo");
 
-                <div className="menu-card__footer">
-                  <strong>{formatCurrency(item.price)}</strong>
-                  <button
-                    type="button"
-                    className="action-button"
-                    onClick={() => addToCart(item)}
-                  >
-                    Add
-                  </button>
-                </div>
-              </article>
-            ))}
+              return (
+                <article key={item.id} className={cardClasses.join(" ")}>
+                  {item.is_popular ? (
+                    <span className="menu-badge menu-badge--popular">★ Popular</span>
+                  ) : null}
+                  {item.is_promo ? (
+                    <span className="menu-badge menu-badge--promo">
+                      {item.promo_label || "Promo"}
+                    </span>
+                  ) : null}
+
+                  <div>
+                    <p className="menu-card__category">{item.category_name}</p>
+                    <h3>{item.name}</h3>
+                    <p className="menu-card__description">
+                      {item.description || "Chef special prepared fresh to order."}
+                    </p>
+                  </div>
+
+                  <div className="menu-card__footer">
+                    <strong>{formatCurrency(item.price)}</strong>
+                    <button
+                      type="button"
+                      className="action-button"
+                      onClick={() => addToCart(item)}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
 

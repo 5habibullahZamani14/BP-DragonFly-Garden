@@ -575,3 +575,257 @@
     flex-direction: column;
   }
 }
+
+/* ============ Spotlight: "this week's favorite" ============ */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 26px 28px;
+  margin-bottom: 22px;
+  color: #1d1206;
+  background: linear-gradient(135deg, #ffd45a 0%, #ff9a3c 45%, #ff5b6a 100%);
+  background-size: 200% 200%;
+  box-shadow: 0 18px 40px -16px rgba(255, 110, 80, 0.55);
+  animation: spotlight-gradient 9s ease-in-out infinite, spotlight-float 4.5s ease-in-out infinite;
+}
+
+@keyframes spotlight-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes spotlight-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.spotlight-card__shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: spotlight-shimmer 3.6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spotlight-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.spotlight-card__sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.spotlight-card__sparkles span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+  opacity: 0;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.95));
+  animation: spotlight-sparkle 2.8s ease-in-out infinite;
+}
+
+.spotlight-card__sparkles span:nth-child(1) { top: 14%; left: 8%;  animation-delay: 0s; }
+.spotlight-card__sparkles span:nth-child(2) { top: 70%; left: 22%; animation-delay: 0.6s; }
+.spotlight-card__sparkles span:nth-child(3) { top: 30%; left: 88%; animation-delay: 1.1s; }
+.spotlight-card__sparkles span:nth-child(4) { top: 80%; left: 70%; animation-delay: 1.7s; }
+.spotlight-card__sparkles span:nth-child(5) { top: 12%; left: 55%; animation-delay: 2.2s; }
+
+@keyframes spotlight-sparkle {
+  0%, 100% { transform: scale(0.4); opacity: 0; }
+  50%      { transform: scale(1.2); opacity: 1; }
+}
+
+.spotlight-card__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spotlight-card__crown {
+  display: inline-block;
+  width: fit-content;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(29, 18, 6, 0.85);
+  color: #ffd45a;
+  border-radius: 999px;
+}
+
+.spotlight-card__body h2 {
+  font-size: 28px;
+  margin: 4px 0 2px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.spotlight-card__body p {
+  margin: 0;
+  font-size: 15px;
+  max-width: 540px;
+  color: #2b1908;
+}
+
+.spotlight-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  gap: 12px;
+}
+
+.spotlight-card__footer strong {
+  font-size: 22px;
+}
+
+.spotlight-card__cta {
+  border: none;
+  background: #1d1206;
+  color: #ffd45a;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.45);
+}
+
+.spotlight-card__cta:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 12px 22px -10px rgba(0, 0, 0, 0.55);
+}
+
+/* ============ Promo strip ============ */
+.promo-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.promo-strip__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+
+.promo-strip__track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.promo-pill {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, #34d399, #10b981);
+  color: #fff;
+  text-align: left;
+  min-width: 160px;
+  box-shadow: 0 8px 18px -10px rgba(16, 185, 129, 0.7);
+  transition: transform 0.15s ease;
+}
+
+.promo-pill:hover { transform: translateY(-2px); }
+
+.promo-pill__tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.promo-pill__name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.promo-pill__price {
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+/* ============ Menu card badges + emphasis ============ */
+.menu-card {
+  position: relative;
+}
+
+.menu-badge {
+  position: absolute;
+  top: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #fff;
+  z-index: 1;
+}
+
+.menu-badge--popular {
+  left: 10px;
+  background: linear-gradient(135deg, #ff9a3c, #ff5b6a);
+  box-shadow: 0 0 0 0 rgba(255, 91, 106, 0.55);
+  animation: badge-pulse 1.8s ease-in-out infinite;
+}
+
+.menu-badge--promo {
+  right: 10px;
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 4px 10px -4px rgba(16, 185, 129, 0.7);
+}
+
+@keyframes badge-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 91, 106, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 91, 106, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 91, 106, 0); }
+}
+
+.menu-card--popular {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, #ffd45a, #ff5b6a) border-box;
+  box-shadow: 0 12px 28px -16px rgba(255, 91, 106, 0.45);
+}
+
+.menu-card--promo:not(.menu-card--popular) {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, #34d399, #10b981) border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card,
+  .spotlight-card__shimmer,
+  .spotlight-card__sparkles span,
+  .menu-badge--popular {
+    animation: none;
+  }
+}
