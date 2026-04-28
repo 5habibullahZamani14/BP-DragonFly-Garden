@@ -1,0 +1,46 @@
+Perfect. I now have a complete understanding. Let me create a detailed implementation plan for this local farm cafe ordering system.
+
+Implementation Plan: Farm Cafe Ordering System
+I've created a 20-step comprehensive plan to build this system. Here's the breakdown organized by major phases:
+
+Phase 1: Architecture & Database (Steps 1-4)
+Review current structure and fix setup
+Configure proper .gitignore for Raspberry Pi deployment
+Design database schema with tables, menu items, orders, and order status history
+Implement order status workflow (queue, preparing, ready, served)
+
+Phase 2: Backend APIs (Steps 5-9)
+Menu API (GET endpoints for customer/waiter browsing)
+Order APIs (POST for creating, GET for retrieving, PUT for status updates)
+Printer service integration (automatic receipt printing when order placed)
+Role-based access control (determine user role from QR code type)
+
+Phase 3: Frontend - Role Detection & Navigation (Steps 10, 15-16)
+QR code scanner component with network connection pop-up
+Session/auth mechanism to track role (customer/waiter vs kitchen crew) and table number
+Routing logic: table QR → customer/waiter interface | kitchen QR → kitchen interface
+
+Phase 4: Customer/Waiter Interface (Steps 11-13)
+Menu browsing UI with item details, images, categories
+Order placement and confirmation screen
+Order status monitoring dashboard (real-time updates on queue position, preparation status)
+
+Phase 5: Kitchen Crew Interface (Step 14)
+Dedicated orders dashboard (only visible to kitchen crew)
+Order list with ability to update status
+Visual indicators for queue management
+
+Phase 6: Testing & Deployment (Steps 17-20)
+Raspberry Pi configuration (Node.js, local network setup)
+QR code generation and placement strategy
+Full workflow testing (end-to-end: scan → order → print → status update)
+Documentation for cafe owner on setup and operation
+
+Key architectural decisions:
+
+QR codes are the primary auth mechanism (table QR vs kitchen crew QR)
+Session stored locally to track user role and table number
+Printer integrates directly with order creation
+Real-time order status updates via polling or WebSockets
+Everything runs offline on local network
+Would you like me to proceed with implementing this plan step by step?
