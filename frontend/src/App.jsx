@@ -1,5 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
+import ReactiveButton from "./ReactiveButton";
 import "./App.css";
+
+function MenuMedia({ item }) {
+  if (item.image_url) {
+    return (
+      <div className="menu-card__media">
+        <img src={item.image_url} alt={item.name} loading="lazy" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="menu-card__media menu-card__media--placeholder" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="menu-card__leaf">
+        <path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66.95-2.3c.48.17.98.3 1.34.3C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5s1.75 3.75 1.75 3.75C7 8 17 8 17 8z" />
+      </svg>
+    </div>
+  );
+}
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
@@ -344,13 +363,12 @@ function CustomerView({ qrCode, notify }) {
                 <p>{spotlightItem.description || "Loved by our farm guests this week."}</p>
                 <div className="spotlight-card__footer">
                   <strong>{formatCurrency(spotlightItem.price)}</strong>
-                  <button
-                    type="button"
+                  <ReactiveButton
                     className="spotlight-card__cta"
                     onClick={() => addToCart(spotlightItem)}
                   >
                     Add to cart
-                  </button>
+                  </ReactiveButton>
                 </div>
               </div>
             </article>
@@ -361,16 +379,15 @@ function CustomerView({ qrCode, notify }) {
               <span className="promo-strip__label">Today's promos</span>
               <div className="promo-strip__track">
                 {promoItems.map((item) => (
-                  <button
+                  <ReactiveButton
                     key={item.id}
-                    type="button"
                     className="promo-pill"
                     onClick={() => addToCart(item)}
                   >
                     <span className="promo-pill__tag">{item.promo_label || "PROMO"}</span>
                     <span className="promo-pill__name">{item.name}</span>
                     <span className="promo-pill__price">{formatCurrency(item.price)}</span>
-                  </button>
+                  </ReactiveButton>
                 ))}
               </div>
             </div>
@@ -385,14 +402,13 @@ function CustomerView({ qrCode, notify }) {
 
           <div className="category-row">
             {categories.map((category) => (
-              <button
+              <ReactiveButton
                 key={category}
-                type="button"
                 className={category === selectedCategory ? "chip chip--active" : "chip"}
                 onClick={() => setSelectedCategory(category)}
               >
                 {category}
-              </button>
+              </ReactiveButton>
             ))}
           </div>
 
@@ -415,7 +431,9 @@ function CustomerView({ qrCode, notify }) {
                     </span>
                   ) : null}
 
-                  <div>
+                  <MenuMedia item={item} />
+
+                  <div className="menu-card__body">
                     <p className="menu-card__category">{item.category_name}</p>
                     <h3>{item.name}</h3>
                     <p className="menu-card__description">
@@ -425,13 +443,12 @@ function CustomerView({ qrCode, notify }) {
 
                   <div className="menu-card__footer">
                     <strong>{formatCurrency(item.price)}</strong>
-                    <button
-                      type="button"
+                    <ReactiveButton
                       className="action-button"
                       onClick={() => addToCart(item)}
                     >
                       Add
-                    </button>
+                    </ReactiveButton>
                   </div>
                 </article>
               );
@@ -465,19 +482,17 @@ function CustomerView({ qrCode, notify }) {
                   </div>
 
                   <div className="quantity-controls">
-                    <button
-                      type="button"
+                    <ReactiveButton
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
                     >
                       -
-                    </button>
+                    </ReactiveButton>
                     <span>{item.quantity}</span>
-                    <button
-                      type="button"
+                    <ReactiveButton
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
                     >
                       +
-                    </button>
+                    </ReactiveButton>
                   </div>
 
                   <label className="notes-field">
@@ -500,14 +515,13 @@ function CustomerView({ qrCode, notify }) {
               <strong>{formatCurrency(total)}</strong>
             </div>
 
-            <button
-              type="button"
+            <ReactiveButton
               className="checkout-button"
               disabled={submittingOrder || cart.length === 0 || !tableInfo}
               onClick={placeOrder}
             >
               {submittingOrder ? "Sending order..." : "Submit order"}
-            </button>
+            </ReactiveButton>
           </div>
         </aside>
       </section>
@@ -598,9 +612,9 @@ function KitchenView({ qrCode, notify }) {
         </div>
 
         <div className="hero-band__controls hero-band__controls--stack">
-          <button type="button" className="action-button" onClick={() => loadKitchenData()}>
+          <ReactiveButton className="action-button" onClick={() => loadKitchenData()}>
             Refresh board
-          </button>
+          </ReactiveButton>
         </div>
       </section>
 
@@ -648,15 +662,14 @@ function KitchenView({ qrCode, notify }) {
 
                       <div className="ticket-actions">
                         {STATUS_ACTIONS[order.status].map((status) => (
-                          <button
+                          <ReactiveButton
                             key={status}
-                            type="button"
                             className="chip chip--action"
                             disabled={updatingOrderId === order.id}
                             onClick={() => updateStatus(order.id, status)}
                           >
                             Mark {status}
-                          </button>
+                          </ReactiveButton>
                         ))}
                       </div>
                     </article>
