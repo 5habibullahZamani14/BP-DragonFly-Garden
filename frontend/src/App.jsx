@@ -13,12 +13,10 @@ const STATUS_ACTIONS = {
 const TABLE_QR_PATTERN = /^table-\d+$/;
 const KITCHEN_QR_PATTERN = /^kitchen-crew-[a-z0-9_-]+$/i;
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD"
-});
-
-const formatCurrency = (value) => currencyFormatter.format(value);
+const formatCurrency = (value) => {
+  const amount = Number(value) || 0;
+  return `RM ${amount.toFixed(2)}`;
+};
 const apiUrl = (path, qrCode) => {
   const base = `${API_BASE}${path}`;
   if (!qrCode) {
@@ -46,13 +44,14 @@ const detectRoleFromUrl = () => {
 function LandingView() {
   return (
     <section className="landing">
-      <p className="eyebrow">Welcome</p>
-      <h1>Restaurant Garden</h1>
+      <p className="eyebrow">Welcome to the farm</p>
+      <h1>🌻 BP Dragonfly Garden</h1>
+      <p className="hero-tagline">Where nature, fun &amp; memories grow.</p>
       <p className="hero-copy">
-        Please scan the QR code on your table to view the menu and place your order.
+        Please scan the QR code on your table to view our farm menu and place your order.
       </p>
       <p className="landing__hint">
-        If you'd rather order in person, just press the bell on your table and a waiter will come over.
+        If you'd rather order in person, just wave to one of our farm crew and they'll come over.
       </p>
     </section>
   );
@@ -276,10 +275,11 @@ function CustomerView({ qrCode, notify }) {
     <>
       <section className="hero-band">
         <div>
-          <p className="eyebrow">QR table ordering</p>
-          <h1>Restaurant Garden</h1>
+          <p className="eyebrow">Farm-to-table ordering</p>
+          <h1>🌻 BP Dragonfly Garden</h1>
+          <p className="hero-tagline">Where nature, fun &amp; memories grow.</p>
           <p className="hero-copy">
-            Browse the live menu, send your order straight to the kitchen, and track it as it moves.
+            Browse our farm menu, send your order straight to the kitchen, and track it as it moves.
           </p>
         </div>
 
@@ -339,9 +339,9 @@ function CustomerView({ qrCode, notify }) {
                 <span /><span /><span /><span /><span />
               </div>
               <div className="spotlight-card__body">
-                <span className="spotlight-card__crown">★ This week's favorite</span>
+                <span className="spotlight-card__crown">🌻 This week's farm favourite</span>
                 <h2>{spotlightItem.name}</h2>
-                <p>{spotlightItem.description || "Loved by everyone this week."}</p>
+                <p>{spotlightItem.description || "Loved by our farm guests this week."}</p>
                 <div className="spotlight-card__footer">
                   <strong>{formatCurrency(spotlightItem.price)}</strong>
                   <button
@@ -378,8 +378,8 @@ function CustomerView({ qrCode, notify }) {
 
           <div className="panel-header">
             <div>
-              <p className="section-label">Menu</p>
-              <h2>Available dishes</h2>
+              <p className="section-label">Farm Menu</p>
+              <h2>Goodness of nature 🌿</h2>
             </div>
           </div>
 
@@ -419,7 +419,7 @@ function CustomerView({ qrCode, notify }) {
                     <p className="menu-card__category">{item.category_name}</p>
                     <h3>{item.name}</h3>
                     <p className="menu-card__description">
-                      {item.description || "Chef special prepared fresh to order."}
+                      {item.description || "Farm special prepared fresh to order."}
                     </p>
                   </div>
 
@@ -451,7 +451,7 @@ function CustomerView({ qrCode, notify }) {
           </div>
 
           {cart.length === 0 ? (
-            <p className="empty-state">Choose a few dishes to start an order.</p>
+            <p className="empty-state">Pick a few dishes from our farm menu to start an order.</p>
           ) : (
             <div className="cart-list">
               {cart.map((item) => (
@@ -590,8 +590,8 @@ function KitchenView({ qrCode, notify }) {
     <>
       <section className="hero-band">
         <div>
-          <p className="eyebrow">Kitchen board</p>
-          <h1>Live service view</h1>
+          <p className="eyebrow">🌿 Kitchen board</p>
+          <h1>BP Dragonfly Garden — Kitchen</h1>
           <p className="hero-copy">
             Watch incoming orders and advance each ticket from queue to ready.
           </p>

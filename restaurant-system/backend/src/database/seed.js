@@ -33,18 +33,53 @@ const all = (sql, params = []) =>
     });
   });
 
+const CATEGORIES = [
+  { name: "Mains", display_order: 1 },
+  { name: "Beverages", display_order: 2 },
+  { name: "Herbal Tea", display_order: 3 },
+  { name: "Enzyme Drinks", display_order: 4 },
+  { name: "Pre-Order Specials", display_order: 5 }
+];
+
 const MENU_ITEMS = [
-  ["Coke", "Refreshing cola drink, chilled and served with ice", 3.5, "Drinks", 1, null, 0, 0, null],
-  ["Water", "Fresh filtered water, still or sparkling", 1.5, "Drinks", 1, null, 0, 0, null],
-  ["Cappuccino", "Rich espresso with steamed milk and foam", 4.5, "Drinks", 1, null, 0, 1, "NEW"],
-  ["Iced Coffee", "Cold brew coffee served over ice with cream", 4.0, "Drinks", 1, null, 0, 0, null],
-  ["Burger", "Juicy beef patty with lettuce, tomato, cheese, and sauce", 8.0, "Food", 1, null, 1, 0, null],
-  ["Caesar Salad", "Fresh romaine lettuce with parmesan and house-made dressing", 7.5, "Food", 1, null, 0, 0, null],
-  ["Chicken Sandwich", "Grilled chicken breast with avocado and fresh vegetables", 8.5, "Food", 1, null, 0, 1, "20% OFF"],
-  ["French Fries", "Crispy golden fries with salt and your choice of dip", 3.5, "Food", 1, null, 0, 0, null],
-  ["Chocolate Cake", "Rich, moist chocolate cake with creamy frosting", 5.5, "Desserts", 1, null, 0, 0, null],
-  ["Cheesecake", "Classic New York style cheesecake with berry topping", 6.0, "Desserts", 1, null, 0, 0, null],
-  ["Ice Cream", "Creamy ice cream, choose from vanilla, chocolate, or strawberry", 3.5, "Desserts", 1, null, 0, 0, null]
+  ["Kocha Char Koay Teow", "Stir-fried flat rice noodles with a smoky wok-charred flavour.", 6.0, "Mains", 1, null, 0, 0, null],
+  ["Spaghetti Stir Fried", "Asian-style stir-fried spaghetti with seasonal vegetables.", 7.0, "Mains", 1, null, 0, 0, null],
+  ["Kampung Eggs (2pcs)", "Two soft-boiled village (kampung) eggs served warm.", 4.0, "Mains", 1, null, 0, 0, null],
+  ["Farm Herbal Soup with Healthy Rice", "Slow-simmered herbal soup paired with our signature healthy multigrain rice.", 10.0, "Mains", 1, null, 1, 0, null],
+  ["Meesua Herbal Soup", "Fine meesua noodles in a comforting herbal broth.", 9.0, "Mains", 1, null, 0, 0, null],
+  ["Small Bites - Hummus Sesame", "Crispy crackers served with creamy sesame hummus dip.", 4.0, "Mains", 1, null, 0, 0, null],
+  ["Small Bites - Hummus Milky", "Crispy crackers served with our creamy milky hummus dip.", 4.0, "Mains", 1, null, 0, 0, null],
+  ["Papa Sandwich (Egg + Cheese)", "Toasted sandwich filled with fluffy egg and melted cheese.", 6.0, "Mains", 1, null, 0, 0, null],
+  ["Papa Sandwich (Egg Only)", "Toasted sandwich with our farm-fresh egg.", 5.0, "Mains", 1, null, 0, 0, null],
+  ["Mushroom Soup", "Creamy mushroom soup served with a slice of bread.", 6.0, "Mains", 1, null, 0, 0, null],
+  ["Jacket Potato", "Baked potato loaded with savoury filling and fresh garnish.", 7.0, "Mains", 1, null, 0, 0, null],
+  ["Mummy Farm Salad", "Garden-fresh salad with crisp lettuce, tomato and house dressing.", 8.0, "Mains", 1, null, 0, 0, null],
+  ["Farm Herbal Fried Rice", "Wok-fried rice infused with our farm herbal blend, served with egg and sides.", 8.0, "Mains", 1, null, 0, 0, null],
+  ["Ah Ma Curry with Healthy Rice", "Grandma's secret-recipe curry served with our healthy multigrain rice.", 8.0, "Mains", 1, null, 0, 0, null],
+  ["Spaghetti Carbonara", "Creamy spaghetti carbonara with cheese, egg and a hint of pepper.", 9.0, "Mains", 1, null, 0, 0, null],
+
+  ["Kopi O (南洋咖啡乌)", "Traditional black coffee, brewed Nanyang-style.", 3.0, "Beverages", 1, null, 0, 0, null],
+  ["Kopi with Milk (南洋咖啡奶)", "Traditional Nanyang coffee with a swirl of milk.", 3.5, "Beverages", 1, null, 0, 0, null],
+  ["Milo O (美禄乌)", "Hot Milo without milk, classic and chocolatey.", 3.0, "Beverages", 1, null, 0, 0, null],
+  ["Milo with Milk (美禄奶)", "Hot Milo with creamy milk.", 3.5, "Beverages", 1, null, 0, 0, null],
+  ["Honey Lemon (蜂蜜柑橘柠檬)", "Refreshing honey, citrus and lemon drink.", 4.0, "Beverages", 1, null, 0, 0, null],
+
+  ["Mugwort Herbal Tea (艾草)", "Supports menstrual health, aids relaxation, improves sleep, relieves pain and boosts immunity.", 4.0, "Herbal Tea", 1, null, 0, 0, null],
+
+  ["D Passion - Glass (百香果酵素)", "Passionfruit enzyme. Relieves insomnia, keeps skin hydrated and glowing.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["D Passion - Bottle (百香果酵素)", "Passionfruit enzyme bottle to take home. Relieves insomnia, keeps skin glowing.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Le Mulberry - Glass (桑葚酵素)", "Mulberry enzyme. Improves eyesight, reduces age spots and acts as an antioxidant.", 7.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Le Mulberry - Bottle (桑葚酵素)", "Mulberry enzyme bottle to take home.", 18.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Nutmeg Fantasy - Glass (豆蔻酵素)", "Nutmeg enzyme. Soothes anxiety, depression and rheumatic pain.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Nutmeg Fantasy - Bottle (豆蔻酵素)", "Nutmeg enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Tropicana - Glass (黄梨酵素)", "Pineapple enzyme. Anti-inflammatory and helps reduce obesity.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Tropicana - Bottle (黄梨酵素)", "Pineapple enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Rising Sun - Glass (老姜酵素)", "Old ginger enzyme. Improves immunity and promotes blood circulation.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Rising Sun - Bottle (老姜酵素)", "Old ginger enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Colour of Night - Glass (香茅酵素)", "Lemongrass enzyme. Boosts memory and helps with digestion and nutrient absorption.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["Colour of Night - Bottle (香茅酵素)", "Lemongrass enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+
+  ["Vegetarian Herbal Steamboat", "Wholesome herbal steamboat. RM28 per person, minimum 4 people. Pre-order 3 days ahead.", 28.0, "Pre-Order Specials", 1, null, 0, 1, "PRE-ORDER 3 DAYS"]
 ];
 
 const TABLES = Array.from({ length: 5 }, (_, index) => ({
@@ -53,12 +88,21 @@ const TABLES = Array.from({ length: 5 }, (_, index) => ({
 }));
 
 const seedDatabase = async () => {
-  const categoryCount = await get("SELECT COUNT(*) AS count FROM categories");
+  for (const category of CATEGORIES) {
+    const existing = await get(`SELECT id FROM categories WHERE name = ?`, [category.name]);
 
-  if (!categoryCount || categoryCount.count === 0) {
-    await run(`INSERT INTO categories (name, display_order) VALUES ('Drinks', 1)`);
-    await run(`INSERT INTO categories (name, display_order) VALUES ('Food', 2)`);
-    await run(`INSERT INTO categories (name, display_order) VALUES ('Desserts', 3)`);
+    if (existing) {
+      await run(
+        `UPDATE categories SET display_order = ? WHERE id = ?`,
+        [category.display_order, existing.id]
+      );
+      continue;
+    }
+
+    await run(
+      `INSERT INTO categories (name, display_order) VALUES (?, ?)`,
+      [category.name, category.display_order]
+    );
   }
 
   for (const [
@@ -99,6 +143,17 @@ const seedDatabase = async () => {
       );
     }
   }
+
+  const allowedNames = MENU_ITEMS.map(([name]) => name);
+  const placeholders = allowedNames.map(() => "?").join(", ");
+  await run(
+    `
+      UPDATE menu_items
+      SET is_available = 0, is_popular = 0, is_promo = 0, promo_label = NULL
+      WHERE name NOT IN (${placeholders})
+    `,
+    allowedNames
+  );
 
   for (const table of TABLES) {
     const existingTable = await get(
