@@ -1047,36 +1047,56 @@
   z-index: 5;
 }
 
-.rx-burst span {
+.rx-bubble {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 7px;
-  height: 7px;
-  background: currentColor;
+  width: var(--size, 8px);
+  height: var(--size, 8px);
   border-radius: 50%;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.85));
-  transform: translate(-50%, -50%);
-  animation: rx-burst-fly 620ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 28%,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(255, 255, 255, 0.35) 28%,
+      var(--bcolor, #f4b84b) 60%,
+      rgba(0, 0, 0, 0.18) 100%);
+  box-shadow:
+    0 0 6px var(--bcolor, #f4b84b),
+    0 0 12px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%) scale(0.3);
+  opacity: 0;
+  animation-name: rx-bubble-fly;
+  animation-timing-function: cubic-bezier(0.18, 0.72, 0.32, 1);
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
 }
 
-.rx-burst span:nth-child(1) { --tx:  34px; --ty: -28px; }
-.rx-burst span:nth-child(2) { --tx: -34px; --ty: -28px; }
-.rx-burst span:nth-child(3) { --tx:  42px; --ty:   2px; animation-delay: 30ms; }
-.rx-burst span:nth-child(4) { --tx: -42px; --ty:   2px; animation-delay: 30ms; }
-.rx-burst span:nth-child(5) { --tx:  26px; --ty:  30px; animation-delay: 60ms; }
-.rx-burst span:nth-child(6) { --tx: -26px; --ty:  30px; animation-delay: 60ms; }
-.rx-burst span:nth-child(7) { --tx:   0px; --ty: -38px; animation-delay: 15ms; }
-.rx-burst span:nth-child(8) { --tx:   0px; --ty:  34px; animation-delay: 75ms; }
-
-@keyframes rx-burst-fly {
-  0%   {
-    transform: translate(-50%, -50%) scale(0.5);
+@keyframes rx-bubble-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  18% {
     opacity: 1;
+    transform:
+      translate(
+        calc(-50% + (var(--tx) * 0.22) + (var(--drift) * 0.3)),
+        calc(-50% + (var(--ty) * 0.22))
+      )
+      scale(1);
+  }
+  70% {
+    opacity: 0.85;
   }
   100% {
-    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.2);
+    transform:
+      translate(
+        calc(-50% + var(--tx) + var(--drift)),
+        calc(-50% + var(--ty) + var(--lift, 0px))
+      )
+      scale(0.4);
     opacity: 0;
   }
 }
@@ -1087,7 +1107,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rx-button.rx-released { animation: none; }
-  .rx-burst { display: none; }
+  .rx-burst,
+  .rx-bubble { display: none; }
   .rx-button.rx-pressed,
   .rx-button.rx-button.rx-pressed {
     transform: none !important;

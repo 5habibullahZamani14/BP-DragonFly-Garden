@@ -48,3 +48,23 @@ Menu items carry three extra flags: `is_popular`, `is_promo`, and `promo_label`.
 
 ### Auto-pick the popular item ("the AI")
 `POST /menu/popular/recompute` runs a SQL aggregate over the last N days of orders, picks the top-N most-ordered items, clears `is_popular` on everything else, and sets it on the winner(s). Body params (all optional): `lookback_days` (default 7, 1–90) and `top` (default 1, 1–5). Returns the winner names and units sold. Hit this endpoint on a weekly schedule (cron / Task Scheduler / a setInterval in the backend) to keep the spotlight fresh automatically.
+
+## Reactive buttons (frontend/src/ReactiveButton.jsx)
+Every interactive button uses `<ReactiveButton>` instead of `<button>`. Behavior:
+- Press: scales down + dims, plays a low click tone (~360 Hz).
+- Release: jelly bounce animation + plays a higher tone (~820 Hz) + spawns a randomized bubble burst.
+- Each click generates **16 bubble particles** with random angle, distance, size, delay, duration, lateral drift, and color picked from a palette.
+- Particles use a glossy radial-gradient (white highlight at top-left → colored body → dark rim) to look like bubbles, with a colored outer glow.
+- Palette is auto-derived from the button's class name via `derivePalette()`:
+  - `spotlight-card__cta` → warm gold mix
+  - `promo-pill` → blossom mix (gold + pink + sage)
+  - `checkout-button`, `action-button`, `chip--active`, `chip--action` → sunflower
+  - plain `chip` → sage greens
+  - quantity controls (no extra class) → sage greens
+- A custom palette can be passed via the `palette={[...]}` prop to override.
+- Respects `prefers-reduced-motion`.
+
+## Menu item images (frontend/public/menu-images/)
+Real food photos cropped from the printed BP Dragonfly Garden menu screenshots using ImageMagick (`scripts/crop_menu_images.sh`). 20 jpgs covering all Mains, all Enzyme Drinks (glass + bottle pairs share the same bottle photo), and the Vegetarian Herbal Steamboat. Beverages (Kopi/Milo/Honey Lemon) and Mugwort tea have no source photo so they fall back to the leaf-on-cream placeholder rendered by `<MenuMedia>` in App.jsx. The seed.js `IMG()` helper maps slug → `/menu-images/<slug>.jpg`.
+
+To re-crop or add new photos: edit `scripts/crop_menu_images.sh`, run `bash scripts/crop_menu_images.sh`, then re-run the backend (which re-seeds via `seed.js` to update `image_url`).

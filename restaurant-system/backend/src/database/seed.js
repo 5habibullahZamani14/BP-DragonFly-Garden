@@ -41,22 +41,24 @@ const CATEGORIES = [
   { name: "Pre-Order Specials", display_order: 5 }
 ];
 
+const IMG = (slug) => `/menu-images/${slug}.jpg`;
+
 const MENU_ITEMS = [
-  ["Kocha Char Koay Teow", "Stir-fried flat rice noodles with a smoky wok-charred flavour.", 6.0, "Mains", 1, null, 0, 0, null],
-  ["Spaghetti Stir Fried", "Asian-style stir-fried spaghetti with seasonal vegetables.", 7.0, "Mains", 1, null, 0, 0, null],
-  ["Kampung Eggs (2pcs)", "Two soft-boiled village (kampung) eggs served warm.", 4.0, "Mains", 1, null, 0, 0, null],
-  ["Farm Herbal Soup with Healthy Rice", "Slow-simmered herbal soup paired with our signature healthy multigrain rice.", 10.0, "Mains", 1, null, 1, 0, null],
-  ["Meesua Herbal Soup", "Fine meesua noodles in a comforting herbal broth.", 9.0, "Mains", 1, null, 0, 0, null],
-  ["Small Bites - Hummus Sesame", "Crispy crackers served with creamy sesame hummus dip.", 4.0, "Mains", 1, null, 0, 0, null],
-  ["Small Bites - Hummus Milky", "Crispy crackers served with our creamy milky hummus dip.", 4.0, "Mains", 1, null, 0, 0, null],
-  ["Papa Sandwich (Egg + Cheese)", "Toasted sandwich filled with fluffy egg and melted cheese.", 6.0, "Mains", 1, null, 0, 0, null],
-  ["Papa Sandwich (Egg Only)", "Toasted sandwich with our farm-fresh egg.", 5.0, "Mains", 1, null, 0, 0, null],
-  ["Mushroom Soup", "Creamy mushroom soup served with a slice of bread.", 6.0, "Mains", 1, null, 0, 0, null],
-  ["Jacket Potato", "Baked potato loaded with savoury filling and fresh garnish.", 7.0, "Mains", 1, null, 0, 0, null],
-  ["Mummy Farm Salad", "Garden-fresh salad with crisp lettuce, tomato and house dressing.", 8.0, "Mains", 1, null, 0, 0, null],
-  ["Farm Herbal Fried Rice", "Wok-fried rice infused with our farm herbal blend, served with egg and sides.", 8.0, "Mains", 1, null, 0, 0, null],
-  ["Ah Ma Curry with Healthy Rice", "Grandma's secret-recipe curry served with our healthy multigrain rice.", 8.0, "Mains", 1, null, 0, 0, null],
-  ["Spaghetti Carbonara", "Creamy spaghetti carbonara with cheese, egg and a hint of pepper.", 9.0, "Mains", 1, null, 0, 0, null],
+  ["Kocha Char Koay Teow", "Stir-fried flat rice noodles with a smoky wok-charred flavour.", 6.0, "Mains", 1, IMG("kocha-char-koay-teow"), 0, 0, null],
+  ["Spaghetti Stir Fried", "Asian-style stir-fried spaghetti with seasonal vegetables.", 7.0, "Mains", 1, IMG("spaghetti-stir-fried"), 0, 0, null],
+  ["Kampung Eggs (2pcs)", "Two soft-boiled village (kampung) eggs served warm.", 4.0, "Mains", 1, IMG("kampung-eggs"), 0, 0, null],
+  ["Farm Herbal Soup with Healthy Rice", "Slow-simmered herbal soup paired with our signature healthy multigrain rice.", 10.0, "Mains", 1, IMG("farm-herbal-soup"), 1, 0, null],
+  ["Meesua Herbal Soup", "Fine meesua noodles in a comforting herbal broth.", 9.0, "Mains", 1, IMG("meesua-herbal-soup"), 0, 0, null],
+  ["Small Bites - Hummus Sesame", "Crispy crackers served with creamy sesame hummus dip.", 4.0, "Mains", 1, IMG("small-bites-hummus"), 0, 0, null],
+  ["Small Bites - Hummus Milky", "Crispy crackers served with our creamy milky hummus dip.", 4.0, "Mains", 1, IMG("small-bites-hummus"), 0, 0, null],
+  ["Papa Sandwich (Egg + Cheese)", "Toasted sandwich filled with fluffy egg and melted cheese.", 6.0, "Mains", 1, IMG("papa-sandwich"), 0, 0, null],
+  ["Papa Sandwich (Egg Only)", "Toasted sandwich with our farm-fresh egg.", 5.0, "Mains", 1, IMG("papa-sandwich"), 0, 0, null],
+  ["Mushroom Soup", "Creamy mushroom soup served with a slice of bread.", 6.0, "Mains", 1, IMG("mushroom-soup"), 0, 0, null],
+  ["Jacket Potato", "Baked potato loaded with savoury filling and fresh garnish.", 7.0, "Mains", 1, IMG("jacket-potato"), 0, 0, null],
+  ["Mummy Farm Salad", "Garden-fresh salad with crisp lettuce, tomato and house dressing.", 8.0, "Mains", 1, IMG("mummy-farm-salad"), 0, 0, null],
+  ["Farm Herbal Fried Rice", "Wok-fried rice infused with our farm herbal blend, served with egg and sides.", 8.0, "Mains", 1, IMG("farm-herbal-fried-rice"), 0, 0, null],
+  ["Ah Ma Curry with Healthy Rice", "Grandma's secret-recipe curry served with our healthy multigrain rice.", 8.0, "Mains", 1, IMG("ah-ma-curry"), 0, 0, null],
+  ["Spaghetti Carbonara", "Creamy spaghetti carbonara with cheese, egg and a hint of pepper.", 9.0, "Mains", 1, IMG("spaghetti-carbonara"), 0, 0, null],
 
   ["Kopi O (南洋咖啡乌)", "Traditional black coffee, brewed Nanyang-style.", 3.0, "Beverages", 1, null, 0, 0, null],
   ["Kopi with Milk (南洋咖啡奶)", "Traditional Nanyang coffee with a swirl of milk.", 3.5, "Beverages", 1, null, 0, 0, null],
@@ -66,20 +68,20 @@ const MENU_ITEMS = [
 
   ["Mugwort Herbal Tea (艾草)", "Supports menstrual health, aids relaxation, improves sleep, relieves pain and boosts immunity.", 4.0, "Herbal Tea", 1, null, 0, 0, null],
 
-  ["D Passion - Glass (百香果酵素)", "Passionfruit enzyme. Relieves insomnia, keeps skin hydrated and glowing.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["D Passion - Bottle (百香果酵素)", "Passionfruit enzyme bottle to take home. Relieves insomnia, keeps skin glowing.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Le Mulberry - Glass (桑葚酵素)", "Mulberry enzyme. Improves eyesight, reduces age spots and acts as an antioxidant.", 7.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Le Mulberry - Bottle (桑葚酵素)", "Mulberry enzyme bottle to take home.", 18.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Nutmeg Fantasy - Glass (豆蔻酵素)", "Nutmeg enzyme. Soothes anxiety, depression and rheumatic pain.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Nutmeg Fantasy - Bottle (豆蔻酵素)", "Nutmeg enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Tropicana - Glass (黄梨酵素)", "Pineapple enzyme. Anti-inflammatory and helps reduce obesity.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Tropicana - Bottle (黄梨酵素)", "Pineapple enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Rising Sun - Glass (老姜酵素)", "Old ginger enzyme. Improves immunity and promotes blood circulation.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Rising Sun - Bottle (老姜酵素)", "Old ginger enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Colour of Night - Glass (香茅酵素)", "Lemongrass enzyme. Boosts memory and helps with digestion and nutrient absorption.", 5.0, "Enzyme Drinks", 1, null, 0, 0, null],
-  ["Colour of Night - Bottle (香茅酵素)", "Lemongrass enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, null, 0, 0, null],
+  ["D Passion - Glass (百香果酵素)", "Passionfruit enzyme. Relieves insomnia, keeps skin hydrated and glowing.", 5.0, "Enzyme Drinks", 1, IMG("d-passion"), 0, 0, null],
+  ["D Passion - Bottle (百香果酵素)", "Passionfruit enzyme bottle to take home. Relieves insomnia, keeps skin glowing.", 12.0, "Enzyme Drinks", 1, IMG("d-passion"), 0, 0, null],
+  ["Le Mulberry - Glass (桑葚酵素)", "Mulberry enzyme. Improves eyesight, reduces age spots and acts as an antioxidant.", 7.0, "Enzyme Drinks", 1, IMG("le-mulberry"), 0, 0, null],
+  ["Le Mulberry - Bottle (桑葚酵素)", "Mulberry enzyme bottle to take home.", 18.0, "Enzyme Drinks", 1, IMG("le-mulberry"), 0, 0, null],
+  ["Nutmeg Fantasy - Glass (豆蔻酵素)", "Nutmeg enzyme. Soothes anxiety, depression and rheumatic pain.", 5.0, "Enzyme Drinks", 1, IMG("nutmeg-fantasy"), 0, 0, null],
+  ["Nutmeg Fantasy - Bottle (豆蔻酵素)", "Nutmeg enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, IMG("nutmeg-fantasy"), 0, 0, null],
+  ["Tropicana - Glass (黄梨酵素)", "Pineapple enzyme. Anti-inflammatory and helps reduce obesity.", 5.0, "Enzyme Drinks", 1, IMG("tropicana"), 0, 0, null],
+  ["Tropicana - Bottle (黄梨酵素)", "Pineapple enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, IMG("tropicana"), 0, 0, null],
+  ["Rising Sun - Glass (老姜酵素)", "Old ginger enzyme. Improves immunity and promotes blood circulation.", 5.0, "Enzyme Drinks", 1, IMG("rising-sun"), 0, 0, null],
+  ["Rising Sun - Bottle (老姜酵素)", "Old ginger enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, IMG("rising-sun"), 0, 0, null],
+  ["Colour of Night - Glass (香茅酵素)", "Lemongrass enzyme. Boosts memory and helps with digestion and nutrient absorption.", 5.0, "Enzyme Drinks", 1, IMG("colour-of-night"), 0, 0, null],
+  ["Colour of Night - Bottle (香茅酵素)", "Lemongrass enzyme bottle to take home.", 12.0, "Enzyme Drinks", 1, IMG("colour-of-night"), 0, 0, null],
 
-  ["Vegetarian Herbal Steamboat", "Wholesome herbal steamboat. RM28 per person, minimum 4 people. Pre-order 3 days ahead.", 28.0, "Pre-Order Specials", 1, null, 0, 1, "PRE-ORDER 3 DAYS"]
+  ["Vegetarian Herbal Steamboat", "Wholesome herbal steamboat. RM28 per person, minimum 4 people. Pre-order 3 days ahead.", 28.0, "Pre-Order Specials", 1, IMG("vegetarian-herbal-steamboat"), 0, 1, "PRE-ORDER 3 DAYS"]
 ];
 
 const TABLES = Array.from({ length: 5 }, (_, index) => ({

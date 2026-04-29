@@ -46,18 +46,67 @@ const prefersReducedMotion = () => {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 };
 
+const PALETTES = {
+  sunflower: ["#f4b84b", "#f7d27a", "#fff5d4", "#ffe7a3", "#ffc566"],
+  sage:      ["#5a8f3a", "#a3c66f", "#d8ecb3", "#f4b84b", "#fff5d4"],
+  warmGold:  ["#f4d169", "#fff5d4", "#ffd9b3", "#a3c66f", "#ffe07a"],
+  blossom:   ["#f4b84b", "#ffb3b3", "#fff5d4", "#a3c66f", "#ffd9e0"],
+};
+
+const derivePalette = (className) => {
+  const c = className || "";
+  if (c.includes("spotlight-card__cta")) return PALETTES.warmGold;
+  if (c.includes("promo-pill")) return PALETTES.blossom;
+  if (c.includes("checkout-button")) return PALETTES.sunflower;
+  if (c.includes("chip--active") || c.includes("chip--action")) return PALETTES.sunflower;
+  if (c.includes("action-button")) return PALETTES.sunflower;
+  if (c.includes("chip")) return PALETTES.sage;
+  return PALETTES.sage;
+};
+
+const SPARK_COUNT = 16;
+
+const makeBurst = (palette) => {
+  const particles = [];
+  for (let i = 0; i < SPARK_COUNT; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 24 + Math.random() * 42;
+    const size = 5 + Math.random() * 9;
+    const delay = Math.random() * 110;
+    const duration = 480 + Math.random() * 340;
+    const drift = (Math.random() - 0.5) * 26;
+    const lift = -(Math.random() * 12);
+    const color = palette[Math.floor(Math.random() * palette.length)];
+    particles.push({
+      key: i,
+      tx: Math.cos(angle) * distance,
+      ty: Math.sin(angle) * distance,
+      drift,
+      lift,
+      size,
+      delay,
+      duration,
+      color,
+    });
+  }
+  return particles;
+};
+
 export default function ReactiveButton({
   className = "",
   children,
   onClick,
   disabled,
   type = "button",
+  palette,
   ...rest
 }) {
   const btnRef = useRef(null);
   const releaseTimerRef = useRef(null);
   const [bursts, setBursts] = useState([]);
   const burstIdRef = useRef(0);
+
+  const effectivePalette = palette || derivePalette(className);
 
   useEffect(() => {
     return () => {
@@ -99,10 +148,11 @@ export default function ReactiveButton({
       }, 520);
 
       const id = ++burstIdRef.current;
-      setBursts((current) => [...current, id]);
+      const particles = makeBurst(effectivePalette);
+      setBursts((current) => [...current, { id, particles }]);
       setTimeout(() => {
-        setBursts((current) => current.filter((x) => x !== id));
-      }, 700);
+        setBursts((current) => current.filter((b) => b.id !== id));
+      }, 950);
     }
 
     playTone(820, 0.09, 0.14);
@@ -122,9 +172,24 @@ export default function ReactiveButton({
       {...rest}
     >
       {children}
-      {bursts.map((id) => (
-        <span key={id} className="rx-burst" aria-hidden="true">
-          <span /><span /><span /><span /><span /><span /><span /><span />
+      {bursts.map((burst) => (
+        <span key={burst.id} className="rx-burst" aria-hidden="true">
+          {burst.particles.map((p) => (
+            <span
+              key={p.key}
+              className="rx-bubble"
+              style={{
+                "--tx": `${p.tx.toFixed(1)}px`,
+                "--ty": `${p.ty.toFixed(1)}px`,
+                "--drift": `${p.drift.toFixed(1)}px`,
+                "--lift": `${p.lift.toFixed(1)}px`,
+                "--size": `${p.size.toFixed(1)}px`,
+                "--bcolor": p.color,
+                animationDelay: `${p.delay.toFixed(0)}ms`,
+                animationDuration: `${p.duration.toFixed(0)}ms`,
+              }}
+            />
+          ))}
         </span>
       ))}
     </button>
