@@ -1,8 +1,4 @@
 const db = require("../database/db");
-const printerService = require("../services/printerService");
-const { createHttpError } = require("../middleware/validation");
-const { ORDER_STATUS, STATUS_TRANSITIONS, KITCHEN_VISIBLE_STATUSES } = require("../constants/order-status");
-const { recordStatusChange, getStatusHistory } = require("../utils/order-status-history");
 
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -83,12 +79,12 @@ const fetchOrderById = async (orderId) => {
   };
 };
 
-const createOrder = async (req, res) => {
-  const { table_id: tableId, items } = req.body;
+const createOrder = async (orderData) => {
+  const { table_id: tableId, items } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
 
   if (!table) {
-    throw createHttpError(404, "Table not found");
+    throw new Error("Table not found");
   }
 
   const uniqueMenuItemIds = [...new Set(items.map((item) => item.menu_item_id))];
@@ -108,11 +104,11 @@ const createOrder = async (req, res) => {
     const menuItem = menuItemMap.get(item.menu_item_id);
 
     if (!menuItem) {
-      throw createHttpError(404, `Menu item ${item.menu_item_id} not found`);
+      throw new Error(`Menu item ${item.menu_item_id} not found`);
     }
 
     if (!menuItem.is_available) {
-      throw createHttpError(409, `${menuItem.name} is currently unavailable`);
+      throw new Error(`${menuItem.name} is currently unavailable`);
     }
   }
 
@@ -133,7 +129,7 @@ const createOrder = async (req, res) => {
         INSERT INTO orders (table_id, status, total_price)
         VALUES (?, ?, ?)
       `,
-      [tableId, ORDER_STATUS.QUEUE, totalPrice]
+      [tableId, "pending", totalPrice]
     );
 
     for (const item of items) {
@@ -148,21 +144,9 @@ const createOrder = async (req, res) => {
       );
     }
 
-    // Record initial status in history
-    await recordStatusChange(orderInsert.lastID, ORDER_STATUS.QUEUE, "system");
-
     await run("COMMIT");
 
-    const createdOrder = await fetchOrderById(orderInsert.lastID);
-
-    printerService.printTicket(createdOrder).catch((printError) => {
-      console.error("Printer service error:", printError.message || printError);
-    });
-
-    return res.status(201).json({
-      message: "Order created successfully",
-      order: createdOrder
-    });
+    return fetchOrderById(orderInsert.lastID);
   } catch (transactionError) {
     try {
       await run("ROLLBACK");
@@ -174,20 +158,18 @@ const createOrder = async (req, res) => {
   }
 };
 
-const getOrder = async (req, res) => {
-  const orderId = Number(req.params.id);
+const getOrder = async (orderId) => {
   const order = await fetchOrderById(orderId);
 
   if (!order) {
-    throw createHttpError(404, "Order not found");
+    throw new Error("Order not found");
   }
 
-  return res.json(order);
+  return order;
 };
 
-const getOrders = async (req, res) => {
-  const tableId = req.query.table_id ? Number(req.query.table_id) : null;
-  const status = req.query.status || null;
+const getOrders = async (filters) => {
+  const { table_id: tableId, status } = filters;
 
   let query = `
     SELECT
@@ -220,40 +202,42 @@ const getOrders = async (req, res) => {
     ORDER BY o.created_at DESC, o.id DESC
   `;
 
-  const orders = await all(query, params);
-  return res.json(orders);
+  return all(query, params);
 };
 
-const getKitchenOrders = async (req, res) => {
-  const requestedStatus = req.query.status || null;
-  const placeholders = KITCHEN_VISIBLE_STATUSES.map(() => "?").join(", ");
-  const params = requestedStatus ? [requestedStatus] : [...KITCHEN_VISIBLE_STATUSES];
-  const whereClause = requestedStatus ? "o.status = ?" : `o.status IN (${placeholders})`;
+const getKitchenOrders = async (filters) => {
+  const { status } = filters;
 
-  const rows = await all(
-    `
-      SELECT
-        o.id,
-        o.table_id,
-        t.table_number,
-        o.status,
-        o.total_price,
-        o.created_at,
-        oi.id AS order_item_id,
-        oi.menu_item_id,
-        oi.quantity,
-        oi.price_at_order_time,
-        oi.notes,
-        mi.name AS item_name
-      FROM orders o
-      INNER JOIN tables t ON t.id = o.table_id
-      LEFT JOIN order_items oi ON oi.order_id = o.id
-      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-      WHERE ${whereClause}
-      ORDER BY o.created_at ASC, o.id ASC, oi.id ASC
-    `,
-    params
-  );
+  let query = `
+    SELECT
+      o.id,
+      o.table_id,
+      t.table_number,
+      o.status,
+      o.total_price,
+      o.created_at,
+      oi.id AS order_item_id,
+      oi.menu_item_id,
+      oi.quantity,
+      oi.price_at_order_time,
+      oi.notes,
+      mi.name AS item_name
+    FROM orders o
+    INNER JOIN tables t ON t.id = o.table_id
+    LEFT JOIN order_items oi ON oi.order_id = o.id
+    LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+    WHERE o.status IN ('pending', 'confirmed', 'cooking', 'ready')
+  `;
+  const params = [];
+
+  if (status) {
+    query += ` AND o.status = ?`;
+    params.push(status);
+  }
+
+  query += ` ORDER BY o.created_at ASC, o.id ASC, oi.id ASC`;
+
+  const rows = await all(query, params);
 
   const orders = [];
   const orderMap = new Map();
@@ -286,51 +270,21 @@ const getKitchenOrders = async (req, res) => {
     }
   }
 
-  return res.json(orders);
+  return orders;
 };
 
-const updateOrderStatus = async (req, res) => {
-  const orderId = Number(req.params.id);
-  const { status: nextStatus } = req.body;
+const updateOrderStatus = async (orderId, newStatus, role) => {
   const existingOrder = await get(`SELECT id, status FROM orders WHERE id = ?`, [orderId]);
 
   if (!existingOrder) {
-    throw createHttpError(404, "Order not found");
+    throw new Error("Order not found");
   }
 
-  const currentStatus = existingOrder.status;
+  // Add your status transition logic here
 
-  if (currentStatus === nextStatus) {
-    const order = await fetchOrderById(orderId);
-    return res.json({
-      message: "Order status unchanged",
-      order
-    });
-  }
+  await run(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, orderId]);
 
-  const allowedNextStatuses = STATUS_TRANSITIONS[currentStatus] || [];
-
-  if (!allowedNextStatuses.includes(nextStatus)) {
-    throw createHttpError(409, `Cannot move order from ${currentStatus} to ${nextStatus}`, {
-      allowed_statuses: allowedNextStatuses
-    });
-  }
-
-  await run(`UPDATE orders SET status = ? WHERE id = ?`, [nextStatus, orderId]);
-  
-  // Record status change in history
-  await recordStatusChange(orderId, nextStatus, "kitchen_crew");
-  
-  const updatedOrder = await fetchOrderById(orderId);
-  
-  // Include status history in response for kitchen crew
-  const statusHistory = await getStatusHistory(orderId);
-
-  return res.json({
-    message: "Order status updated successfully",
-    order: updatedOrder,
-    status_history: statusHistory
-  });
+  return fetchOrderById(orderId);
 };
 
 module.exports = {

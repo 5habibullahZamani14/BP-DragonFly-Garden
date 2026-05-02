@@ -1,18 +1,4 @@
-/*
- * Import the Express.js library
- * This is a framework that helps us build web servers and APIs
- */
 const express = require("express");
-
-/*
- * Create an Express router object
- * This router will handle HTTP requests related to payment operations
- */
-const router = express.Router();
-
-/*
- * Import the payment controller functions
- */
 const {
   getPaymentMethods,
   getUnpaidOrders,
@@ -24,10 +10,6 @@ const {
   archivePaidOrders,
   getArchivedOrders
 } = require("../controllers/paymentController");
-
-/*
- * Import validation middleware functions
- */
 const {
   asyncHandler,
   validatePaymentCreation,
@@ -35,61 +17,34 @@ const {
   validateAddItem,
   validateOrderIdParam
 } = require("../middleware/validation");
-
 const { requirePaymentCounter } = require("../middleware/role-based-access");
 
-/*
- * GET /payment-methods
- * Returns all available payment methods
- */
-router.get("/methods", asyncHandler(getPaymentMethods));
+const paymentRoutes = (broadcast) => {
+  const router = express.Router();
 
-/*
- * GET /unpaid
- * Returns all unpaid orders with details
- */
-router.get("/unpaid", requirePaymentCounter, asyncHandler(getUnpaidOrders));
+  router.get("/methods", asyncHandler(getPaymentMethods));
 
-/*
- * GET /paid
- * Returns all paid orders for the day (toggleable history)
- */
-router.get("/paid", requirePaymentCounter, asyncHandler(getPaidOrders));
+  router.get("/unpaid", requirePaymentCounter, asyncHandler(getUnpaidOrders));
 
-/*
- * POST /:orderId/payments
- * Process a payment for an order
- */
-router.post("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, validatePaymentCreation, asyncHandler(processPayment));
+  router.get("/paid", requirePaymentCounter, asyncHandler(getPaidOrders));
 
-/*
- * GET /:orderId/payments
- * Get payment history for an order
- */
-router.get("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, asyncHandler(getOrderPayments));
+  router.post("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, validatePaymentCreation, asyncHandler(async (req, res) => {
+    const payment = await processPayment(req.params.orderId, req.body);
+    broadcast({ type: "NEW_PAYMENT", payload: payment });
+    res.status(201).json(payment);
+  }));
 
-/*
- * PATCH /:orderId/vat
- * Edit VAT rate for an order (requires employee auth)
- */
-router.patch("/:orderId/vat", requirePaymentCounter, validateOrderIdParam, validateVATEdit, asyncHandler(editOrderVAT));
+  router.get("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, asyncHandler(getOrderPayments));
 
-/*
- * POST /:orderId/items
- * Add item to an order
- */
-router.post("/:orderId/items", requirePaymentCounter, validateOrderIdParam, validateAddItem, asyncHandler(addOrderItem));
+  router.patch("/:orderId/vat", requirePaymentCounter, validateOrderIdParam, validateVATEdit, asyncHandler(editOrderVAT));
 
-/*
- * POST /archive
- * Archive all paid orders at end of day
- */
-router.post("/archive", requirePaymentCounter, asyncHandler(archivePaidOrders));
+  router.post("/:orderId/items", requirePaymentCounter, validateOrderIdParam, validateAddItem, asyncHandler(addOrderItem));
 
-/*
- * GET /archived
- * Get archived orders with search/filter
- */
-router.get("/archived", requirePaymentCounter, asyncHandler(getArchivedOrders));
+  router.post("/archive", requirePaymentCounter, asyncHandler(archivePaidOrders));
 
-module.exports = router;
+  router.get("/archived", requirePaymentCounter, asyncHandler(getArchivedOrders));
+
+  return router;
+};
+
+module.exports = paymentRoutes;
