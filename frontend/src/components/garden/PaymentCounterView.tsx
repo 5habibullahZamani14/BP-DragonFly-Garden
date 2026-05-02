@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Eye, EyeOff, CreditCard, DollarSign } from "lucide-react";
-import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, updateVAT } from "@/lib/api";
+import { Eye, EyeOff } from "lucide-react";
+import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, updateVAT, addOrderItem, fetchMenuItems } from "@/lib/api";
+
+// ... (existing interfaces)
 
 interface Order {
   id: number;
@@ -30,6 +32,12 @@ interface PaymentMethod {
   name: string;
 }
 
+interface MenuItem {
+  id: number;
+  name: string;
+  price: number;
+}
+
 interface PaymentCounterViewProps {
   qrCode: string;
   notify: (kind: "success" | "error", text: string) => void;
@@ -39,6 +47,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [paidOrders, setPaidOrders] = useState<Order[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [showPaidOrders, setShowPaidOrders] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -47,6 +56,9 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [employeeName, setEmployeeName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [editingVAT, setEditingVAT] = useState(false);
+  const [addingItem, setAddingItem] = useState(false);
+  const [newItemId, setNewItemId] = useState("");
+  const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [newVAT, setNewVAT] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -57,20 +69,19 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [unpaidOrders, paidOrders, paymentMethods] = await Promise.all([
+      const [unpaid, paid, methods, menu] = await Promise.all([
         fetchUnpaidOrders(qrCode),
         fetchPaidOrders(qrCode),
-        fetchPaymentMethods(qrCode)
+        fetchPaymentMethods(qrCode),
+        fetchMenuItems(qrCode)
       ]);
 
-      setUnpaidOrders(unpaidOrders);
-      setPaidOrders(paidOrders);
-      setPaymentMethods(paymentMethods);
+      setUnpaidOrders(unpaid);
+      setPaidOrders(paid);
+      setPaymentMethods(methods);
+      setMenuItems(menu);
     } catch (error) {
       notify("error", "Failed to load payment data");
-      setUnpaidOrders([]);
-      setPaidOrders([]);
-      setPaymentMethods([]);
     } finally {
       setLoading(false);
     }
@@ -85,8 +96,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     setIsProcessing(true);
     try {
       await processPayment(qrCode, selectedOrder.id, {
-        method_id: parseInt(selectedPaymentMethod),
-        amount: parseFloat(paymentAmount),
+        payment_method_id: parseInt(selectedPaymentMethod),
+        amount_paid: parseFloat(paymentAmount),
         employee_id: employeeId,
         employee_name: employeeName
       });
@@ -95,13 +106,37 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       setSelectedOrder(null);
       setPaymentAmount("");
       setSelectedPaymentMethod("");
-      loadData();
+      loadData(); // This should refresh the lists
     } catch (error) {
       notify("error", "Failed to process payment");
     } finally {
       setIsProcessing(false);
     }
   };
+  
+  const handleAddItem = async () => {
+    if (!selectedOrder || !newItemId || !newItemQuantity) {
+        notify("error", "Please select an item and quantity");
+        return;
+    }
+
+    try {
+        await addOrderItem(qrCode, selectedOrder.id, {
+            menu_item_id: parseInt(newItemId),
+            quantity: parseInt(newItemQuantity),
+            employee_id: employeeId,
+            employee_name: employeeName,
+        });
+        notify("success", "Item added successfully");
+        setAddingItem(false);
+        setNewItemId("");
+        setNewItemQuantity("1");
+        loadData(); // Refresh data to show the new item
+    } catch (error) {
+        notify("error", "Failed to add item");
+    }
+};
+
 
   const editVAT = async () => {
     if (!selectedOrder || !newVAT || !employeeId || !employeeName) {
@@ -111,7 +146,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
     try {
       await updateVAT(qrCode, selectedOrder.id, {
-        vat_rate: parseFloat(newVAT) / 100, // Convert percentage to decimal
+        vat_rate: parseFloat(newVAT) / 100,
         employee_id: employeeId,
         employee_name: employeeName
       });
@@ -129,65 +164,48 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Payment Counter</h1>
-            <Button
-              onClick={() => setShowPaidOrders(!showPaidOrders)}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              {showPaidOrders ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showPaidOrders ? "Hide" : "Show"} Paid Orders
-            </Button>
-          </div>
-        <div className="space-y-10">
+          <h1 className="text-3xl font-bold text-gray-900">Payment Counter</h1>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <section className="space-y-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">Unpaid Orders</h2>
-                <p className="text-sm text-gray-600">Current receipts waiting for payment.</p>
-              </div>
-              <div className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm">
-                {loading ? "Loading..." : `${unpaidOrders.length} unpaid`}
-              </div>
-            </div>
-
+            <h2 className="text-2xl font-semibold">Unpaid Orders</h2>
             {loading ? (
-              <div className="text-center py-8">Loading unpaid orders...</div>
-            ) : unpaidOrders.length === 0 ? (
-              <div className="text-center py-8 text-gray-600">No unpaid orders at the moment.</div>
+              <p>Loading...</p>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-4">
                 {unpaidOrders.map((order) => (
-                  <Card key={order.id} className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <Card key={order.id}>
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between">
-                        Table {order.table_number}
+                        <span>Table {order.table_number}</span>
                         <Badge variant={order.remaining > 0 ? "destructive" : "secondary"}>
                           RM {order.remaining.toFixed(2)}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-2 text-sm">
-                        <div>Items: {order.items.reduce((sum, item) => sum + item.quantity, 0)}</div>
-                        <div>Subtotal: RM {order.total_price.toFixed(2)}</div>
-                        <div>VAT: RM {(order.total_price * order.vat_rate).toFixed(2)}</div>
-                        <div className="font-semibold">Total: RM {order.total_with_vat.toFixed(2)}</div>
-                        <div>Paid: RM {order.total_paid.toFixed(2)}</div>
+                      <ul>
+                        {order.items.map(item => (
+                          <li key={item.item_name}>{item.quantity}x {item.item_name}</li>
+                        ))}
+                      </ul>
+                      <div className="mt-4">
+                        <p>Subtotal: RM {order.total_price.toFixed(2)}</p>
+                        <p>VAT ({order.vat_rate * 100}%): RM {(order.total_price * order.vat_rate).toFixed(2)}</p>
+                        <p className="font-bold">Total: RM {order.total_with_vat.toFixed(2)}</p>
+                        <p>Paid: RM {order.total_paid.toFixed(2)}</p>
                       </div>
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button
-                            className="w-full mt-4"
-                            onClick={() => setSelectedOrder(order)}
-                          >
+                          <Button className="w-full mt-4" onClick={() => setSelectedOrder(order)}>
                             Process Payment
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-md">
+                        <DialogContent>
                           <DialogHeader>
                             <DialogTitle>Process Payment - Table {order.table_number}</DialogTitle>
                           </DialogHeader>
+                          {/* Payment processing form */}
                           <div className="space-y-4">
                             <div>
                               <Label>Total Amount: RM {order.total_with_vat.toFixed(2)}</Label>
@@ -203,7 +221,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                   <SelectValue placeholder="Select payment method" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {(paymentMethods || []).map((method) => (
+                                  {paymentMethods.map((method) => (
                                     <SelectItem key={method.id} value={method.id.toString()}>
                                       {method.name}
                                     </SelectItem>
@@ -214,51 +232,26 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div>
                               <Label htmlFor="amount">Payment Amount (RM)</Label>
-                              <Input
-                                id="amount"
-                                type="number"
-                                step="0.01"
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                placeholder="Enter amount"
-                              />
+                              <Input id="amount" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                               <div>
                                 <Label htmlFor="employee-id">Employee ID</Label>
-                                <Input
-                                  id="employee-id"
-                                  value={employeeId}
-                                  onChange={(e) => setEmployeeId(e.target.value)}
-                                  placeholder="ID"
-                                />
+                                <Input id="employee-id" value={employeeId} onChange={e => setEmployeeId(e.target.value)} />
                               </div>
                               <div>
                                 <Label htmlFor="employee-name">Employee Name</Label>
-                                <Input
-                                  id="employee-name"
-                                  value={employeeName}
-                                  onChange={(e) => setEmployeeName(e.target.value)}
-                                  placeholder="Name"
-                                />
+                                <Input id="employee-name" value={employeeName} onChange={e => setEmployeeName(e.target.value)} />
                               </div>
                             </div>
 
                             <div className="flex gap-2">
-                              <Button
-                                onClick={handleProcessPayment}
-                                disabled={isProcessing}
-                                className="flex-1"
-                              >
+                              <Button onClick={handleProcessPayment} disabled={isProcessing} className="flex-1">
                                 {isProcessing ? "Processing..." : "Process Payment"}
                               </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => setEditingVAT(true)}
-                              >
-                                Edit VAT
-                              </Button>
+                              <Button variant="outline" onClick={() => setEditingVAT(true)}>Edit VAT</Button>
+                              <Button variant="outline" onClick={() => setAddingItem(true)}>Add Item</Button>
                             </div>
                           </div>
                         </DialogContent>
@@ -271,54 +264,40 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           </section>
 
           <section className="space-y-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
+            <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-semibold">Paid Orders</h2>
-                <p className="text-sm text-gray-600">Paid receipts are shown below.</p>
-              </div>
-              <Button onClick={() => setShowPaidOrders(!showPaidOrders)} variant="outline" className="flex items-center gap-2">
-                {showPaidOrders ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showPaidOrders ? "Hide Paid Orders" : "Show Paid Orders"}
-              </Button>
+                <Button onClick={() => setShowPaidOrders(!showPaidOrders)} variant="outline">
+                    {showPaidOrders ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                    {showPaidOrders ? "Hide" : "Show"} Paid Orders
+                </Button>
             </div>
-
-            {loading ? (
-              <div className="text-center py-8">Loading paid orders...</div>
-            ) : showPaidOrders ? (
-              paidOrders.length === 0 ? (
-                <div className="text-center py-8 text-gray-600">No paid orders yet.</div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {showPaidOrders && (
+              loading ? <p>Loading...</p> : (
+                <div className="space-y-4">
                   {paidOrders.map((order) => (
                     <Card key={order.id}>
                       <CardHeader>
                         <CardTitle className="flex items-center justify-between">
-                          Table {order.table_number}
-                          <Badge variant="default">Paid</Badge>
+                          <span>Table {order.table_number}</span>
+                          <Badge>Paid</Badge>
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-2 text-sm">
-                          <div>Items: {order.items.reduce((sum, item) => sum + item.quantity, 0)}</div>
-                          <div>Total: RM {order.total_with_vat.toFixed(2)}</div>
-                          <div className="text-gray-600">
-                            {new Date(order.created_at).toLocaleString()}
-                          </div>
-                        </div>
+                        <p>Total: RM {order.total_with_vat.toFixed(2)}</p>
+                        <p className="text-sm text-gray-500">Paid at: {new Date(order.created_at).toLocaleTimeString()}</p>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               )
-            ) : (
-              <div className="text-sm text-gray-600">Paid orders are hidden. Click the button above to show them.</div>
             )}
           </section>
         </div>
+      </div>
 
-        {/* VAT Edit Dialog */}
-        <Dialog open={editingVAT} onOpenChange={setEditingVAT}>
-          <DialogContent>
+      {/* VAT Edit Dialog */}
+       <Dialog open={editingVAT} onOpenChange={setEditingVAT}>
+           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit VAT Rate</DialogTitle>
             </DialogHeader>
@@ -360,7 +339,37 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+
+      {/* Add Item Dialog */}
+        <Dialog open={addingItem} onOpenChange={setAddingItem}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add Item to Order</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <div>
+                        <Label htmlFor="menu-item">Menu Item</Label>
+                        <Select value={newItemId} onValueChange={setNewItemId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select an item" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {menuItems.map(item => (
+                                    <SelectItem key={item.id} value={item.id.toString()}>
+                                        {item.name} - RM {item.price.toFixed(2)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div>
+                        <Label htmlFor="quantity">Quantity</Label>
+                        <Input id="quantity" type="number" value={newItemQuantity} onChange={e => setNewItemQuantity(e.target.value)} min="1" />
+                    </div>
+                    <Button onClick={handleAddItem} className="w-full">Add Item</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 };
