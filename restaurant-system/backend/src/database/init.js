@@ -147,8 +147,63 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_order_items_order", "order_items", "order_id");
   await ensureIndex("idx_order_items_menu_item", "order_items", "menu_item_id");
   await ensureIndex("idx_tables_qr_code", "tables", "qr_code");
-  await ensureIndex("idx_order_status_history_order", "order_status_history", "order_id, changed_at DESC");
-  await ensureIndex("idx_order_status_history_status", "order_status_history", "status, changed_at DESC");
+  await run(`
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      payment_method_id INTEGER NOT NULL,
+      amount_paid REAL NOT NULL,
+      payment_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      employee_id TEXT,
+      employee_name TEXT,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE RESTRICT
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS payment_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      employee_id TEXT,
+      employee_name TEXT,
+      timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS archived_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_order_id INTEGER NOT NULL,
+      table_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      total_price REAL NOT NULL,
+      vat_rate REAL NOT NULL DEFAULT 0.06,
+      payment_status TEXT NOT NULL DEFAULT 'unpaid',
+      created_at DATETIME NOT NULL,
+      archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      order_data TEXT NOT NULL -- JSON string of order details
+    )
+  `);
+
+  await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
+  await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
+
+  await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
+  await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");
+  await ensureIndex("idx_archived_orders_date", "archived_orders", "archived_at DESC");
+  await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
 
   console.log("Database schema ready");
 };

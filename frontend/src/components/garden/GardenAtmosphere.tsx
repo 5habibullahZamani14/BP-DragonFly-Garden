@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 /** Floating dragonflies & drifting leaves & flowers — pure CSS, lightweight, decorative only. */
-export const GardenAtmosphere = () => {
+export const GardenAtmosphere = ({ disableEffects = false }: { disableEffects?: boolean }) => {
   const [leaves, setLeaves] = useState<{ id: number; left: number; delay: number; dur: number; hue: number }[]>([]);
   const [flowers, setFlowers] = useState<{ id: number; left: number; delay: number; dur: number; size: number; sway: number }[]>([]);
 
@@ -38,7 +38,7 @@ export const GardenAtmosphere = () => {
         className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-30"
         style={{ background: "radial-gradient(circle, hsl(152 45% 30%), transparent 70%)" }}
       />
-      {leaves.map((l) => (
+      {!disableEffects && leaves.map((l) => (
         <svg
           key={l.id}
           viewBox="0 0 24 24"
@@ -56,7 +56,7 @@ export const GardenAtmosphere = () => {
         </svg>
       ))}
 
-      {flowers.map((f) => (
+      {!disableEffects && flowers.map((f) => (
         <div
           key={`f-${f.id}`}
           className="absolute -top-12"
@@ -66,10 +66,12 @@ export const GardenAtmosphere = () => {
           }}
         >
           <div
-            style={{
-              animation: `flower-sway ${3 + (f.id % 3)}s ease-in-out infinite alternate`,
-              ['--sway' as string]: `${f.sway}px`,
-            } as React.CSSProperties}
+            style={
+              {
+                animation: `flower-sway ${3 + (f.id % 3)}s ease-in-out infinite alternate`,
+                ['--sway' as string]: `${f.sway}px`,
+              } as CSSProperties
+            }
           >
             <svg
               viewBox="0 0 40 40"

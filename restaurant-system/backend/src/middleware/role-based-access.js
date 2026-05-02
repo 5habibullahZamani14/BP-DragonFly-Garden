@@ -9,19 +9,21 @@ const { createHttpError } = require("./validation");
 // Role constants
 const ROLES = {
   CUSTOMER_WAITER: "customer_waiter",
-  KITCHEN_CREW: "kitchen_crew"
+  KITCHEN_CREW: "kitchen_crew",
+  PAYMENT_COUNTER: "payment_counter"
 };
 
 // QR code patterns to identify role
 const QR_PATTERNS = {
   TABLE_QR: /^table-\d+$/,           // Table QR codes (e.g., "table-1", "table-2")
-  KITCHEN_QR: /^kitchen-crew-\w+$/   // Kitchen QR codes (e.g., "kitchen-crew-main")
+  KITCHEN_QR: /^kitchen-crew-\w+$/,  // Kitchen QR codes (e.g., "kitchen-crew-main")
+  PAYMENT_QR: /^payment-counter-\w+$/ // Payment counter QR codes (e.g., "payment-counter-main")
 };
 
 /**
  * Determine user role from QR code
  * @param {string} qrCode - The QR code string
- * @returns {string} - The user role (CUSTOMER_WAITER or KITCHEN_CREW)
+ * @returns {string} - The user role (CUSTOMER_WAITER, KITCHEN_CREW, or PAYMENT_COUNTER)
  */
 const getRoleFromQRCode = (qrCode) => {
   if (!qrCode) {
@@ -30,6 +32,10 @@ const getRoleFromQRCode = (qrCode) => {
 
   if (QR_PATTERNS.KITCHEN_QR.test(qrCode)) {
     return ROLES.KITCHEN_CREW;
+  }
+
+  if (QR_PATTERNS.PAYMENT_QR.test(qrCode)) {
+    return ROLES.PAYMENT_COUNTER;
   }
 
   if (QR_PATTERNS.TABLE_QR.test(qrCode)) {
@@ -107,6 +113,11 @@ const requireRole = (requiredRole) => {
 const requireKitchenCrew = requireRole(ROLES.KITCHEN_CREW);
 
 /**
+ * Middleware to require payment counter role
+ */
+const requirePaymentCounter = requireRole(ROLES.PAYMENT_COUNTER);
+
+/**
  * Middleware to require customer or waiter role
  */
 const requireCustomerOrWaiter = (req, res, next) => {
@@ -129,5 +140,6 @@ module.exports = {
   attachRoleMiddleware,
   requireRole,
   requireKitchenCrew,
+  requirePaymentCounter,
   requireCustomerOrWaiter
 };

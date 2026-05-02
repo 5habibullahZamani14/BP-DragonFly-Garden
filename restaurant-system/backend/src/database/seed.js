@@ -188,6 +188,16 @@ const seedDatabase = async () => {
     );
   }
 
+  const PAYMENT_METHODS = ["Cash", "Visa Card", "Mastercard", "eWallet", "Other"];
+
+  for (const method of PAYMENT_METHODS) {
+    const existing = await get(`SELECT id FROM payment_methods WHERE name = ?`, [method]);
+
+    if (!existing) {
+      await run(`INSERT INTO payment_methods (name) VALUES (?)`, [method]);
+    }
+  }
+
   console.log("Seed data ready");
 };
 

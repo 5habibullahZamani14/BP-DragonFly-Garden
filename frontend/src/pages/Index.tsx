@@ -3,17 +3,20 @@ import { GardenAtmosphere } from "@/components/garden/GardenAtmosphere";
 import { LandingView } from "@/components/garden/LandingView";
 import { CustomerView } from "@/components/garden/CustomerView";
 import { KitchenView } from "@/components/garden/KitchenView";
+import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 const TABLE_QR_PATTERN = /^table-\d+$/;
 const KITCHEN_QR_PATTERN = /^kitchen-crew-[a-z0-9_-]+$/i;
+const PAYMENT_QR_PATTERN = /^payment-counter-[a-z0-9_-]+$/i;
 
-type Role = "landing" | "customer" | "kitchen";
+type Role = "landing" | "customer" | "kitchen" | "payment";
 
 const detectRole = (): { role: Role; qrCode: string } => {
   const params = new URLSearchParams(window.location.search);
   const qr = (params.get("qr") || "").trim().toLowerCase();
   if (KITCHEN_QR_PATTERN.test(qr)) return { role: "kitchen", qrCode: qr };
+  if (PAYMENT_QR_PATTERN.test(qr)) return { role: "payment", qrCode: qr };
   if (TABLE_QR_PATTERN.test(qr)) return { role: "customer", qrCode: qr };
   // Friendly preview default: customer view, fake table-1, so the live preview is rich
   if (!qr) return { role: "customer", qrCode: "table-1" };
@@ -43,14 +46,16 @@ const Index = () => {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  // Allow quick role switch via ?view=kitchen for preview demoing
+  // Allow quick role switch via ?view=kitchen or ?view=payment for preview demoing
   const view = new URLSearchParams(window.location.search).get("view");
   const role: Role = (view as Role) || initial.role;
-  const qr = role === "kitchen" ? "kitchen-crew-demo" : initial.qrCode;
+  const qr = role === "kitchen" ? "kitchen-crew-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
+
+  console.log("Index: view =", view, "role =", role, "qr =", qr);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden">
-      <GardenAtmosphere />
+      <GardenAtmosphere disableEffects={role === "payment"} />
 
       {toast && (
         <div
@@ -70,6 +75,7 @@ const Index = () => {
       )}
 
       {role === "kitchen" && <KitchenView qrCode={qr} notify={notify} />}
+      {role === "payment" && <PaymentCounterView qrCode={qr} notify={notify} />}
       {role === "customer" && <CustomerView qrCode={qr} notify={notify} />}
       {role === "landing" && <LandingView />}
     </main>

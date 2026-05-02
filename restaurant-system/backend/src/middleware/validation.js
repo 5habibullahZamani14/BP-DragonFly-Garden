@@ -192,6 +192,86 @@ const validateQrCodeParam = (req, res, next) => {
   next();
 };
 
+const validatePaymentCreation = (req, res, next) => {
+  const paymentMethodId = toPositiveInteger(req.body?.payment_method_id);
+  const amountPaid = Number(req.body?.amount_paid);
+  const employeeId = req.body?.employee_id?.toString().trim();
+  const employeeName = req.body?.employee_name?.toString().trim();
+
+  if (!paymentMethodId) {
+    return next(createHttpError(400, "Valid payment_method_id is required."));
+  }
+
+  if (!amountPaid || amountPaid <= 0) {
+    return next(createHttpError(400, "Valid amount_paid is required."));
+  }
+
+  if (!employeeId || !employeeName) {
+    return next(createHttpError(400, "Employee ID and name are required."));
+  }
+
+  req.body = {
+    payment_method_id: paymentMethodId,
+    amount_paid: amountPaid,
+    employee_id: employeeId,
+    employee_name: employeeName
+  };
+
+  next();
+};
+
+const validateVATEdit = (req, res, next) => {
+  const vatRate = Number(req.body?.vat_rate);
+  const employeeId = req.body?.employee_id?.toString().trim();
+  const employeeName = req.body?.employee_name?.toString().trim();
+
+  if (vatRate === null || vatRate === undefined || vatRate < 0 || vatRate > 1) {
+    return next(createHttpError(400, "Valid VAT rate (0-1) is required."));
+  }
+
+  if (!employeeId || !employeeName) {
+    return next(createHttpError(400, "Employee ID and name are required for VAT changes."));
+  }
+
+  req.body = {
+    vat_rate: vatRate,
+    employee_id: employeeId,
+    employee_name: employeeName
+  };
+
+  next();
+};
+
+const validateAddItem = (req, res, next) => {
+  const menuItemId = toPositiveInteger(req.body?.menu_item_id);
+  const quantity = toPositiveInteger(req.body?.quantity);
+  const notes = sanitizeNotes(req.body?.notes);
+  const employeeId = req.body?.employee_id?.toString().trim();
+  const employeeName = req.body?.employee_name?.toString().trim();
+
+  if (!menuItemId) {
+    return next(createHttpError(400, "Valid menu_item_id is required."));
+  }
+
+  if (!quantity) {
+    return next(createHttpError(400, "Valid quantity is required."));
+  }
+
+  if (!employeeId || !employeeName) {
+    return next(createHttpError(400, "Employee ID and name are required."));
+  }
+
+  req.body = {
+    menu_item_id: menuItemId,
+    quantity,
+    notes,
+    employee_id: employeeId,
+    employee_name: employeeName
+  };
+
+  next();
+};
+
 const notFoundHandler = (req, res, next) => {
   next(createHttpError(404, `Route not found: ${req.method} ${req.originalUrl}`));
 };
@@ -234,6 +314,9 @@ module.exports = {
   validateOrderIdParam,
   validateOrderQuery,
   validateQrCodeParam,
+  validatePaymentCreation,
+  validateVATEdit,
+  validateAddItem,
   notFoundHandler,
   errorHandler
 };
