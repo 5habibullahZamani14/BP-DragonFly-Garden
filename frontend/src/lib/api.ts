@@ -2,7 +2,7 @@
 // Falls back to local mock data so the visual preview is always populated.
 import { MOCK_MENU, MOCK_KITCHEN_ORDERS, type MenuItem, type Order } from "./menu-data";
 
-const API_BASE = "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
 const apiUrl = (path: string, qrCode?: string) => {
   const base = `${API_BASE}${path}`;
@@ -109,6 +109,23 @@ export const updateOrderStatus = async (qr: string, id: number, status: string) 
     body: JSON.stringify({ status }),
   }, qr);
   return data?.order ?? null;
+};
+
+export const fetchMenuItems = async (qr: string): Promise<MenuItem[]> => {
+  const data = await safeFetch<MenuItem[]>("/menu", undefined, qr);
+  return data || [];
+};
+
+export const addOrderItem = async (
+  qr: string,
+  orderId: number,
+  body: { menu_item_id: number; quantity: number; employee_id?: string; employee_name?: string }
+): Promise<any> => {
+  return await safeFetch(`/payments/${orderId}/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, qr);
 };
 
 // Simple API wrapper for general use
