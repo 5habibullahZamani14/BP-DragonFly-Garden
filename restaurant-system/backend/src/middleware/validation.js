@@ -140,13 +140,21 @@ const validateStatusUpdate = (req, res, next) => {
 };
 
 const validateOrderIdParam = (req, res, next) => {
-  const orderId = toPositiveInteger(req.params?.id);
+  const rawOrderId = req.params?.id ?? req.params?.orderId;
+  const orderId = toPositiveInteger(rawOrderId);
 
   if (!orderId) {
     return next(createHttpError(400, "Valid order ID is required."));
   }
 
-  req.params.id = String(orderId);
+  if (req.params?.id !== undefined) {
+    req.params.id = String(orderId);
+  }
+
+  if (req.params?.orderId !== undefined) {
+    req.params.orderId = String(orderId);
+  }
+
   next();
 };
 

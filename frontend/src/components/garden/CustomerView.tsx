@@ -13,6 +13,7 @@ import type { MenuItem, Order } from "@/lib/menu-data";
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
 const STAGE_LABEL: Record<string, string> = { queue: "Received", preparing: "Cooking", ready: "Ready to serve" };
+const orderStageIndex = (status: string) => ORDER_STAGES.findIndex((stage) => stage === status);
 
 type Notify = (kind: "success" | "error", text: string) => void;
 
@@ -72,7 +73,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       document.removeEventListener("pointerdown", dismiss, true);
       document.removeEventListener("touchstart", dismiss, true);
       window.removeEventListener("wheel", dismiss);
-      window.removeEventListener("scroll", dismiss, { capture: true } as any);
+      window.removeEventListener("scroll", dismiss, { capture: true });
     };
   }, [query]);
 
@@ -187,7 +188,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     orders.forEach((o) => {
       const prev = prevStageRef.current[o.id];
       if (prev && prev !== o.status) {
-        const prevIdx = ORDER_STAGES.indexOf(prev as any);
+        const prevIdx = orderStageIndex(prev);
         if (prevIdx >= 0) {
           next[o.id] = prev;
           changed = true;
@@ -688,7 +689,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <span className="text-xs text-foreground/50">{orders.length} active</span>
               </div>
               {orders.map((o) => {
-                const ai = ORDER_STAGES.indexOf(o.status as any);
+                const ai = orderStageIndex(o.status);
                 const isReady = o.status === "ready";
                 const justCelebrated = isReady && celebratedIds.has(o.id);
                 return (
@@ -710,10 +711,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               key={i}
                               className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full bg-accent animate-confetti"
                               style={{
-                                ["--cx" as any]: `${cx}px`,
-                                ["--cy" as any]: `${cy}px`,
+                                "--cx": `${cx}px`,
+                                "--cy": `${cy}px`,
                                 animationDelay: `${i * 40}ms`,
-                              }}
+                              } as React.CSSProperties & Record<"--cx" | "--cy", string>}
                             />
                           );
                         })}

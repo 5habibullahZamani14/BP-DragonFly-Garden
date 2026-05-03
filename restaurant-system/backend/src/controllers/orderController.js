@@ -129,7 +129,7 @@ const createOrder = async (orderData) => {
         INSERT INTO orders (table_id, status, total_price)
         VALUES (?, ?, ?)
       `,
-      [tableId, "pending", totalPrice]
+      [tableId, "queue", totalPrice]
     );
 
     for (const item of items) {
@@ -226,7 +226,7 @@ const getKitchenOrders = async (filters) => {
     INNER JOIN tables t ON t.id = o.table_id
     LEFT JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-    WHERE o.status IN ('pending', 'confirmed', 'cooking', 'ready')
+    WHERE o.status IN ('queue', 'preparing', 'ready')
   `;
   const params = [];
 

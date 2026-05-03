@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { fetchKitchenOrders, updateOrderStatus } from "@/lib/api";
@@ -22,18 +22,18 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   const [updating, setUpdating] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<typeof STAGES[number]>("queue");
 
-  const load = async (silent = false) => {
+  const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     const data = await fetchKitchenOrders(qrCode);
     setOrders(data);
     if (!silent) setLoading(false);
-  };
+  }, [qrCode]);
 
   useEffect(() => {
     load();
     const id = window.setInterval(() => load(true), 7000);
     return () => window.clearInterval(id);
-  }, [qrCode]);
+  }, [load]);
 
   const grouped = useMemo(() =>
     STAGES.map((s) => ({ status: s, orders: orders.filter((o) => o.status === s) })),

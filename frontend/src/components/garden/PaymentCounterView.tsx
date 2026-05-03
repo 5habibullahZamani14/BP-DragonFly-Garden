@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,24 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Eye, EyeOff } from "lucide-react";
 import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, updateVAT, addOrderItem, fetchMenuItems } from "@/lib/api";
+import type { PaymentOrder } from "@/lib/api";
 
 // ... (existing interfaces)
-
-interface Order {
-  id: number;
-  table_number: string;
-  total_price: number;
-  vat_rate: number;
-  total_with_vat: number;
-  items: Array<{
-    quantity: number;
-    price_at_order_time: number;
-    item_name: string;
-  }>;
-  total_paid: number;
-  remaining: number;
-  created_at: string;
-}
 
 interface PaymentMethod {
   id: number;
@@ -44,12 +29,12 @@ interface PaymentCounterViewProps {
 }
 
 export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) => {
-  const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
-  const [paidOrders, setPaidOrders] = useState<Order[]>([]);
+  const [unpaidOrders, setUnpaidOrders] = useState<PaymentOrder[]>([]);
+  const [paidOrders, setPaidOrders] = useState<PaymentOrder[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [showPaidOrders, setShowPaidOrders] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<PaymentOrder | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [employeeId, setEmployeeId] = useState("");
@@ -62,11 +47,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [newVAT, setNewVAT] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [unpaid, paid, methods, menu] = await Promise.all([
@@ -85,7 +66,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [notify, qrCode]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !employeeId || !employeeName) {

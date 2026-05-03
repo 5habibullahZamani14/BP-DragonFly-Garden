@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { GardenAtmosphere } from "@/components/garden/GardenAtmosphere";
 import { LandingView } from "@/components/garden/LandingView";
 import { CustomerView } from "@/components/garden/CustomerView";
@@ -36,9 +36,9 @@ const Index = () => {
   const initial = useMemo(detectRole, []);
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string; key: number } | null>(null);
 
-  const notify = (kind: "success" | "error", text: string) => {
+  const notify = useCallback((kind: "success" | "error", text: string) => {
     setToast({ kind, text, key: Date.now() });
-  };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -50,8 +50,6 @@ const Index = () => {
   const view = new URLSearchParams(window.location.search).get("view");
   const role: Role = (view as Role) || initial.role;
   const qr = role === "kitchen" ? "kitchen-crew-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
-
-  console.log("Index: view =", view, "role =", role, "qr =", qr);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden">

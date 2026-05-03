@@ -47,7 +47,7 @@ app.use("/payments", paymentRoutes(broadcast));
 if (hasFrontendBuild) {
   app.use(express.static(frontendDistPath));
 
-  app.get(/^(?!\/(?:menu|orders|tables)\b).*/, (req, res) => {
+  app.get(/^(?!\/(?:menu|orders|tables|payments)\b).*/, (req, res) => {
     res.sendFile(path.join(frontendDistPath, "index.html"));
   });
 } else {

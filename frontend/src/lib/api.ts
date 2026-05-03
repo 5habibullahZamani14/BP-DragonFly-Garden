@@ -22,6 +22,43 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
   }
 };
 
+type PaymentMethod = { id: number; name: string };
+export type PaymentOrder = Order & {
+  table_id: number;
+  vat_rate: number;
+  payment_status: "unpaid" | "partially_paid" | "paid";
+  total_with_vat: number;
+  total_paid: number;
+  remaining: number;
+  created_at: string;
+  payments?: Array<{
+    id: number;
+    amount_paid: number;
+    payment_date: string;
+    employee_id?: string;
+    employee_name?: string;
+    payment_method: string;
+  }>;
+};
+type PaymentPayload = {
+  payment_method_id: number;
+  amount_paid: number;
+  employee_id?: string;
+  employee_name?: string;
+};
+type VatPayload = {
+  vat_rate: number;
+  employee_id: string;
+  employee_name: string;
+};
+type AddOrderItemPayload = {
+  menu_item_id: number;
+  quantity: number;
+  employee_id?: string;
+  employee_name?: string;
+};
+type ApiBody = Record<string, unknown> | unknown[] | null;
+
 export const fetchMenu = async (): Promise<MenuItem[]> => {
   const data = await safeFetch<MenuItem[]>("/menu");
   return data && data.length ? data : MOCK_MENU;
@@ -39,22 +76,22 @@ export const fetchKitchenOrders = async (qr: string): Promise<Order[]> => {
   return data && data.length ? data : MOCK_KITCHEN_ORDERS;
 };
 
-export const fetchUnpaidOrders = async (qr: string): Promise<Order[]> => {
-  const data = await safeFetch<Order[]>("/payments/unpaid", undefined, qr);
+export const fetchUnpaidOrders = async (qr: string): Promise<PaymentOrder[]> => {
+  const data = await safeFetch<PaymentOrder[]>("/payments/unpaid", undefined, qr);
   return data || [];
 };
 
-export const fetchPaidOrders = async (qr: string): Promise<Order[]> => {
-  const data = await safeFetch<Order[]>("/payments/paid", undefined, qr);
+export const fetchPaidOrders = async (qr: string): Promise<PaymentOrder[]> => {
+  const data = await safeFetch<PaymentOrder[]>("/payments/paid", undefined, qr);
   return data || [];
 };
 
-export const fetchPaymentMethods = async (qr: string): Promise<{id: number, name: string}[]> => {
-  const data = await safeFetch<{id: number, name: string}[]>("/payments/methods", undefined, qr);
+export const fetchPaymentMethods = async (qr: string): Promise<PaymentMethod[]> => {
+  const data = await safeFetch<PaymentMethod[]>("/payments/methods", undefined, qr);
   return data || [];
 };
 
-export const processPayment = async (qr: string, orderId: number, paymentData: {method_id: number, amount: number, employee_id?: string, employee_name?: string}): Promise<any> => {
+export const processPayment = async (qr: string, orderId: number, paymentData: PaymentPayload): Promise<PaymentOrder | null> => {
   return await safeFetch("/payments/" + orderId + "/payments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,7 +99,7 @@ export const processPayment = async (qr: string, orderId: number, paymentData: {
   }, qr);
 };
 
-export const updateVAT = async (qr: string, orderId: number, vatData: {vat_rate: number, employee_id: string, employee_name: string}): Promise<any> => {
+export const updateVAT = async (qr: string, orderId: number, vatData: VatPayload): Promise<PaymentOrder | null> => {
   return await safeFetch("/payments/" + orderId + "/vat", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -70,7 +107,7 @@ export const updateVAT = async (qr: string, orderId: number, vatData: {vat_rate:
   }, qr);
 };
 
-export const archivePaidOrders = async (qr: string): Promise<any> => {
+export const archivePaidOrders = async (qr: string): Promise<{ archived_count: number } | null> => {
   return await safeFetch("/payments/archive", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -119,8 +156,8 @@ export const fetchMenuItems = async (qr: string): Promise<MenuItem[]> => {
 export const addOrderItem = async (
   qr: string,
   orderId: number,
-  body: { menu_item_id: number; quantity: number; employee_id?: string; employee_name?: string }
-): Promise<any> => {
+  body: AddOrderItemPayload
+): Promise<PaymentOrder | null> => {
   return await safeFetch(`/payments/${orderId}/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -131,12 +168,12 @@ export const addOrderItem = async (
 // Simple API wrapper for general use
 export const api = {
   get: (path: string) => safeFetch(path),
-  post: (path: string, body?: any) => safeFetch(path, {
+  post: (path: string, body?: ApiBody) => safeFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined
   }),
-  patch: (path: string, body?: any) => safeFetch(path, {
+  patch: (path: string, body?: ApiBody) => safeFetch(path, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined
