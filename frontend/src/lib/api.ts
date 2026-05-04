@@ -120,12 +120,12 @@ export const placeOrder = async (
   fallbackTotal: number,
   fallbackTable: string
 ): Promise<Order> => {
-  const data = await safeFetch<{ order: Order }>("/orders", {
+  const data = await safeFetch<Order>("/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }, qr);
-  if (data?.order) return data.order;
+  if (data && 'id' in data) return data;
   // Mock fallback
   return {
     id: Math.floor(1000 + Math.random() * 9000),
@@ -140,12 +140,12 @@ export const refreshOrder = async (qr: string, id: number) =>
   safeFetch<Order>(`/orders/${id}`, undefined, qr);
 
 export const updateOrderStatus = async (qr: string, id: number, status: string) => {
-  const data = await safeFetch<{ order: Order }>(`/orders/${id}/status`, {
+  const data = await safeFetch<Order>(`/orders/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   }, qr);
-  return data?.order ?? null;
+  return data && 'id' in data ? data : null;
 };
 
 export const fetchMenuItems = async (qr: string): Promise<MenuItem[]> => {
