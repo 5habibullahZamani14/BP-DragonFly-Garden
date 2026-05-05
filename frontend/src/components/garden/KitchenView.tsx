@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight, KeyRound, LogOut } from "lucide-react";
+import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight, KeyRound, LogOut, Loader2 } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { fetchKitchenOrders, updateOrderStatus } from "@/lib/api";
+import { fetchKitchenOrders, updateOrderStatus, fetchKitchenPasscode } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import type { Order } from "@/lib/menu-data";
 
@@ -17,7 +17,7 @@ const STAGE_META: Record<string, { label: string; icon: typeof Clock; tint: stri
 
 // Session duration: 7 days in milliseconds
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const KITCHEN_PASSCODE = "kitchen2024"; // Simple passcode — manager can share with crew
+const FALLBACK_PASSCODE = 'kitchen2024'; // used if API is unreachable
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 
@@ -27,11 +27,21 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [passcodeInput, setPasscodeInput] = useState("");
   const [loginError, setLoginError] = useState(false);
+  const [kitchenPasscode, setKitchenPasscode] = useState(FALLBACK_PASSCODE);
+  const [passcodeLoading, setPasscodeLoading] = useState(true);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<typeof STAGES[number]>("queue");
+
+  // Load passcode from API on mount
+  useEffect(() => {
+    fetchKitchenPasscode()
+      .then((p) => setKitchenPasscode(p))
+      .catch(() => { /* keep fallback */ })
+      .finally(() => setPasscodeLoading(false));
+  }, []);
 
   // Restore session from localStorage (7-day expiry)
   useEffect(() => {
@@ -51,7 +61,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   }, []);
 
   const handleLogin = () => {
-    if (passcodeInput === KITCHEN_PASSCODE) {
+    if (passcodeInput === kitchenPasscode) {
       localStorage.setItem("kitchenSession", JSON.stringify({
         expiry: Date.now() + SESSION_DURATION_MS,
       }));
@@ -146,8 +156,8 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                 )}
               </div>
 
-              <PetalButton variant="emerald" size="lg" onClick={handleLogin} className="w-full">
-                Enter Kitchen Board
+              <PetalButton variant="emerald" size="lg" onClick={handleLogin} disabled={passcodeLoading} className="w-full">
+                {passcodeLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading...</> : <>Enter Kitchen Board</>}
               </PetalButton>
             </div>
 

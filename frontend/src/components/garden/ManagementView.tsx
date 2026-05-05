@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft } from "lucide-react";
+import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail } from "lucide-react";
 import { SettingsTab } from "./management/SettingsTab";
 import { EmployeesTab } from "./management/EmployeesTab";
 import { InventoryTab } from "./management/InventoryTab";
@@ -11,6 +11,7 @@ import { LogsTab } from "./management/LogsTab";
 import { TablesTab } from "./management/TablesTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
+import { managerAuth, sendPasswordResetEmail } from "@/lib/api";
 
 interface ManagementViewProps {
   qrCode: string;
@@ -20,7 +21,13 @@ interface ManagementViewProps {
 export const ManagementView = ({ notify }: ManagementViewProps) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginId, setLoginId] = useState("");
-  const [loginName, setLoginName] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "settings" | "employees" | "inventory" | "logs" | "tables">("overview");
 
   useEffect(() => {
@@ -28,8 +35,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     if (savedLogin) {
       try {
         const parsed = JSON.parse(savedLogin);
-        // 7-day expiry
-        if (parsed.id === "admin" && parsed.expiry && Date.now() < parsed.expiry) {
+        if (parsed.expiry && Date.now() < parsed.expiry) {
           setIsLoggedIn(true);
         } else {
           localStorage.removeItem("managerLogin");
@@ -40,19 +46,44 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, []);
 
-  const handleLogin = () => {
-    if (loginId === "admin" && loginName === "manager") {
-      setIsLoggedIn(true);
-      localStorage.setItem(
-        "managerLogin",
-        JSON.stringify({
-          id: "admin",
-          name: "manager",
+  const handleLogin = async () => {
+    if (!loginId.trim() || !loginPassword.trim()) {
+      setLoginError("Please enter both Manager ID and Password.");
+      return;
+    }
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const result = await managerAuth(loginId.trim(), loginPassword.trim());
+      if (result.success) {
+        setIsLoggedIn(true);
+        localStorage.setItem("managerLogin", JSON.stringify({
+          id: loginId.trim(),
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        })
-      );
-    } else {
-      notify("error", "Invalid Manager Credentials");
+        }));
+      } else {
+        setLoginError("Invalid Manager ID or Password. Please try again.");
+      }
+    } catch {
+      setLoginError("Could not connect to the server. Please check your connection.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleForgot = async () => {
+    if (!forgotEmail.trim()) return;
+    setForgotSending(true);
+    setForgotMsg("");
+    try {
+      const result = await sendPasswordResetEmail(forgotEmail.trim());
+      setForgotMsg(result.success
+        ? "✅ " + result.message
+        : "⚠️ " + result.message);
+    } catch {
+      setForgotMsg("⚠️ Could not send email. Check the backend email configuration.");
+    } finally {
+      setForgotSending(false);
     }
   };
 
@@ -73,39 +104,81 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl border-green-100">
             <CardHeader>
-            <div className="flex justify-center mb-4">
-              <div className="bg-green-100 p-3 rounded-full">
-                <Settings className="h-8 w-8 text-green-700" />
+              <div className="flex justify-center mb-4">
+                <div className="bg-green-100 p-3 rounded-full">
+                  <Settings className="h-8 w-8 text-green-700" />
+                </div>
               </div>
-            </div>
-            <CardTitle className="text-2xl text-center text-gray-900">Manager Access</CardTitle>
-            <CardDescription className="text-center">Authorized personnel only.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="login-id">Manager ID</Label>
-              <Input
-                id="login-id"
-                value={loginId}
-                onChange={(e) => setLoginId(e.target.value)}
-                placeholder="e.g. admin"
-              />
-            </div>
-            <div>
-              <Label htmlFor="login-name">Manager Name</Label>
-              <Input
-                id="login-name"
-                value={loginName}
-                onChange={(e) => setLoginName(e.target.value)}
-                placeholder="e.g. manager"
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleLogin} className="w-full text-lg h-12 bg-green-700 hover:bg-green-800">Access Dashboard</Button>
-          </CardFooter>
-        </Card>
+              <CardTitle className="text-2xl text-center text-gray-900">Manager Access</CardTitle>
+              <CardDescription className="text-center">Authorized personnel only.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!showForgot ? (
+                <>
+                  <div>
+                    <Label htmlFor="login-id">Manager ID</Label>
+                    <Input
+                      id="login-id"
+                      value={loginId}
+                      onChange={(e) => { setLoginId(e.target.value); setLoginError(""); }}
+                      placeholder="e.g. admin"
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="login-password">Password</Label>
+                    <Input
+                      id="login-password"
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => { setLoginPassword(e.target.value); setLoginError(""); }}
+                      placeholder="Enter password..."
+                      onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    />
+                  </div>
+                  {loginError && <p className="text-sm text-red-600 font-medium">{loginError}</p>}
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgot(true); setLoginError(""); }}
+                    className="text-xs text-green-700 hover:underline"
+                  >
+                    Forgot your password?
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">Enter your registered email and we will send your credentials.</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="Your registered email..."
+                      className="flex-1"
+                    />
+                    <Button onClick={handleForgot} disabled={forgotSending} variant="outline" className="shrink-0">
+                      {forgotSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {forgotMsg && <p className="text-sm text-gray-700">{forgotMsg}</p>}
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgot(false); setForgotMsg(""); }}
+                    className="text-xs text-green-700 hover:underline"
+                  >
+                    ← Back to login
+                  </button>
+                </>
+              )}
+            </CardContent>
+            {!showForgot && (
+              <CardFooter>
+                <Button onClick={handleLogin} disabled={loginLoading} className="w-full text-lg h-12 bg-green-700 hover:bg-green-800">
+                  {loginLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</> : "Access Dashboard"}
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
         </div>
       </div>
     );

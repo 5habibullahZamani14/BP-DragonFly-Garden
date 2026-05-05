@@ -1,16 +1,24 @@
 const express = require("express");
 const managementController = require("../controllers/managementController");
 
-// Note: In a real production system, add authentication middleware here
-// e.g. const { requireManager } = require("../middleware/role-based-access");
-// const router = express.Router().use(requireManager);
 const router = express.Router();
 
-// Middleware to attach fake manager user for logs for now
+// Middleware to attach manager user for logs
 router.use((req, res, next) => {
   req.user = { id: 'admin', name: 'manager' };
   next();
 });
+
+// Auth
+router.post("/auth", managementController.managerAuth);
+router.post("/send-reset-email", managementController.sendResetEmail);
+
+// Manager profile
+router.get("/manager-profile", managementController.getManagerProfileRoute);
+router.put("/manager-profile", managementController.updateManagerProfile);
+
+// Kitchen passcode (public read — kitchen login needs it before auth)
+router.get("/kitchen-passcode", managementController.getKitchenPasscode);
 
 // Logs
 router.get("/logs", managementController.getLogs);

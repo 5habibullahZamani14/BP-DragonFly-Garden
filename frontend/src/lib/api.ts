@@ -239,3 +239,41 @@ export const deleteTable = async (id: number) =>
   safeFetch<any>(`/tables/${id}`, {
     method: "DELETE"
   });
+
+// =====================================
+// MANAGER AUTH & PROFILE
+// =====================================
+export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; name?: string; message?: string }> => {
+  const res = await fetch(`${API_BASE}/management/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, password }),
+  });
+  return res.json();
+};
+
+export const fetchManagerProfile = async (): Promise<{ id: string; name: string; email: string; phone: string }> =>
+  safeFetch("/management/manager-profile");
+
+export const updateManagerProfile = async (data: {
+  name?: string; id?: string; password?: string; email?: string; phone?: string;
+}): Promise<{ success: boolean; profile: any }> =>
+  safeFetch("/management/manager-profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+  const res = await fetch(`${API_BASE}/management/send-reset-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+};
+
+export const fetchKitchenPasscode = async (): Promise<string> => {
+  const data = await safeFetch<{ passcode: string }>("/management/kitchen-passcode");
+  return data.passcode;
+};

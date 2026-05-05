@@ -1,6 +1,20 @@
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 
+// Resend email client (lazy-init so missing key doesn't crash the server)
+let _resend = null;
+const getResend = () => {
+  if (!_resend && process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_your_key_here') {
+    const { Resend } = require('resend');
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+};
+
+// Default manager credentials (used as fallback before first profile save)
+const DEFAULT_MANAGER = { id: 'admin', password: 'manager', name: 'Manager', email: '', phone: '' };
+const DEFAULT_KITCHEN_PASSCODE = 'kitchen2024';
+
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
@@ -288,6 +302,113 @@ const updateRecipe = async (req, res, next) => {
   }
 };
 
+// ==========================================
+// MANAGER AUTH & PROFILE
+// ==========================================
+const getManagerProfile = async () => {
+  const row = await get("SELECT value FROM restaurant_settings WHERE key = 'manager_profile'");
+  if (!row) return { ...DEFAULT_MANAGER };
+  try { return { ...DEFAULT_MANAGER, ...JSON.parse(row.value) }; } 
+  catch { return { ...DEFAULT_MANAGER }; }
+};
+
+const managerAuth = async (req, res, next) => {
+  try {
+    const { id, password } = req.body;
+    if (!id || !password) return next(createHttpError(400, 'ID and password are required'));
+    const profile = await getManagerProfile();
+    if (id === profile.id && password === profile.password) {
+      res.json({ success: true, name: profile.name });
+    } else {
+      res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+  } catch (error) { next(error); }
+};
+
+const getManagerProfileRoute = async (req, res, next) => {
+  try {
+    const profile = await getManagerProfile();
+    // Never return the password to the client
+    const { password: _pw, ...safe } = profile;
+    res.json(safe);
+  } catch (error) { next(error); }
+};
+
+const updateManagerProfile = async (req, res, next) => {
+  try {
+    const { name, id, password, email, phone } = req.body;
+    const current = await getManagerProfile();
+    const updated = {
+      ...current,
+      ...(name !== undefined && { name }),
+      ...(id !== undefined && { id }),
+      ...(password !== undefined && password !== '' && { password }),
+      ...(email !== undefined && { email }),
+      ...(phone !== undefined && { phone }),
+    };
+    await run(
+      "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      [JSON.stringify(updated)]
+    );
+    await createLog('SYSTEM', 'UPDATE_MANAGER_PROFILE', updated.id, updated.name, 'manager', 'Manager Profile', { name: updated.name, email: updated.email });
+    const { password: _pw, ...safe } = updated;
+    res.json({ success: true, profile: safe });
+  } catch (error) { next(error); }
+};
+
+// ==========================================
+// KITCHEN PASSCODE
+// ==========================================
+const getKitchenPasscode = async (req, res, next) => {
+  try {
+    const row = await get("SELECT value FROM restaurant_settings WHERE key = 'kitchen_passcode'");
+    const passcode = row ? row.value : DEFAULT_KITCHEN_PASSCODE;
+    res.json({ passcode });
+  } catch (error) { next(error); }
+};
+
+// ==========================================
+// PASSWORD RESET EMAIL
+// ==========================================
+const sendResetEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return next(createHttpError(400, 'Email address is required'));
+    
+    const profile = await getManagerProfile();
+    if (!profile.email || profile.email.toLowerCase() !== email.toLowerCase()) {
+      // Always return success to avoid email enumeration
+      return res.json({ success: true, message: 'If that email is registered, a reset message has been sent.' });
+    }
+    
+    const resend = getResend();
+    if (!resend) {
+      return res.status(503).json({ success: false, message: 'Email service not configured. Please set RESEND_API_KEY in the backend .env file.' });
+    }
+    
+    const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+    await resend.emails.send({
+      from: `BP DragonFly Garden <${from}>`,
+      to: profile.email,
+      subject: 'Your Manager Login Credentials — BP DragonFly Garden',
+      html: `
+        <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #fdf8f0; border-radius: 16px;">
+          <h1 style="font-size: 22px; color: #2d4a22; margin-bottom: 8px;">BP DragonFly Garden 🌿</h1>
+          <p style="color: #555; margin-bottom: 24px;">You requested your manager login credentials. Here they are:</p>
+          <div style="background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5ddd0;">
+            <p style="margin: 0 0 8px;"><strong>Manager ID:</strong> <code style="background:#f4f0ea;padding:2px 8px;border-radius:6px;">${profile.id}</code></p>
+            <p style="margin: 0;"><strong>Password:</strong> <code style="background:#f4f0ea;padding:2px 8px;border-radius:6px;">${profile.password}</code></p>
+          </div>
+          <p style="margin-top: 24px; font-size: 13px; color: #999;">If you did not request this, please ignore this email. Your credentials have not been changed.</p>
+        </div>
+      `
+    });
+    
+    await createLog('SYSTEM', 'PASSWORD_RESET_EMAIL_SENT', 'system', 'System', 'manager', profile.name, { email: profile.email });
+    res.json({ success: true, message: 'If that email is registered, a reset message has been sent.' });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   createLog,
   getLogs,
@@ -300,5 +421,10 @@ module.exports = {
   createInventoryItem,
   updateInventoryStock,
   getRecipes,
-  updateRecipe
+  updateRecipe,
+  managerAuth,
+  getManagerProfileRoute,
+  updateManagerProfile,
+  getKitchenPasscode,
+  sendResetEmail,
 };
