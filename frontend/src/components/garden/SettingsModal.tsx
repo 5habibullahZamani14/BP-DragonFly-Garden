@@ -14,24 +14,24 @@ const FONT_OPTIONS: {
   {
     id: "font-1",
     label: "Clarity",
-    tagline: "Ultimate readability — clean, open, effortless for all ages",
+    tagline: "Maximum readability — clean, open, effortless for all ages",
     fontFamily: "'Inter', sans-serif",
     headingFamily: "'Inter', sans-serif",
   },
   {
     id: "font-2",
-    label: "Botanical",
-    tagline: "The original garden feel — warm, organic, friendly",
+    label: "Classic",
+    tagline: "Warm & familiar — the garden signature at full strength",
     fontFamily: "'Lexend', sans-serif",
     headingFamily: "'Fraunces', serif",
   },
   {
     id: "font-3",
     label: "Elegance",
-    tagline: "Refined luxury — timeless, sophisticated, classy",
-    fontFamily: "'Cormorant Garamond', serif",
-    headingFamily: "'Cormorant Garamond', serif",
-    sampleStyle: { fontStyle: "italic", letterSpacing: "0.01em" },
+    tagline: "Light & refined — the same garden voice, whisper-thin",
+    fontFamily: "'Lexend', sans-serif",
+    headingFamily: "'Fraunces', serif",
+    sampleStyle: { fontWeight: 300, letterSpacing: "0.01em" },
   },
 ];
 
@@ -60,9 +60,9 @@ export const SettingsModal = () => {
         </button>
       </DialogTrigger>
 
-      <DialogContent className="w-[95vw] max-w-lg rounded-2xl p-0 overflow-hidden">
-        {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-border/50" style={{ background: "var(--gradient-soft)" }}>
+      <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] rounded-2xl p-0 overflow-hidden flex flex-col">
+        {/* Header — stays fixed */}
+        <div className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0" style={{ background: "var(--gradient-soft)" }}>
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">Display Settings</DialogTitle>
             <DialogDescription className="text-sm text-foreground/60 mt-1">
@@ -71,7 +71,8 @@ export const SettingsModal = () => {
           </DialogHeader>
         </div>
 
-        <div className="space-y-6 px-6 py-5">
+        {/* Scrollable body */}
+        <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1">
 
           {/* ── Typography Mode ────────────────────────────── */}
           <section aria-labelledby="typography-heading">
@@ -237,7 +238,7 @@ export const SettingsModal = () => {
 
           {/* Reset button */}
           <button
-            onClick={() => { setUiScale(1); setFontScale(1); setFontTheme("font-2"); }}
+            onClick={() => { setUiScale(1); setFontScale(1); setFontTheme("font-3"); }}
             className="w-full rounded-xl border border-border/50 py-2 text-xs font-semibold text-foreground/50 transition hover:bg-muted/40 hover:text-foreground/70"
           >
             Reset to defaults

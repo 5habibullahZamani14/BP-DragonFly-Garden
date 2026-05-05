@@ -408,14 +408,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           </div>
           <section className="relative mx-5 mb-7 rounded-[28px] text-primary-foreground animate-fade-up"
             style={{ background: "var(--gradient-spotlight)", boxShadow: "var(--shadow-deep)" }}>
-            <WingedAccent
-              seed={`spotlight-${spotlight.id}`}
-              size="h-16 w-16"
-              corner="tr"
-              rotate={-25}
-              offsetX={-90}
-              offsetY={-25}
-            />
             {/* shimmer */}
             <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
               <span className="absolute -top-4 -left-4 h-32 w-1/2 bg-white/10 blur-2xl"

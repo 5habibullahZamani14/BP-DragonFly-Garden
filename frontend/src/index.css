@@ -16,6 +16,7 @@
     --font-sans: 'Lexend';
     --ui-scale: 1;
     --font-scale: 1;
+    --body-weight: 400;
 
     /* Surfaces — refined warm cream paper, slightly creamier & more luminous */
     --background: 42 55% 95%;
@@ -106,7 +107,7 @@
     /* Uses dynamic font variable from Accessibility Context */
     font-family: var(--font-sans), system-ui, sans-serif;
     font-feature-settings: "calt";
-    font-weight: 400;
+    font-weight: var(--body-weight);
     line-height: 1.6;
     letter-spacing: 0;
     -webkit-font-smoothing: antialiased;

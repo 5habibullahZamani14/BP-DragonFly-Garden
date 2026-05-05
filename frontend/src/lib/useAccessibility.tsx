@@ -15,7 +15,7 @@ const AccessibilityContext = createContext<AccessibilityContextType | undefined>
 
 export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [fontTheme, setFontTheme] = useState<FontTheme>(() => {
-    return (localStorage.getItem("a11y-font-theme") as FontTheme) || "font-2";
+    return (localStorage.getItem("a11y-font-theme") as FontTheme) || "font-3";
   });
   const [uiScale, setUiScale] = useState<number>(() => {
     return parseFloat(localStorage.getItem("a11y-ui-scale") || "1");
@@ -29,19 +29,28 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     
     let displayFont = "'Fraunces', serif";
     let sansFont = "'Lexend', sans-serif";
+    let bodyWeight = "400";
 
     if (fontTheme === "font-1") {
-      // Ultimate readability
+      // Clarity — maximum readability
       displayFont = "'Inter', sans-serif";
       sansFont = "'Inter', sans-serif";
-    } else if (fontTheme === "font-3") {
-      // Ultimate elegance
-      displayFont = "'Cormorant Garamond', serif";
-      sansFont = "'Cormorant Garamond', serif";
+      bodyWeight = "400";
+    } else if (fontTheme === "font-2") {
+      // Classic — Fraunces + Lexend at normal weight (same feel as the default app)
+      displayFont = "'Fraunces', serif";
+      sansFont = "'Lexend', sans-serif";
+      bodyWeight = "400";
+    }
+    // font-3 (Elegance) = Fraunces + Lexend at light weight (300) — thin, airy, luxury
+    // displayFont and sansFont already set to Fraunces/Lexend above
+    if (fontTheme === "font-3") {
+      bodyWeight = "300";
     }
 
     document.documentElement.style.setProperty("--font-display", displayFont);
     document.documentElement.style.setProperty("--font-sans", sansFont);
+    document.documentElement.style.setProperty("--body-weight", bodyWeight);
   }, [fontTheme]);
 
   useEffect(() => {

@@ -61,9 +61,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     if (savedLogin) {
       try {
         const parsed = JSON.parse(savedLogin);
-        const today = new Date().toDateString();
-        // If login is from today, restore it. Otherwise, force new login.
-        if (parsed.date === today) {
+        // 7-day expiry
+        if (parsed.expiry && Date.now() < parsed.expiry) {
           setLoggedInEmployee({ name: parsed.name, id: parsed.id });
         } else {
           localStorage.removeItem("paymentCounterLogin");
@@ -88,7 +87,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           JSON.stringify({
             id: matched.employee_id,
             name: matched.name,
-            date: new Date().toDateString()
+            expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
           })
         );
       } else {
@@ -484,11 +483,13 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 const paymentHelpSections: HelpSection[] = [
   {
     id: "login",
-    title: "1. Login & Shift Tracking",
+    title: "1. Login & Session",
     content: (
       <div className="space-y-2">
-        <p>Before you can process payments, you must log in using your authorized Employee ID and Name. This ensures that every transaction is securely tracked under your name in the system logs.</p>
-        <p><strong>Note:</strong> The system automatically monitors restaurant working hours. If the restaurant closes, the system will automatically end your shift and log you out.</p>
+        <p>Before you can process payments, log in using your <strong>Employee ID</strong> and <strong>Name</strong>. This ensures every transaction is tracked under your name.</p>
+        <p><strong>Your session is remembered for 7 days.</strong> You will not need to log in again until the week ends or you manually click Logout.</p>
+        <p>The ⚙️ Settings icon (top-left) and the ℹ️ Info icon (top-right) are always accessible, even before you log in.</p>
+        <p><strong>Note:</strong> The system automatically monitors restaurant working hours. If the restaurant closes, it will automatically end your shift and log you out.</p>
       </div>
     )
   },
@@ -503,7 +504,7 @@ const paymentHelpSections: HelpSection[] = [
           <li>Click the blue <strong>Process Payment</strong> button.</li>
           <li>A window will appear showing the total cost (including VAT and Service Charge) and the <strong>Remaining</strong> amount due.</li>
           <li>Select the <strong>Payment Method</strong> (e.g., Cash, Card).</li>
-          <li>Enter the <strong>Tendered Amount</strong> (the exact amount the customer handed to you). If they gave you more than the total, the system will automatically calculate the <strong>Change due</strong>.</li>
+          <li>Enter the <strong>Tendered Amount</strong> (the amount the customer handed to you). If they gave more than the total, the system will automatically calculate the <strong>Change due</strong>.</li>
           <li>Click <strong>Process</strong>. The system will record the payment and move the order to the Paid list if the balance is fully settled.</li>
         </ol>
       </div>
@@ -518,8 +519,8 @@ const paymentHelpSections: HelpSection[] = [
         <ol className="list-decimal pl-5 space-y-1">
           <li>Click <strong>Process Payment</strong> on their order.</li>
           <li>Instead of entering payment, click the <strong>Add Item</strong> button.</li>
-          <li>Select the item they want from the dropdown list and enter the quantity.</li>
-          <li>Click <strong>Add to Order</strong>. The item will be instantly added to their bill, the total will update, and the inventory will be automatically deducted.</li>
+          <li>Select the item from the dropdown list and enter the quantity.</li>
+          <li>Click <strong>Add to Order</strong>. The item will be instantly added to their bill, the total will update, and inventory will be automatically deducted.</li>
         </ol>
       </div>
     )
@@ -533,5 +534,20 @@ const paymentHelpSections: HelpSection[] = [
         <p>Click the <strong>Show</strong> button to reveal all fully paid orders from today. You can use this to verify past transactions or confirm a payment went through successfully.</p>
       </div>
     )
-  }
+  },
+  {
+    id: "display-settings",
+    title: "5. Display Settings",
+    content: (
+      <div className="space-y-2">
+        <p>Tap the <strong>⚙️ Settings icon</strong> in the top-left corner at any time (even before logging in) to open Display Settings. From there you can:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>Switch between three font styles (Clarity, Classic, Elegance).</li>
+          <li>Adjust the Interface Size and Text Size using sliders or +/− buttons.</li>
+        </ul>
+        <p>All settings are saved automatically and remembered across visits.</p>
+      </div>
+    )
+  },
 ];
+
