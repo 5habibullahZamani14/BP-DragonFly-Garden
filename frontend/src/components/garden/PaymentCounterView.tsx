@@ -11,6 +11,7 @@ import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment
 import type { PaymentOrder } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { HelpModal, HelpSection } from "./HelpModal";
+import { SettingsModal } from "./SettingsModal";
 
 interface PaymentMethod {
   id: number;
@@ -229,8 +230,13 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   // Render Login Screen if not logged in
   if (!loggedInEmployee) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md shadow-xl">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
+        <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
+          <SettingsModal />
+          <HelpModal title="Payment Counter" sections={paymentHelpSections} />
+        </div>
+        <div className="flex-1 flex items-center justify-center pb-20">
+          <Card className="w-full max-w-md shadow-xl">
           <CardHeader>
             <CardTitle className="text-2xl text-center text-gray-900">Payment Counter Login</CardTitle>
             <CardDescription className="text-center">Enter your employee credentials to start your shift.</CardDescription>
@@ -260,6 +266,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             <Button onClick={handleLogin} className="w-full text-lg h-12">Login</Button>
           </CardFooter>
         </Card>
+        </div>
       </div>
     );
   }
@@ -269,7 +276,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">Payment Counter</h1>
+          <div className="flex items-center gap-4">
+            <SettingsModal />
+            <h1 className="text-3xl font-bold text-gray-900">Payment Counter</h1>
+          </div>
           <div className="flex items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
             <span className="text-sm font-medium text-gray-700">
               Shift: <span className="text-green-700">{loggedInEmployee.name}</span>

@@ -15,9 +15,22 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ['Fraunces', 'serif'],
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'serif'],
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['DM Mono', 'monospace'],
+        "mono-cute": ["DM Mono", "monospace"],
+      },
+      fontSize: {
+        xs: ['calc(0.75rem * var(--font-scale))', { lineHeight: '1rem' }],
+        sm: ['calc(0.875rem * var(--font-scale))', { lineHeight: '1.25rem' }],
+        base: ['calc(1rem * var(--font-scale))', { lineHeight: '1.5rem' }],
+        lg: ['calc(1.125rem * var(--font-scale))', { lineHeight: '1.75rem' }],
+        xl: ['calc(1.25rem * var(--font-scale))', { lineHeight: '1.75rem' }],
+        '2xl': ['calc(1.5rem * var(--font-scale))', { lineHeight: '2rem' }],
+        '3xl': ['calc(1.875rem * var(--font-scale))', { lineHeight: '2.25rem' }],
+        '4xl': ['calc(2.25rem * var(--font-scale))', { lineHeight: '2.5rem' }],
+        '5xl': ['calc(3rem * var(--font-scale))', { lineHeight: '1' }],
+        '6xl': ['calc(3.75rem * var(--font-scale))', { lineHeight: '1' }],
       },
       colors: {
         border: "hsl(var(--border))",

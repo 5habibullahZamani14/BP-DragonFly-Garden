@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { HelpModal, HelpSection } from "./HelpModal";
+import { SettingsModal } from "./SettingsModal";
 import { fetchKitchenOrders, updateOrderStatus } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import type { Order } from "@/lib/menu-data";
@@ -59,7 +60,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   const visible = grouped.find((g) => g.status === activeTab)!;
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-2xl pb-16">
+    <div className="relative z-10 mx-auto w-full max-w-7xl pb-16">
       <header className="relative px-5 pt-10 pb-6">
         <div className="flex items-start justify-between">
           <div>
@@ -70,6 +71,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
             </h1>
           </div>
           <div className="flex gap-2 items-center">
+            <SettingsModal />
             <HelpModal title="Kitchen Crew" sections={kitchenHelpSections} />
             <button
               onClick={() => load()}
@@ -121,7 +123,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
             <p className="mt-1 text-sm text-foreground/40">All caught up — beautiful.</p>
           </div>
         ) : (
-          <ul className="space-y-3">
+          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {visible.orders.map((o, idx) => {
               const meta = STAGE_META[o.status];
               const next = NEXT[o.status];

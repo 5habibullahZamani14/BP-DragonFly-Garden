@@ -10,6 +10,7 @@ import { InventoryTab } from "./management/InventoryTab";
 import { LogsTab } from "./management/LogsTab";
 import { TablesTab } from "./management/TablesTab";
 import { HelpModal, HelpSection } from "./HelpModal";
+import { SettingsModal } from "./SettingsModal";
 
 interface ManagementViewProps {
   qrCode: string;
@@ -64,9 +65,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md shadow-xl border-green-100">
-          <CardHeader>
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
+        <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
+          <SettingsModal />
+        </div>
+        <div className="flex-1 flex items-center justify-center pb-20">
+          <Card className="w-full max-w-md shadow-xl border-green-100">
+            <CardHeader>
             <div className="flex justify-center mb-4">
               <div className="bg-green-100 p-3 rounded-full">
                 <Settings className="h-8 w-8 text-green-700" />
@@ -100,6 +105,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             <Button onClick={handleLogin} className="w-full text-lg h-12 bg-green-700 hover:bg-green-800">Access Dashboard</Button>
           </CardFooter>
         </Card>
+        </div>
       </div>
     );
   }
@@ -109,6 +115,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
+            <SettingsModal />
             {activeTab !== "overview" && (
               <Button variant="outline" size="icon" onClick={() => setActiveTab("overview")} className="rounded-full shadow-sm">
                 <ArrowLeft className="h-5 w-5 text-gray-600" />

@@ -9,6 +9,7 @@ import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
 import { fetchMenu, fetchTable, placeOrder, refreshOrder } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { SettingsModal } from "./SettingsModal";
 import type { MenuItem, Order } from "@/lib/menu-data";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
@@ -233,11 +234,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   }, [tab, orders, celebratedIds]);
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-md pb-32" style={{ paddingTop: "var(--safe-top)" }}>
+    <div className="relative z-10 mx-auto w-full max-w-7xl pb-32" style={{ paddingTop: "var(--safe-top)" }}>
       {/* ============ TOP BAR (sticky, app-like) ============ */}
       <div className="sticky top-0 z-30 px-5 pt-4 pb-3 cream-frost">
-        {/* Hero — blueprint layout: WELCOME text on top, big butterfly centered, search below */}
-        <div className="flex flex-col items-center text-center">
+        <div className="absolute top-4 left-5">
+          <SettingsModal />
+        </div>
+        {/* Hero ??" blueprint layout: WELCOME text on top, big butterfly centered, search below */}
+        <div className="flex flex-col items-center text-center mt-2">
           <p className="text-[0.65rem] font-bold uppercase tracking-[0.36em] text-foreground/55">Welcome</p>
           <p className="mt-1.5 font-display text-xl font-semibold" style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}>
             {tableInfo ? <>at <span className="text-primary italic">Table {tableInfo.table_number.replace(/^table-?/i, "")}</span></> : "to the garden"}
@@ -582,7 +586,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           </div>
         ) : (
           /* Refined "row" cards inspired by Foodpanda/KFC menu lists */
-          <ul className="space-y-3">
+          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((item, idx) => (
               <li
                 key={item.id}
@@ -807,7 +811,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       {cartCount > 0 && (
         <button
           onClick={() => setCartOpen(true)}
-          className="btn-emerald fixed inset-x-4 z-40 mx-auto flex max-w-md items-center justify-between rounded-full px-5 py-3.5 animate-slide-down"
+          className="btn-emerald fixed inset-x-4 z-40 mx-auto flex max-w-2xl items-center justify-between rounded-full px-5 py-3.5 animate-slide-down"
           style={{ bottom: "calc(4.5rem + var(--safe-bottom))" }}
         >
           <span className="flex items-center gap-3">
@@ -825,7 +829,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {/* ============ BOTTOM NAV (mobile-app feel) ============ */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-md grid-cols-3 items-start bg-background px-2 py-2"
+        className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-2xl grid-cols-3 items-start bg-background px-2 py-2 md:rounded-t-3xl md:border md:border-border/60 md:shadow-2xl"
         style={{ paddingBottom: "calc(0.5rem + var(--safe-bottom))" }}
       >
         {/* hairline gold divider on top of nav */}
@@ -879,7 +883,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
           <div className="absolute inset-0 bg-primary/40 backdrop-blur-sm animate-fade-up" onClick={() => setCartOpen(false)} />
-          <div className="relative w-full max-w-md max-h-[88vh] overflow-y-auto rounded-t-[32px] bg-background p-5 shadow-2xl animate-slide-down">
+          <div className="relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-[32px] bg-background p-5 shadow-2xl animate-slide-down md:rounded-[32px] md:mb-4">
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
             <div className="mb-4 flex items-center justify-between">
               <div>
