@@ -68,6 +68,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
+          <HelpModal title="Manager" sections={managerHelpSections} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl border-green-100">
