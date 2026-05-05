@@ -152,7 +152,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       if (ex) return c.map((x) => (x.id === item.id ? { ...x, quantity: x.quantity + 1 } : x));
       return [...c, { id: item.id, name: item.name, price: item.price, quantity: 1, notes: "" }];
     });
-    notify("success", `${item.name} added`);
   };
   const setQty = (id: number, q: number) => {
     if (q <= 0) return setCart((c) => c.filter((x) => x.id !== id));
@@ -172,7 +171,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       setOrders((cur) => [order, ...cur]);
       setCart([]);
       setCartOpen(false);
-      notify("success", `Order #${order.id} sent to the kitchen`);
     } catch (err) {
       notify("error", "Network issue, order failed to send.");
     } finally { setSubmitting(false); }

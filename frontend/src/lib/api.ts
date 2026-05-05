@@ -162,5 +162,70 @@ export const api = {
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined
   }),
+  put: (path: string, body?: ApiBody) => safeFetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  }),
   delete: (path: string) => safeFetch(path, { method: "DELETE" })
 };
+
+// =====================================
+// MANAGEMENT API
+// =====================================
+export const fetchSettings = async () => safeFetch<any>("/management/settings");
+export const updateSetting = async (key: string, value: any) => 
+  safeFetch<any>(`/management/settings/${key}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value })
+  });
+
+export const fetchEmployees = async (includeArchived = false) => 
+  safeFetch<any[]>(`/management/employees?include_archived=${includeArchived}`);
+export const createEmployee = async (data: any) =>
+  safeFetch<any>("/management/employees", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+export const updateEmployee = async (id: number, data: any) =>
+  safeFetch<any>(`/management/employees/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+export const fetchInventory = async () => safeFetch<any[]>("/management/inventory");
+export const createInventoryItem = async (data: any) =>
+  safeFetch<any>("/management/inventory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+export const updateInventoryStock = async (id: number, data: any) =>
+  safeFetch<any>(`/management/inventory/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+export const fetchRecipes = async () => safeFetch<any[]>("/management/recipes");
+export const updateRecipe = async (menuItemId: number, ingredients: any[]) =>
+  safeFetch<any>(`/management/recipes/${menuItemId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ingredients })
+  });
+
+export const fetchLogs = async (category?: string) => {
+  const query = category ? `?category=${category}` : "";
+  return safeFetch<any[]>(`/management/logs${query}`);
+};
+export const fetchTables = async () => safeFetch<any[]>("/tables");
+export const createTable = async (data: any) => 
+  safeFetch<any>("/tables", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });

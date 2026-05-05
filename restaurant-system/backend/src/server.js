@@ -12,6 +12,7 @@ const menuRoutes = require("./routes/menuRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const tableRoutes = require("./routes/tableRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const managementRoutes = require("./routes/managementRoutes");
 const { executeArchive } = require("./controllers/paymentController");
 const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
@@ -44,6 +45,7 @@ app.use("/menu", menuRoutes);
 app.use("/orders", orderRoutes(broadcast));
 app.use("/tables", tableRoutes);
 app.use("/payments", paymentRoutes(broadcast));
+app.use("/management", managementRoutes);
 
 app.use((req, res, next) => {
   if (fs.existsSync(frontendDistPath)) {
@@ -53,7 +55,7 @@ app.use((req, res, next) => {
   }
 });
 
-app.get(/^(?!\/(?:menu|orders|tables|payments)\b).*/, (req, res) => {
+app.get(/^(?!\/(?:menu|orders|tables|payments|management)\b).*/, (req, res) => {
   if (fs.existsSync(frontendDistPath)) {
     res.sendFile(path.join(frontendDistPath, "index.html"));
   } else {

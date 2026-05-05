@@ -44,7 +44,6 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     const o = await updateOrderStatus(qrCode, id, status);
     if (o) {
       setOrders((cur) => cur.map((x) => (x.id === id ? o : x)));
-      notify("success", `Order #${id} → ${status}`);
     } else {
       // optimistic for mock
       setOrders((cur) => cur.map((x) => (x.id === id ? { ...x, status: status as Order["status"] } : x)));

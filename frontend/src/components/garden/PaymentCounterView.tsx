@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Eye, EyeOff, LogOut } from "lucide-react";
-import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems } from "@/lib/api";
+import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings } from "@/lib/api";
 import type { PaymentOrder } from "@/lib/api";
 
 interface PaymentMethod {
@@ -31,12 +31,7 @@ interface Employee {
   id: string;
 }
 
-const AUTHORIZED_EMPLOYEES: Employee[] = [
-  { name: "epm1", id: "111" },
-  { name: "epm2", id: "222" },
-  { name: "epm3", id: "333" },
-  { name: "epm4", id: "444" },
-];
+
 
 export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) => {
   const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | null>(null);
@@ -76,33 +71,63 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   }, []);
 
-  const handleLogin = () => {
-    const matched = AUTHORIZED_EMPLOYEES.find(
-      (emp) => emp.id === loginInputId && emp.name === loginInputName
-    );
-
-    if (matched) {
-      setLoggedInEmployee(matched);
-      localStorage.setItem(
-        "paymentCounterLogin",
-        JSON.stringify({
-          id: matched.id,
-          name: matched.name,
-          date: new Date().toDateString()
-        })
+  const handleLogin = async () => {
+    try {
+      const employees = await fetchEmployees(false);
+      const matched = employees.find(
+        (emp: any) => emp.employee_id === loginInputId && emp.name.toLowerCase() === loginInputName.toLowerCase()
       );
-      notify("success", `Logged in as ${matched.name}`);
-    } else {
-      notify("error", "Invalid Employee ID or Name");
+
+      if (matched) {
+        setLoggedInEmployee({ name: matched.name, id: matched.employee_id });
+        localStorage.setItem(
+          "paymentCounterLogin",
+          JSON.stringify({
+            id: matched.employee_id,
+            name: matched.name,
+            date: new Date().toDateString()
+          })
+        );
+      } else {
+        notify("error", "Invalid Employee ID or Name");
+      }
+    } catch (e) {
+      notify("error", "Failed to verify employee");
     }
   };
+
+  useEffect(() => {
+    const checkWorkingHours = async () => {
+      if (!loggedInEmployee) return;
+      try {
+        const settings = await fetchSettings();
+        if (settings && settings.work_hours) {
+          const { start, end } = settings.work_hours;
+          const now = new Date();
+          const currentHour = now.getHours();
+          const currentMinute = now.getMinutes();
+          const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+          
+          if (currentTimeStr < start || currentTimeStr > end) {
+            handleLogout();
+            // Silent logout, or inline UI alert later. For now just clear session
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check hours", e);
+      }
+    };
+    
+    checkWorkingHours();
+    const interval = setInterval(checkWorkingHours, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [loggedInEmployee]);
 
   const handleLogout = () => {
     setLoggedInEmployee(null);
     setLoginInputId("");
     setLoginInputName("");
     localStorage.removeItem("paymentCounterLogin");
-    notify("success", "Logged out successfully");
   };
 
   const loadData = useCallback(async () => {
@@ -160,11 +185,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         employee_name: loggedInEmployee.name
       });
 
-      if (change > 0) {
-        notify("success", `Payment successful. Change due: RM ${change.toFixed(2)}`);
-      } else {
-        notify("success", "Payment processed successfully");
-      }
       setSelectedOrder(null);
       setPaymentAmount("");
       // Don't reset selectedPaymentMethod so it stays on Cash
@@ -189,7 +209,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             employee_id: loggedInEmployee.id,
             employee_name: loggedInEmployee.name,
         });
-        notify("success", "Item added successfully");
         setAddingItem(false);
         setNewItemId("");
         setNewItemQuantity("1");

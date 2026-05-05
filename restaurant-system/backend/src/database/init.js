@@ -207,6 +207,77 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_archived_orders_date", "archived_orders", "archived_at DESC");
   await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS restaurant_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      department TEXT,
+      salary REAL DEFAULT 0,
+      bonuses REAL DEFAULT 0,
+      shift_start TEXT,
+      shift_end TEXT,
+      employment_type TEXT,
+      contact_info TEXT,
+      hire_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_archived INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS inventory_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT,
+      unit TEXT NOT NULL,
+      current_stock REAL NOT NULL DEFAULT 0,
+      max_stock REAL NOT NULL DEFAULT 100,
+      low_stock_threshold_percent REAL NOT NULL DEFAULT 15,
+      is_archived INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS menu_item_ingredients (
+      menu_item_id INTEGER NOT NULL,
+      inventory_item_id INTEGER NOT NULL,
+      quantity_required REAL NOT NULL,
+      PRIMARY KEY (menu_item_id, inventory_item_id),
+      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
+      FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS grand_archive_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      category TEXT NOT NULL, -- e.g., 'EMPLOYEE', 'INVENTORY', 'ORDER', 'SYSTEM'
+      action TEXT NOT NULL, -- e.g., 'LOGIN', 'RESTOCK', 'CREATE'
+      actor_id TEXT, -- ID of the employee/manager doing the action
+      actor_name TEXT,
+      target_id TEXT, -- ID of the affected entity
+      target_name TEXT,
+      details TEXT -- JSON string with granular info
+    )
+  `);
+
+  await ensureIndex("idx_grand_archive_logs_category", "grand_archive_logs", "category, timestamp DESC");
+  await ensureIndex("idx_employees_id", "employees", "employee_id");
+
+  // Insert default setting if it doesn't exist
+  await run(`
+    INSERT OR IGNORE INTO restaurant_settings (key, value)
+    VALUES ('work_hours', '{"start": "09:00", "end": "22:00"}')
+  `);
+
   console.log("Database schema ready");
 };
 
