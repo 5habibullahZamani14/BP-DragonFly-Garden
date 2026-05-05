@@ -190,6 +190,7 @@ const initializeDatabase = async () => {
       status TEXT NOT NULL,
       total_price REAL NOT NULL,
       vat_rate REAL NOT NULL DEFAULT 0.06,
+      service_charge_rate REAL NOT NULL DEFAULT 0.10,
       payment_status TEXT NOT NULL DEFAULT 'unpaid',
       created_at DATETIME NOT NULL,
       archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -199,6 +200,7 @@ const initializeDatabase = async () => {
 
   await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
   await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
+  await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
 
   await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
   await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");

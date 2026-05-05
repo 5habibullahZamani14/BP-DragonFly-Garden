@@ -1,3 +1,4 @@
+require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
@@ -11,6 +12,7 @@ const menuRoutes = require("./routes/menuRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const tableRoutes = require("./routes/tableRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+const { executeArchive } = require("./controllers/paymentController");
 const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
 
@@ -32,7 +34,6 @@ const broadcast = (data) => {
 };
 
 const frontendDistPath = path.resolve(__dirname, "../../../frontend/dist");
-const hasFrontendBuild = fs.existsSync(frontendDistPath);
 
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
@@ -44,20 +45,24 @@ app.use("/orders", orderRoutes(broadcast));
 app.use("/tables", tableRoutes);
 app.use("/payments", paymentRoutes(broadcast));
 
-if (hasFrontendBuild) {
-  app.use(express.static(frontendDistPath));
+app.use((req, res, next) => {
+  if (fs.existsSync(frontendDistPath)) {
+    express.static(frontendDistPath)(req, res, next);
+  } else {
+    next();
+  }
+});
 
-  app.get(/^(?!\/(?:menu|orders|tables|payments)\b).*/, (req, res) => {
+app.get(/^(?!\/(?:menu|orders|tables|payments)\b).*/, (req, res) => {
+  if (fs.existsSync(frontendDistPath)) {
     res.sendFile(path.join(frontendDistPath, "index.html"));
-  });
-} else {
-  app.get("/", (req, res) => {
+  } else {
     res.json({
       message: "API is running",
       frontend: "No frontend build found. Run the frontend build to serve the web app from this server.",
     });
-  });
-}
+  }
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -82,32 +87,13 @@ const startServer = async () => {
         }
         const delay = nextRun.getTime() - now.getTime();
 
-        const runArchive = () => {
-          const req = http.request(
-            {
-              hostname: "127.0.0.1",
-              port: PORT,
-              path: "/payments/archive?qr_code=payment-counter-scheduler",
-              method: "POST",
-              headers: {
-                "Content-Length": 0,
-              },
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (chunk) => {
-                body += chunk;
-              });
-              res.on("end", () => {
-                console.log(`Scheduled archive completed with status ${res.statusCode}: ${body}`);
-              });
-            }
-          );
-
-          req.on("error", (err) => {
-            console.error("Scheduled archive request failed:", err);
-          });
-          req.end();
+        const runArchive = async () => {
+          try {
+            const count = await executeArchive();
+            console.log(`Scheduled archive completed. Archived ${count} orders.`);
+          } catch (err) {
+            console.error("Scheduled archive failed:", err);
+          }
         };
 
         console.log(`Daily archive scheduled for ${nextRun.toLocaleString()}`);

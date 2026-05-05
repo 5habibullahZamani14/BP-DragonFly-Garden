@@ -1,4 +1,5 @@
 const db = require("../database/db");
+const { createHttpError } = require("../middleware/validation");
 
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -43,9 +44,10 @@ const fetchOrderWithPayments = async (orderId) => {
         o.status,
         o.total_price,
         o.vat_rate,
+        o.service_charge_rate,
         o.payment_status,
         o.created_at,
-        (o.total_price * (1 + o.vat_rate)) AS total_with_vat
+        (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id
       WHERE o.id = ?
@@ -109,21 +111,21 @@ const processPayment = async (orderId, paymentData) => {
 
   const order = await fetchOrderWithPayments(orderId);
   if (!order) {
-    throw new Error("Order not found");
+    throw createHttpError(404, "Order not found");
   }
 
   if (order.payment_status === 'paid') {
-    throw new Error("Order is already fully paid");
+    throw createHttpError(400, "Order is already fully paid");
   }
 
   const paymentMethod = await get(`SELECT id FROM payment_methods WHERE id = ?`, [payment_method_id]);
   if (!paymentMethod) {
-    throw new Error("Payment method not found");
+    throw createHttpError(400, "Payment method not found");
   }
 
   const amount = Number(amount_paid);
   if (amount <= 0 || amount > order.remaining) {
-    throw new Error("Invalid payment amount");
+    throw createHttpError(400, "Invalid payment amount");
   }
 
   await run("BEGIN TRANSACTION");
@@ -189,7 +191,7 @@ const getOrderPayments = async (req, res) => {
   const order = await fetchOrderWithPayments(req.params.orderId);
 
   if (!order) {
-    throw new Error("Order not found");
+    throw createHttpError(404, "Order not found");
   }
 
   res.json(order.payments);
@@ -201,7 +203,7 @@ const editOrderVAT = async (req, res) => {
   const existingOrder = await fetchOrderWithPayments(orderId);
 
   if (!existingOrder) {
-    throw new Error("Order not found");
+    throw createHttpError(404, "Order not found");
   }
 
   await run("BEGIN TRANSACTION");
@@ -230,7 +232,7 @@ const addOrderItem = async (req, res) => {
   const order = await fetchOrderWithPayments(orderId);
 
   if (!order) {
-    throw new Error("Order not found");
+    throw createHttpError(404, "Order not found");
   }
 
   const menuItem = await get(
@@ -239,11 +241,11 @@ const addOrderItem = async (req, res) => {
   );
 
   if (!menuItem) {
-    throw new Error("Menu item not found");
+    throw createHttpError(404, "Menu item not found");
   }
 
   if (!menuItem.is_available) {
-    throw new Error(`${menuItem.name} is currently unavailable`);
+    throw createHttpError(400, `${menuItem.name} is currently unavailable`);
   }
 
   const lineTotal = Number((menuItem.price * quantity).toFixed(2));
@@ -279,7 +281,7 @@ const addOrderItem = async (req, res) => {
   res.status(201).json(await fetchOrderWithPayments(orderId));
 };
 
-const archivePaidOrders = async (req, res) => {
+const executeArchive = async () => {
   const paidOrders = await listOrdersByPaymentStatus(["paid"]);
   const ordersToArchive = paidOrders.filter(Boolean);
 
@@ -289,8 +291,8 @@ const archivePaidOrders = async (req, res) => {
     for (const order of ordersToArchive) {
       await run(
         `
-          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, payment_status, created_at, order_data)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, order_data)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           order.id,
@@ -298,6 +300,7 @@ const archivePaidOrders = async (req, res) => {
           order.status,
           order.total_price,
           order.vat_rate,
+          order.service_charge_rate,
           order.payment_status,
           order.created_at,
           JSON.stringify(order)
@@ -312,13 +315,18 @@ const archivePaidOrders = async (req, res) => {
     throw error;
   }
 
-  res.json({ archived_count: ordersToArchive.length });
+  return ordersToArchive.length;
+};
+
+const archivePaidOrders = async (req, res) => {
+  const archived_count = await executeArchive();
+  res.json({ archived_count });
 };
 
 const getArchivedOrders = async (req, res) => {
   const orders = await all(
     `
-      SELECT id, original_order_id, table_id, status, total_price, vat_rate, payment_status, created_at, archived_at, order_data
+      SELECT id, original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, archived_at, order_data
       FROM archived_orders
       ORDER BY archived_at DESC, id DESC
     `
@@ -335,5 +343,6 @@ module.exports = {
   addOrderItem,
   getOrderPayments,
   archivePaidOrders,
-  getArchivedOrders
+  getArchivedOrders,
+  executeArchive
 };

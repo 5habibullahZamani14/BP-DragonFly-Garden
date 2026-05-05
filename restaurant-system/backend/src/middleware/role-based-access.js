@@ -10,14 +10,16 @@ const { createHttpError } = require("./validation");
 const ROLES = {
   CUSTOMER_WAITER: "customer_waiter",
   KITCHEN_CREW: "kitchen_crew",
-  PAYMENT_COUNTER: "payment_counter"
+  PAYMENT_COUNTER: "payment_counter",
+  MANAGER: "manager"
 };
 
 // QR code patterns to identify role
 const QR_PATTERNS = {
   TABLE_QR: /^table-\d+$/,           // Table QR codes (e.g., "table-1", "table-2")
-  KITCHEN_QR: /^kitchen-crew-\w+$/,  // Kitchen QR codes (e.g., "kitchen-crew-main")
-  PAYMENT_QR: /^payment-counter-\w+$/ // Payment counter QR codes (e.g., "payment-counter-main")
+  KITCHEN_QR: /^kitchen-crew-[\w:]+$/,  // Kitchen QR codes (e.g., "kitchen-crew-main")
+  PAYMENT_QR: /^payment-counter-[\w:]+$/, // Payment counter QR codes (e.g., "payment-counter-main", "payment-counter-demo:1")
+  MANAGER_QR: /^manager-[\w:]+$/     // Manager QR codes (e.g., "manager-main")
 };
 
 /**
@@ -32,6 +34,10 @@ const getRoleFromQRCode = (qrCode) => {
 
   if (QR_PATTERNS.KITCHEN_QR.test(qrCode)) {
     return ROLES.KITCHEN_CREW;
+  }
+
+  if (QR_PATTERNS.MANAGER_QR.test(qrCode)) {
+    return ROLES.MANAGER;
   }
 
   if (QR_PATTERNS.PAYMENT_QR.test(qrCode)) {

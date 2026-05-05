@@ -82,11 +82,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     let alive = true;
     (async () => {
       setLoading(true);
-      const [m, t] = await Promise.all([fetchMenu(), fetchTable(qrCode)]);
-      if (!alive) return;
-      setMenu(m);
-      setTableInfo(t);
-      setLoading(false);
+      try {
+        const [m, t] = await Promise.all([fetchMenu(), fetchTable(qrCode)]);
+        if (!alive) return;
+        setMenu(m);
+        setTableInfo(t);
+      } catch (err) {
+        if (alive) notify("error", "Failed to load menu. Please refresh.");
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
     return () => { alive = false; };
   }, [qrCode]);
@@ -96,12 +101,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     const pending = orders.filter((o) => o.status !== "ready");
     if (pending.length === 0) return;
     const id = window.setInterval(async () => {
-      const updated = await Promise.all(
-        pending.map((o) => refreshOrder(qrCode, o.id).then((r) => r ?? o)),
-      );
-      setOrders((cur) =>
-        cur.map((o) => updated.find((u) => u.id === o.id) || o),
-      );
+      try {
+        const updated = await Promise.all(
+          pending.map((o) => refreshOrder(qrCode, o.id).then((r) => r ?? o)),
+        );
+        setOrders((cur) =>
+          cur.map((o) => updated.find((u) => u.id === o.id) || o),
+        );
+      } catch (err) {
+        // Silent catch for background polling
+      }
     }, 8000);
     return () => window.clearInterval(id);
   }, [orders, qrCode]);
@@ -156,13 +165,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     if (!tableInfo || cart.length === 0) return;
     setSubmitting(true);
     try {
-      const order = await placeOrder(qrCode,
-        { table_id: tableInfo.id, items: cart.map((c) => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes })) },
-        total, tableInfo.table_number);
+      const order = await placeOrder(qrCode, {
+        table_id: tableInfo.id,
+        items: cart.map((c) => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes }))
+      });
       setOrders((cur) => [order, ...cur]);
       setCart([]);
       setCartOpen(false);
       notify("success", `Order #${order.id} sent to the kitchen`);
+    } catch (err) {
+      notify("error", "Network issue, order failed to send.");
     } finally { setSubmitting(false); }
   };
 

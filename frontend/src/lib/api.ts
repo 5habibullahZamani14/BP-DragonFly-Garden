@@ -1,8 +1,6 @@
-// Thin API wrapper that talks to the existing Express backend.
-// Falls back to local mock data so the visual preview is always populated.
-import { MOCK_MENU, MOCK_KITCHEN_ORDERS, type MenuItem, type Order } from "./menu-data";
+import type { MenuItem, Order } from "./menu-data";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
 
 const apiUrl = (path: string, qrCode?: string) => {
   const base = `${API_BASE}${path}`;
@@ -11,21 +9,20 @@ const apiUrl = (path: string, qrCode?: string) => {
   return `${base}${sep}qr_code=${encodeURIComponent(qrCode)}`;
 };
 
-const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T | null> => {
+const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
   const url = apiUrl(path, qr);
-  try {
-    const res = await fetch(url, init);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    throw new Error(`API Error: ${res.status} ${res.statusText}`);
   }
+  return (await res.json()) as T;
 };
 
 type PaymentMethod = { id: number; name: string };
 export type PaymentOrder = Order & {
   table_id: number;
   vat_rate: number;
+  service_charge_rate: number;
   payment_status: "unpaid" | "partially_paid" | "paid";
   total_with_vat: number;
   total_paid: number;
@@ -60,8 +57,7 @@ type AddOrderItemPayload = {
 type ApiBody = Record<string, unknown> | unknown[] | null;
 
 export const fetchMenu = async (): Promise<MenuItem[]> => {
-  const data = await safeFetch<MenuItem[]>("/menu");
-  return data && data.length ? data : MOCK_MENU;
+  return await safeFetch<MenuItem[]>("/menu");
 };
 
 export const fetchTable = async (qr: string) => {
@@ -72,8 +68,7 @@ export const fetchTable = async (qr: string) => {
 };
 
 export const fetchKitchenOrders = async (qr: string): Promise<Order[]> => {
-  const data = await safeFetch<Order[]>("/orders/kitchen", undefined, qr);
-  return data && data.length ? data : MOCK_KITCHEN_ORDERS;
+  return await safeFetch<Order[]>("/orders/kitchen", undefined, qr);
 };
 
 export const fetchUnpaidOrders = async (qr: string): Promise<PaymentOrder[]> => {
@@ -116,24 +111,13 @@ export const archivePaidOrders = async (qr: string): Promise<{ archived_count: n
 
 export const placeOrder = async (
   qr: string,
-  body: { table_id: number; items: { menu_item_id: number; quantity: number; notes?: string }[] },
-  fallbackTotal: number,
-  fallbackTable: string
+  body: { table_id: number; items: { menu_item_id: number; quantity: number; notes?: string }[] }
 ): Promise<Order> => {
-  const data = await safeFetch<Order>("/orders", {
+  return await safeFetch<Order>("/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }, qr);
-  if (data && 'id' in data) return data;
-  // Mock fallback
-  return {
-    id: Math.floor(1000 + Math.random() * 9000),
-    status: "queue",
-    table_number: fallbackTable,
-    total_price: fallbackTotal,
-    items: body.items.map((i, idx) => ({ id: idx, quantity: i.quantity, item_name: `Item ${i.menu_item_id}`, notes: i.notes })),
-  };
 };
 
 export const refreshOrder = async (qr: string, id: number) =>
