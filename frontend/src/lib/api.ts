@@ -229,3 +229,13 @@ export const createTable = async (data: any) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
+export const updateTable = async (id: number, data: any) =>
+  safeFetch<any>(`/tables/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+export const deleteTable = async (id: number) =>
+  safeFetch<any>(`/tables/${id}`, {
+    method: "DELETE"
+  });

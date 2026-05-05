@@ -9,6 +9,7 @@ import { EmployeesTab } from "./management/EmployeesTab";
 import { InventoryTab } from "./management/InventoryTab";
 import { LogsTab } from "./management/LogsTab";
 import { TablesTab } from "./management/TablesTab";
+import { HelpModal, HelpSection } from "./HelpModal";
 
 interface ManagementViewProps {
   qrCode: string;
@@ -123,9 +124,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           </div>
           
           <div className="flex items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-700 hidden sm:inline">
               User: <span className="text-green-700 font-bold">Admin</span>
             </span>
+            <HelpModal title="Manager" sections={managerHelpSections} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> Logout
             </Button>
@@ -186,3 +188,95 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     </div>
   );
 };
+
+const managerHelpSections: HelpSection[] = [
+  {
+    id: "overview",
+    title: "1. Dashboard Overview",
+    content: (
+      <div className="space-y-2">
+        <p>The Management Dashboard is your central hub for controlling the restaurant. It is divided into five main sections:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Settings:</strong> Configure restaurant working hours.</li>
+          <li><strong>Employees:</strong> Manage staff, salaries, and shifts.</li>
+          <li><strong>Inventory:</strong> Track raw materials and build recipes.</li>
+          <li><strong>Tables:</strong> Add or remove physical tables and generate QR codes.</li>
+          <li><strong>Grand Archive:</strong> View complete logs of all system activity.</li>
+        </ul>
+      </div>
+    )
+  },
+  {
+    id: "add-table",
+    title: "2. How to Add, Rename, or Remove a Table",
+    content: (
+      <div className="space-y-2">
+        <p>To manage the physical tables in your restaurant:</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Click on the <strong>Tables</strong> card from the main overview.</li>
+          <li>To <strong>Add a Table</strong>: Click the green "+ Add Table" button in the top right. Enter a human-readable name (e.g., "Table 1") and a unique QR Code Identifier (e.g., "table-1"). Click Save. The system will automatically generate a scannable QR code.</li>
+          <li>To <strong>Rename/Edit</strong>: Hover your mouse over an existing table card. Click the blue pencil icon that appears in the top right corner. Update the details and click Update.</li>
+          <li>To <strong>Remove</strong>: Hover over the table card and click the red trash can icon. Confirm the deletion. <em>Note: This will break any existing printed QR codes for this table.</em></li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "manage-employees",
+    title: "3. How to Manage Employees & Roles",
+    content: (
+      <div className="space-y-2">
+        <p>The Employees section allows you to manage your workforce and view payroll analytics:</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Click the <strong>Employees</strong> card. At the top, you will see charts breaking down your staff distribution and payroll load.</li>
+          <li>To <strong>Add Staff</strong>: Click "+ Add Employee". Fill out their Name, Department (e.g., Chef, Waiter), Salary, and Shift Times. When saved, the system will automatically generate a unique 4-character uppercase Employee ID.</li>
+          <li>To <strong>Edit</strong>: Find the employee in their department group and click "Edit". You can adjust their salary, shift times, or contact info here.</li>
+          <li>To <strong>Remove/Archive</strong>: Click "Archive". The employee will be removed from the active system (they can no longer log in), but their historical data is preserved in the Grand Archive.</li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "working-hours",
+    title: "4. Setting Restaurant Working Hours",
+    content: (
+      <div className="space-y-2">
+        <p>The restaurant's operating hours dictate when employees can actively process orders.</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Navigate to the <strong>Settings</strong> tab.</li>
+          <li>Under "Restaurant Operating Hours", define the Start Time and End Time.</li>
+          <li><strong>Important:</strong> The Payment Counter system constantly monitors these hours. When the End Time is reached, any cashier currently logged into the Payment Counter will be automatically logged out by the system.</li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "inventory-recipes",
+    title: "5. Tracking Inventory & Building Recipes",
+    content: (
+      <div className="space-y-2">
+        <p>The Inventory system ensures you never run out of ingredients. It has three sub-tabs:</p>
+        <ul className="list-disc pl-5 space-y-2">
+          <li><strong>Overview Analytics:</strong> Shows a chart of your stock health. Items that drop below their warning threshold will appear red.</li>
+          <li><strong>Raw Stock Levels:</strong> Click "+ Add Inventory Item" to register raw ingredients (e.g., Tomatoes, Chicken). Set the maximum capacity and the low-stock warning percentage (e.g., alert me at 15%). You can manually update stock levels here when a delivery arrives.</li>
+          <li><strong>Menu Recipes Builder:</strong> This is critical. Select a menu item from the list on the left. Then, add ingredients to it (e.g., Chicken Burger uses 1 Chicken Patty, 2 Buns). <em>When a customer orders this item, the exact quantities defined here are automatically deducted from the Raw Stock.</em></li>
+        </ul>
+      </div>
+    )
+  },
+  {
+    id: "grand-archive",
+    title: "6. Using the Grand Archive (Logs)",
+    content: (
+      <div className="space-y-2">
+        <p>The Grand Archive acts as your restaurant's black box, recording every single action.</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Click the <strong>Grand Archive</strong> card.</li>
+          <li>You will see a chronological list of actions (e.g., "Cashier processed payment", "Manager updated inventory", "Order placed").</li>
+          <li>Use the category filters (All, Orders, Inventory, Employees, System) to narrow down the logs.</li>
+          <li>Click "Export to CSV" to download the currently filtered logs into a spreadsheet for accounting or auditing purposes.</li>
+        </ol>
+      </div>
+    )
+  }
+];

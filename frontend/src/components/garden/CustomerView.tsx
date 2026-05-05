@@ -8,6 +8,7 @@ import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
 import { fetchMenu, fetchTable, placeOrder, refreshOrder } from "@/lib/api";
+import { useWebSocket } from "@/lib/useWebSocket";
 import type { MenuItem, Order } from "@/lib/menu-data";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
@@ -96,24 +97,19 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     return () => { alive = false; };
   }, [qrCode]);
 
-  // Poll all active (non-ready) orders
-  useEffect(() => {
-    const pending = orders.filter((o) => o.status !== "ready");
-    if (pending.length === 0) return;
-    const id = window.setInterval(async () => {
-      try {
-        const updated = await Promise.all(
-          pending.map((o) => refreshOrder(qrCode, o.id).then((r) => r ?? o)),
-        );
-        setOrders((cur) =>
-          cur.map((o) => updated.find((u) => u.id === o.id) || o),
-        );
-      } catch (err) {
-        // Silent catch for background polling
+  // Real-time WebSocket listener for order updates
+  useWebSocket(["ORDER_STATUS_UPDATE"], (event) => {
+    const updatedOrder = event.payload;
+    if (!updatedOrder) return;
+    
+    setOrders((cur) => {
+      // Only update if this order belongs to our current active session
+      if (cur.some(o => o.id === updatedOrder.id)) {
+        return cur.map((o) => o.id === updatedOrder.id ? updatedOrder : o);
       }
-    }, 8000);
-    return () => window.clearInterval(id);
-  }, [orders, qrCode]);
+      return cur;
+    });
+  });
 
   const switchTab = (next: "home" | "menu" | "orders") => {
     setTabDir(tabOrder[next] >= tabOrder[tab] ? "right" : "left");

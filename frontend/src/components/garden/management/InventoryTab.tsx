@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchInventory, createInventoryItem, updateInventoryStock, fetchRecipes, updateRecipe, fetchMenuItems } from "@/lib/api";
-import { Package, UtensilsCrossed, AlertTriangle, Plus, Save } from "lucide-react";
+import { useWebSocket } from "@/lib/useWebSocket";
+import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 
 export const InventoryTab = () => {
-  const [activeSubTab, setActiveSubTab] = useState<"stock" | "recipes">("stock");
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">("overview");
   
   // Stock State
   const [inventory, setInventory] = useState<any[]>([]);
@@ -42,6 +44,11 @@ export const InventoryTab = () => {
       setLoading(false);
     }
   };
+
+  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
+    // Inventory changes on order creation/payment
+    loadData();
+  });
 
   const handleCreateItem = async () => {
     try {
@@ -109,6 +116,31 @@ export const InventoryTab = () => {
     }
   };
 
+  // --- Analytics Data Prep ---
+  const { healthData, menuComplexityData } = useMemo(() => {
+    const health = inventory.map(item => {
+      const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
+      return {
+        name: item.name,
+        category: item.category,
+        percent: parseFloat(percent.toFixed(1)),
+        isLow: percent <= item.low_stock_threshold_percent,
+        threshold: item.low_stock_threshold_percent
+      };
+    }).sort((a, b) => a.percent - b.percent);
+
+    const complexity = menuItems.map(m => {
+      const rec = recipes.find(r => r.id === m.id);
+      return {
+        name: m.name,
+        ingredientsCount: rec?.ingredients?.length || 0
+      };
+    }).sort((a, b) => b.ingredientsCount - a.ingredientsCount).slice(0, 10);
+
+    return { healthData: health, menuComplexityData: complexity };
+  }, [inventory, menuItems, recipes]);
+
+
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading inventory...</div>;
 
   return (
@@ -116,24 +148,84 @@ export const InventoryTab = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Package className="h-6 w-6 text-orange-600" />
-          Inventory Management
+          Inventory & Performance
         </h2>
       </div>
 
-      <div className="flex gap-4 border-b border-gray-200 pb-2">
+      <div className="flex gap-4 border-b border-gray-200 pb-2 overflow-x-auto">
         <button 
-          className={\`px-4 py-2 font-medium text-sm rounded-t-lg \${activeSubTab === "stock" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}\`}
+          className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "overview" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
+          onClick={() => setActiveSubTab("overview")}
+        >
+          <Activity className="h-4 w-4 inline mr-2" />
+          Overview Analytics
+        </button>
+        <button 
+          className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "stock" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
           onClick={() => setActiveSubTab("stock")}
         >
-          Raw Stock
+          <Package className="h-4 w-4 inline mr-2" />
+          Raw Stock Levels
         </button>
         <button 
-          className={\`px-4 py-2 font-medium text-sm rounded-t-lg \${activeSubTab === "recipes" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}\`}
+          className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "recipes" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
           onClick={() => setActiveSubTab("recipes")}
         >
-          Menu Recipes
+          <UtensilsCrossed className="h-4 w-4 inline mr-2" />
+          Menu Recipes Builder
         </button>
       </div>
+
+      {activeSubTab === "overview" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Inventory Health Status</CardTitle>
+                <CardDescription>Current stock levels as a percentage of maximum capacity (lowest first)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                      <XAxis type="number" domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+                      <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                      <Tooltip formatter={(value: number) => [`${value}%`, 'Stock Level']} cursor={{fill: 'transparent'}} />
+                      <ReferenceLine x={20} stroke="red" strokeDasharray="3 3" label={{ position: 'top', value: 'Avg Threshold', fill: 'red', fontSize: 10 }} />
+                      <Bar dataKey="percent" radius={[0, 4, 4, 0]} barSize={15}>
+                        {healthData.slice(0, 15).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.isLow ? '#ef4444' : '#10b981'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-orange-500" /> Menu Complexity</CardTitle>
+                <CardDescription>Top menu items by number of linked ingredients</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} tick={{fontSize: 11}} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip formatter={(value: number) => [value, 'Ingredients']} cursor={{fill: 'transparent'}} />
+                      <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {activeSubTab === "stock" && (
         <div className="space-y-6">
@@ -200,7 +292,7 @@ export const InventoryTab = () => {
               const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
               const isLow = percent <= item.low_stock_threshold_percent;
               return (
-                <Card key={item.id} className={\`border-l-4 \${isLow ? 'border-l-red-500 bg-red-50' : 'border-l-green-500'}\`}>
+                <Card key={item.id} className={`border-l-4 ${isLow ? 'border-l-red-500 bg-red-50' : 'border-l-green-500'}`}>
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -218,7 +310,7 @@ export const InventoryTab = () => {
                           <span className="text-gray-500">{percent.toFixed(0)}%</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div className={\`h-2.5 rounded-full \${isLow ? 'bg-red-500' : 'bg-green-500'}\`} style={{ width: \`\${percent}%\` }}></div>
+                          <div className={`h-2.5 rounded-full ${isLow ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percent}%` }}></div>
                         </div>
                       </div>
                       <div className="flex gap-2 pt-2">
@@ -226,14 +318,14 @@ export const InventoryTab = () => {
                           type="number" 
                           className="w-24"
                           placeholder="Amount" 
-                          id={\`restock-\${item.id}\`}
+                          id={`restock-${item.id}`}
                           defaultValue={item.current_stock}
                         />
                         <Button 
                           size="sm" 
                           variant="outline"
                           onClick={() => {
-                            const val = parseFloat((document.getElementById(\`restock-\${item.id}\`) as HTMLInputElement).value);
+                            const val = parseFloat((document.getElementById(`restock-${item.id}`) as HTMLInputElement).value);
                             handleUpdateStock(item.id, val, item.max_stock);
                           }}
                         >
@@ -258,7 +350,7 @@ export const InventoryTab = () => {
                 <div 
                   key={item.id} 
                   onClick={() => selectRecipe(item.id)}
-                  className={\`p-3 rounded-lg cursor-pointer border transition-colors \${selectedMenuItem === item.id ? 'bg-orange-100 border-orange-300 shadow-sm' : 'bg-white hover:bg-gray-50 border-gray-200'}\`}
+                  className={`p-3 rounded-lg cursor-pointer border transition-colors ${selectedMenuItem === item.id ? 'bg-orange-100 border-orange-300 shadow-sm' : 'bg-white hover:bg-gray-50 border-gray-200'}`}
                 >
                   <div className="font-medium">{item.name}</div>
                   <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">

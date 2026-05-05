@@ -3,8 +3,15 @@ const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
-const CANONICAL_QR_CODES = ["table-1", "table-2", "table-3", "table-4", "table-5"];
 const qrSvgCache = new Map();
+
+const run = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this);
+    });
+  });
 
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -60,15 +67,12 @@ const withQrCode = async (req, table) => {
 };
 
 const getTables = async (req, res) => {
-  const placeholders = CANONICAL_QR_CODES.map(() => "?").join(", ");
   const tables = await all(
     `
       SELECT id, table_number, qr_code
       FROM tables
-      WHERE qr_code IN (${placeholders})
       ORDER BY id ASC
-    `,
-    CANONICAL_QR_CODES
+    `
   );
 
   const payload = await Promise.all(tables.map((table) => withQrCode(req, table)));
@@ -92,7 +96,84 @@ const getTableByQrCode = async (req, res) => {
   return res.json(await withQrCode(req, table));
 };
 
+const createTable = async (req, res) => {
+  const { table_number, qr_code } = req.body;
+  if (!table_number || !qr_code) {
+    throw createHttpError(400, "Table number and QR code are required");
+  }
+
+  const existing = await get("SELECT id FROM tables WHERE qr_code = ?", [qr_code]);
+  if (existing) {
+    throw createHttpError(400, "A table with this QR code already exists");
+  }
+
+  const result = await run(
+    `INSERT INTO tables (table_number, qr_code) VALUES (?, ?)`,
+    [table_number, qr_code]
+  );
+
+  const table = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [result.lastID]);
+  
+  // Also log it
+  await run(
+    `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name)
+     VALUES (?, ?, ?, ?, ?)`,
+    ['SYSTEM', 'CREATE_TABLE', 'Manager', result.lastID.toString(), table_number]
+  );
+
+  return res.status(201).json(await withQrCode(req, table));
+};
+
+const updateTable = async (req, res) => {
+  const { id } = req.params;
+  const { table_number, qr_code } = req.body;
+  
+  if (!table_number || !qr_code) {
+    throw createHttpError(400, "Table number and QR code are required");
+  }
+
+  const existing = await get("SELECT id FROM tables WHERE qr_code = ? AND id != ?", [qr_code, id]);
+  if (existing) {
+    throw createHttpError(400, "A table with this QR code already exists");
+  }
+
+  await run(
+    `UPDATE tables SET table_number = ?, qr_code = ? WHERE id = ?`,
+    [table_number, qr_code, id]
+  );
+
+  const table = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [id]);
+  
+  await run(
+    `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name)
+     VALUES (?, ?, ?, ?, ?)`,
+    ['SYSTEM', 'UPDATE_TABLE', 'Manager', id.toString(), table_number]
+  );
+
+  return res.json(await withQrCode(req, table));
+};
+
+const deleteTable = async (req, res) => {
+  const { id } = req.params;
+  
+  const table = await get("SELECT table_number FROM tables WHERE id = ?", [id]);
+  if (!table) throw createHttpError(404, "Table not found");
+
+  await run(`DELETE FROM tables WHERE id = ?`, [id]);
+  
+  await run(
+    `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name)
+     VALUES (?, ?, ?, ?, ?)`,
+    ['SYSTEM', 'DELETE_TABLE', 'Manager', id.toString(), table.table_number]
+  );
+
+  return res.json({ success: true, message: "Table deleted successfully" });
+};
+
 module.exports = {
   getTables,
-  getTableByQrCode
+  getTableByQrCode,
+  createTable,
+  updateTable,
+  deleteTable
 };

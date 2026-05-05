@@ -40,7 +40,7 @@ export const LogsTab = () => {
         log.action,
         log.actor_name || "System",
         log.target_name || "-",
-        \`"\${log.details ? log.details.replace(/"/g, '""') : ''}"\`
+        `"\${log.details ? log.details.replace(/"/g, '""') : ''}"`
       ];
       csvRows.push(row.join(","));
     });
@@ -49,7 +49,7 @@ export const LogsTab = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = \`dragonfly-garden-logs-\${new Date().toISOString().split('T')[0]}.csv\`;
+    a.download = `dragonfly-garden-logs-\${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -148,11 +148,11 @@ export const LogsTab = () => {
                     <tr key={log.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap text-gray-500">{new Date(log.timestamp).toLocaleString()}</td>
                       <td className="px-4 py-3 font-medium">
-                        <span className={\`px-2 py-1 rounded-full text-xs \${
+                        <span className={`px-2 py-1 rounded-full text-xs \${
                           log.category === 'INVENTORY' ? 'bg-orange-100 text-orange-800' :
                           log.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-800' :
                           'bg-gray-100 text-gray-800'
-                        }\`}>
+                        }`}>
                           {log.category}
                         </span>
                       </td>

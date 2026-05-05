@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Eye, EyeOff, LogOut } from "lucide-react";
 import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings } from "@/lib/api";
 import type { PaymentOrder } from "@/lib/api";
+import { useWebSocket } from "@/lib/useWebSocket";
+import { HelpModal, HelpSection } from "./HelpModal";
 
 interface PaymentMethod {
   id: number;
@@ -166,6 +168,12 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     loadData();
   }, [loadData]);
 
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT"], (event) => {
+    if (loggedInEmployee) {
+      loadData();
+    }
+  });
+
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {
       notify("error", "Please fill all payment details");
@@ -266,6 +274,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             <span className="text-sm font-medium text-gray-700">
               Shift: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
+            <HelpModal title="Payment Counter" sections={paymentHelpSections} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> Logout
             </Button>
@@ -461,3 +470,58 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     </div>
   );
 };
+
+const paymentHelpSections: HelpSection[] = [
+  {
+    id: "login",
+    title: "1. Login & Shift Tracking",
+    content: (
+      <div className="space-y-2">
+        <p>Before you can process payments, you must log in using your authorized Employee ID and Name. This ensures that every transaction is securely tracked under your name in the system logs.</p>
+        <p><strong>Note:</strong> The system automatically monitors restaurant working hours. If the restaurant closes, the system will automatically end your shift and log you out.</p>
+      </div>
+    )
+  },
+  {
+    id: "process-payment",
+    title: "2. How to Process a Payment",
+    content: (
+      <div className="space-y-2">
+        <p>When a customer is ready to pay, find their order in the <strong>Unpaid Orders</strong> list on the left side of your screen.</p>
+        <ol className="list-decimal pl-5 space-y-2">
+          <li>Verify the Table number and the items listed on the ticket.</li>
+          <li>Click the blue <strong>Process Payment</strong> button.</li>
+          <li>A window will appear showing the total cost (including VAT and Service Charge) and the <strong>Remaining</strong> amount due.</li>
+          <li>Select the <strong>Payment Method</strong> (e.g., Cash, Card).</li>
+          <li>Enter the <strong>Tendered Amount</strong> (the exact amount the customer handed to you). If they gave you more than the total, the system will automatically calculate the <strong>Change due</strong>.</li>
+          <li>Click <strong>Process</strong>. The system will record the payment and move the order to the Paid list if the balance is fully settled.</li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "add-items",
+    title: "3. Adding Last-Minute Items",
+    content: (
+      <div className="space-y-2">
+        <p>Sometimes a customer will want to add an item right as they are paying (like a last-minute drink or dessert).</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Click <strong>Process Payment</strong> on their order.</li>
+          <li>Instead of entering payment, click the <strong>Add Item</strong> button.</li>
+          <li>Select the item they want from the dropdown list and enter the quantity.</li>
+          <li>Click <strong>Add to Order</strong>. The item will be instantly added to their bill, the total will update, and the inventory will be automatically deducted.</li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "paid-orders",
+    title: "4. Viewing Paid Orders",
+    content: (
+      <div className="space-y-2">
+        <p>The right side of your screen contains the <strong>Paid Orders</strong> list. By default, it is hidden to keep your screen clean.</p>
+        <p>Click the <strong>Show</strong> button to reveal all fully paid orders from today. You can use this to verify past transactions or confirm a payment went through successfully.</p>
+      </div>
+    )
+  }
+];

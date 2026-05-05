@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => ({
       '/menu': 'http://localhost:5000',
       '/orders': 'http://localhost:5000',
       '/tables': 'http://localhost:5000',
-      '/payments': 'http://localhost:5000'
+      '/payments': 'http://localhost:5000',
+      '/management': 'http://localhost:5000'
     }
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight } from "lucide-react";
 import { PetalButton } from "./PetalButton";
+import { HelpModal, HelpSection } from "./HelpModal";
 import { fetchKitchenOrders, updateOrderStatus } from "@/lib/api";
+import { useWebSocket } from "@/lib/useWebSocket";
 import type { Order } from "@/lib/menu-data";
 
 const STAGES = ["queue", "preparing", "ready"] as const;
@@ -31,9 +33,12 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
 
   useEffect(() => {
     load();
-    const id = window.setInterval(() => load(true), 7000);
-    return () => window.clearInterval(id);
   }, [load]);
+
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE"], (event) => {
+    // We could optimize by checking event payload, but a full fresh load ensures perfect sync
+    load(true);
+  });
 
   const grouped = useMemo(() =>
     STAGES.map((s) => ({ status: s, orders: orders.filter((o) => o.status === s) })),
@@ -64,12 +69,15 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
               <span className="italic text-accent">in motion</span>
             </h1>
           </div>
-          <button
-            onClick={() => load()}
-            className="grid h-11 w-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-90"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex gap-2 items-center">
+            <HelpModal title="Kitchen Crew" sections={kitchenHelpSections} />
+            <button
+              onClick={() => load()}
+              className="grid h-11 w-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-90"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -177,3 +185,44 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     </div>
   );
 };
+
+const kitchenHelpSections: HelpSection[] = [
+  {
+    id: "overview",
+    title: "1. Understanding the Kitchen Board",
+    content: (
+      <div className="space-y-2">
+        <p>This is your digital order board. It updates automatically every 7 seconds so you never miss an incoming order. There are three stages:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Queue (Red):</strong> New orders sent by customers. They have not been started yet.</li>
+          <li><strong>Cooking (Orange):</strong> Orders that a chef has claimed and is currently preparing.</li>
+          <li><strong>Ready (Green):</strong> Completed orders waiting to be served by the Waiters.</li>
+        </ul>
+      </div>
+    )
+  },
+  {
+    id: "moving-orders",
+    title: "2. How to Process an Order",
+    content: (
+      <div className="space-y-2">
+        <p>When an order arrives in the <strong>Queue</strong>, follow these steps:</p>
+        <ol className="list-decimal pl-5 space-y-2">
+          <li>Read the ticket carefully. You will see the Table number, the items, quantities, and any specific notes/customizations requested by the customer.</li>
+          <li>When you are ready to start cooking, click the <strong>Start Cooking</strong> button at the bottom of the ticket. This instantly moves the ticket to the "Cooking" tab so other chefs know it is being handled.</li>
+          <li>Once the food is fully prepared, plated, and ready to leave the kitchen, click <strong>Mark Ready</strong>. This alerts the service staff to come pick it up.</li>
+        </ol>
+      </div>
+    )
+  },
+  {
+    id: "auto-refresh",
+    title: "3. Refreshing the Board",
+    content: (
+      <div className="space-y-2">
+        <p>The kitchen board uses an auto-refresh system to pull in new orders without you having to touch the screen with messy hands.</p>
+        <p>However, if you feel you might have missed a sudden rush of orders or if your internet connection hiccuped, you can manually force an instant refresh by clicking the <strong>Refresh (Circular Arrow)</strong> button next to the "i" info icon in the top right corner.</p>
+      </div>
+    )
+  }
+];
