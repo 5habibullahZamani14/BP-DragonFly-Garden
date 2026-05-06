@@ -113,6 +113,8 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");
+  await ensureColumn("order_items", "item_status", "TEXT NOT NULL DEFAULT 'queue'");
+  await ensureColumn("orders", "customer_archived_at", "DATETIME");
   await ensureColumn("order_status_history", "order_id", "INTEGER NOT NULL");
   await ensureColumn("order_status_history", "status", "TEXT NOT NULL");
   await ensureColumn("order_status_history", "changed_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");

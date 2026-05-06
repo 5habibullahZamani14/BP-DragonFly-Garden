@@ -123,6 +123,20 @@ export const placeOrder = async (
 export const refreshOrder = async (qr: string, id: number) =>
   safeFetch<Order>(`/orders/${id}`, undefined, qr);
 
+export const fetchActiveOrdersForTable = async (tableId: number, qr: string): Promise<Order[]> =>
+  safeFetch<Order[]>(`/orders/by-table/${tableId}`, undefined, qr);
+
+export const updateItemStatus = async (qr: string, orderId: number, itemId: number, status: string): Promise<Order> =>
+  safeFetch<Order>(`/orders/${orderId}/items/${itemId}/status`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+  }, qr);
+
+export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
+  safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);
+
+export const fetchCustomerArchivedOrders = async (tableId: number, qr: string): Promise<Order[]> =>
+  safeFetch<Order[]>(`/orders/customer-archived/${tableId}`, undefined, qr);
+
 export const updateOrderStatus = async (qr: string, id: number, status: string) => {
   const data = await safeFetch<Order>(`/orders/${id}/status`, {
     method: "PATCH",

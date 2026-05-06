@@ -28,7 +28,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSending, setForgotSending] = useState(false);
   const [forgotMsg, setForgotMsg] = useState("");
-  const [activeTab, setActiveTab] = useState<"overview" | "settings" | "employees" | "inventory" | "logs" | "tables">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "settings" | "employees" | "inventory" | "logs" | "tables">(() => {
+    try {
+      const s = sessionStorage.getItem("mgr_active_tab");
+      return (["overview","settings","employees","inventory","logs","tables"] as const).includes(s as any)
+        ? s as "overview"|"settings"|"employees"|"inventory"|"logs"|"tables" : "overview";
+    } catch { return "overview"; }
+  });
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("managerLogin");
@@ -90,8 +96,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setLoginId("");
-    setLoginName("");
+    sessionStorage.removeItem("mgr_active_tab");
     localStorage.removeItem("managerLogin");
+  };
+
+  const goToTab = (t: typeof activeTab) => {
+    setActiveTab(t);
+    sessionStorage.setItem("mgr_active_tab", t);
   };
 
   if (!isLoggedIn) {
@@ -191,7 +202,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           <div className="flex items-center gap-4">
             <SettingsModal />
             {activeTab !== "overview" && (
-              <Button variant="outline" size="icon" onClick={() => setActiveTab("overview")} className="rounded-full shadow-sm">
+              <Button variant="outline" size="icon" onClick={() => goToTab("overview")} className="rounded-full shadow-sm">
                 <ArrowLeft className="h-5 w-5 text-gray-600" />
               </Button>
             )}
@@ -217,7 +228,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer" onClick={() => setActiveTab("settings")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer" onClick={() => goToTab("settings")}>
               <CardContent className="pt-6">
                 <Settings className="h-10 w-10 text-green-500 mb-4" />
                 <CardTitle className="mb-2">Settings</CardTitle>
@@ -225,7 +236,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer" onClick={() => setActiveTab("employees")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer" onClick={() => goToTab("employees")}>
               <CardContent className="pt-6">
                 <Users className="h-10 w-10 text-blue-500 mb-4" />
                 <CardTitle className="mb-2">Employees</CardTitle>
@@ -233,7 +244,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer" onClick={() => setActiveTab("inventory")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer" onClick={() => goToTab("inventory")}>
               <CardContent className="pt-6">
                 <PackageOpen className="h-10 w-10 text-orange-500 mb-4" />
                 <CardTitle className="mb-2">Inventory</CardTitle>
@@ -241,7 +252,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer" onClick={() => setActiveTab("tables")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer" onClick={() => goToTab("tables")}>
               <CardContent className="pt-6">
                 <Grid3X3 className="h-10 w-10 text-emerald-500 mb-4" />
                 <CardTitle className="mb-2">Tables</CardTitle>
@@ -249,7 +260,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer" onClick={() => setActiveTab("logs")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer" onClick={() => goToTab("logs")}>
               <CardContent className="pt-6">
                 <FileText className="h-10 w-10 text-purple-500 mb-4" />
                 <CardTitle className="mb-2">Grand Archive</CardTitle>

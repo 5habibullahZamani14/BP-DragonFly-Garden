@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Clock, ChefHat, BellRing, ArrowRight, KeyRound, LogOut, Loader2 } from "lucide-react";
+import { RefreshCw, Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2 } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { fetchKitchenOrders, updateOrderStatus, fetchKitchenPasscode } from "@/lib/api";
+import { fetchKitchenOrders, updateItemStatus, fetchKitchenPasscode } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import type { Order } from "@/lib/menu-data";
 
 const STAGES = ["queue", "preparing", "ready"] as const;
-const NEXT: Record<string, string | null> = { queue: "preparing", preparing: "ready", ready: null };
 const STAGE_META: Record<string, { label: string; icon: typeof Clock; tint: string }> = {
   queue: { label: "Queue", icon: Clock, tint: "text-berry" },
   preparing: { label: "Cooking", icon: ChefHat, tint: "text-accent" },
@@ -32,7 +31,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<number | null>(null);
+  const [updatingItem, setUpdatingItem] = useState<string | null>(null); // "orderId-itemId"
   const [activeTab, setActiveTab] = useState<typeof STAGES[number]>("queue");
 
   // Load passcode from API on mount
@@ -90,7 +89,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     if (isLoggedIn) load();
   }, [load, isLoggedIn]);
 
-  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE"], () => {
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE"], () => {
     if (isLoggedIn) load(true);
   });
 
@@ -98,15 +97,16 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     STAGES.map((s) => ({ status: s, orders: orders.filter((o) => o.status === s) })),
     [orders]);
 
-  const advance = async (id: number, status: string) => {
-    setUpdating(id);
-    const o = await updateOrderStatus(qrCode, id, status);
-    if (o) {
-      setOrders((cur) => cur.map((x) => (x.id === id ? o : x)));
-    } else {
-      setOrders((cur) => cur.map((x) => (x.id === id ? { ...x, status: status as Order["status"] } : x)));
+  const advanceItem = async (orderId: number, itemId: number, currentItemStatus: string) => {
+    const next = currentItemStatus === "queue" ? "preparing" : "ready";
+    const key = `${orderId}-${itemId}`;
+    setUpdatingItem(key);
+    try {
+      const updated = await updateItemStatus(qrCode, orderId, itemId, next);
+      if (updated) setOrders(cur => cur.map(x => x.id === orderId ? updated : x));
+    } finally {
+      setUpdatingItem(null);
     }
-    setUpdating(null);
   };
 
   // ─── Login screen ────────────────────────────────────────────────────────
@@ -271,34 +271,49 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                   </div>
 
                   <ul className="divide-y divide-border/60 px-5 py-3">
-                    {o.items.map((it) => (
-                      <li key={it.id} className="flex items-start gap-3 py-2">
-                        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 font-mono-cute text-sm font-semibold text-accent-foreground">
-                          {it.quantity}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium leading-tight">{it.item_name}</p>
-                          {it.notes && (
-                            <p className="mt-0.5 text-xs text-berry">↳ {it.notes}</p>
-                          )}
-                        </div>
-                      </li>
-                    ))}
+                    {o.items.map((it) => {
+                      const iKey = `${o.id}-${it.id}`;
+                      const isBusy = updatingItem === iKey;
+                      const itemReady = it.item_status === 'ready';
+                      const itemCooking = it.item_status === 'preparing';
+                      return (
+                        <li key={it.id} className="flex items-start gap-3 py-2.5">
+                          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 font-mono-cute text-sm font-semibold text-accent-foreground">
+                            {it.quantity}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium leading-tight">{it.item_name}</p>
+                            {it.notes && <p className="mt-0.5 text-xs text-berry">↳ {it.notes}</p>}
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                              {/* Per-item status pill */}
+                              <span className={`inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                                itemReady ? 'bg-leaf/15 text-leaf' :
+                                itemCooking ? 'bg-accent/20 text-amber-700' :
+                                'bg-berry/10 text-berry'
+                              }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${
+                                  itemReady ? 'bg-leaf' : itemCooking ? 'bg-accent' : 'bg-berry'
+                                }`}/>
+                                {itemReady ? 'Ready' : itemCooking ? 'Cooking' : 'Queue'}
+                              </span>
+                              {/* Advance button */}
+                              {!itemReady && (
+                                <button
+                                  onClick={() => advanceItem(o.id, it.id!, it.item_status || 'queue')}
+                                  disabled={isBusy}
+                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
+                                >
+                                  {isBusy ? '…' : `→ ${itemCooking ? 'Ready' : 'Cooking'}`}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
 
-                  {next && (
-                    <div className="border-t border-border bg-background px-5 py-3">
-                      <PetalButton
-                        variant={next === "ready" ? "gold" : "emerald"}
-                        size="md"
-                        disabled={updating === o.id}
-                        onClick={() => advance(o.id, next)}
-                        className="w-full"
-                      >
-                        Mark as {next} <ArrowRight className="h-4 w-4" />
-                      </PetalButton>
-                    </div>
-                  )}
+
                 </li>
               );
             })}

@@ -53,7 +53,16 @@ export type Order = {
   status: "queue" | "preparing" | "ready";
   table_number: string;
   total_price: number;
-  items: { id: number; quantity: number; item_name: string; notes?: string }[];
+  created_at?: string;
+  customer_archived_at?: string | null;
+  items: {
+    id: number;
+    quantity: number;
+    item_name: string;
+    notes?: string;
+    price_at_order_time?: number;
+    item_status?: "queue" | "preparing" | "ready";
+  }[];
 };
 
 export const MOCK_KITCHEN_ORDERS: Order[] = [

@@ -63,6 +63,7 @@ const fetchOrderById = async (orderId) => {
         oi.quantity,
         oi.price_at_order_time,
         oi.notes,
+        oi.item_status,
         mi.name AS item_name,
         mi.description AS item_description
       FROM order_items oi
@@ -318,12 +319,74 @@ const updateOrderStatus = async (orderId, newStatus, role) => {
   return fetchOrderById(orderId);
 };
 
+const getActiveTableOrders = async (tableId) => {
+  const rows = await all(
+    `SELECT id FROM orders
+     WHERE table_id = ? AND status IN ('queue','preparing','ready')
+     ORDER BY created_at ASC`,
+    [tableId]
+  );
+  const orders = await Promise.all(rows.map(r => fetchOrderById(r.id)));
+  return orders.filter(Boolean);
+};
+
+// Derive overall order status from its items
+const deriveOrderStatus = (itemStatuses) => {
+  if (itemStatuses.every(s => s === 'ready')) return 'ready';
+  if (itemStatuses.every(s => s === 'queue')) return 'queue';
+  return 'preparing';
+};
+
+const updateItemStatus = async (orderId, itemId, newStatus) => {
+  const validStatuses = ['queue', 'preparing', 'ready'];
+  if (!validStatuses.includes(newStatus)) throw new Error(`Invalid status: ${newStatus}`);
+
+  // Update the specific item
+  await run(`UPDATE order_items SET item_status = ? WHERE id = ? AND order_id = ?`,
+    [newStatus, itemId, orderId]);
+
+  // Derive new overall order status from all items
+  const items = await all(`SELECT item_status FROM order_items WHERE order_id = ?`, [orderId]);
+  const derived = deriveOrderStatus(items.map(i => i.item_status));
+
+  // Update order status if changed
+  const current = await get(`SELECT status FROM orders WHERE id = ?`, [orderId]);
+  if (current && current.status !== derived) {
+    await run(`UPDATE orders SET status = ? WHERE id = ?`, [derived, orderId]);
+    await run(`INSERT INTO order_status_history (order_id, status, changed_by) VALUES (?, ?, ?)`,
+      [orderId, derived, 'kitchen-item-advance']);
+  }
+
+  return fetchOrderById(orderId);
+};
+
+const customerArchiveOrder = async (orderId) => {
+  await run(`UPDATE orders SET customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
+  return fetchOrderById(orderId);
+};
+
+const getCustomerArchivedOrdersForTable = async (tableId) => {
+  const rows = await all(
+    `SELECT id FROM orders
+     WHERE table_id = ? AND customer_archived_at IS NOT NULL
+     ORDER BY customer_archived_at DESC
+     LIMIT 30`,
+    [tableId]
+  );
+  const orders = await Promise.all(rows.map(r => fetchOrderById(r.id)));
+  return orders.filter(Boolean);
+};
+
 module.exports = {
   createOrder,
   getOrder,
   getOrders,
   getKitchenOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  getActiveTableOrders,
+  updateItemStatus,
+  customerArchiveOrder,
+  getCustomerArchivedOrdersForTable
 };
 
 

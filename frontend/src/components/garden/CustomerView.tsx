@@ -7,7 +7,7 @@ import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
-import { fetchMenu, fetchTable, placeOrder, refreshOrder } from "@/lib/api";
+import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
 import type { MenuItem, Order } from "@/lib/menu-data";
@@ -36,26 +36,64 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = useState<CartLine[]>(() => {
+    try { return JSON.parse(sessionStorage.getItem(`dfg_cart_${qrCode}`) || '[]'); }
+    catch { return []; }
+  });
   const [tableInfo, setTableInfo] = useState<{ id: number; table_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   // Active orders (in queue / preparing / ready-but-not-yet-viewed-and-cleared)
   const [orders, setOrders] = useState<Order[]>([]);
   // Compact history of completed orders the user has acknowledged
-  const [history, setHistory] = useState<Order[]>([]);
+  const [history, setHistory] = useState<Order[]>(() => {
+    try { return JSON.parse(sessionStorage.getItem(`dfg_history_${qrCode}`) || '[]'); }
+    catch { return []; }
+  });
   // Per-order: which stage was last "live" — used to trigger stage-confirm pop
   const prevStageRef = useRef<Record<number, string>>({});
   // Per-order: has the user already seen the celebration for the ready state?
-  const [celebratedIds, setCelebratedIds] = useState<Set<number>>(new Set());
+  const [celebratedIds, setCelebratedIds] = useState<Set<number>>(() => {
+    try { return new Set<number>(JSON.parse(sessionStorage.getItem(`dfg_celebrated_${qrCode}`) || '[]')); }
+    catch { return new Set(); }
+  });
   const [cartOpen, setCartOpen] = useState(false);
-  const [tab, setTab] = useState<"home" | "menu" | "orders">("home");
+  const [tab, setTab] = useState<"home" | "menu" | "orders">(() => {
+    try {
+      const s = sessionStorage.getItem(`dfg_tab_${qrCode}`);
+      return (["home","menu","orders"] as const).includes(s as any) ? s as "home"|"menu"|"orders" : "home";
+    } catch { return "home"; }
+  });
   // Direction of the last tab change — for swoosh-in animation
   const [tabDir, setTabDir] = useState<"right" | "left">("right");
   const tabOrder: Record<string, number> = { home: 0, menu: 1, orders: 2 };
 
   const heroRef = useRef<HTMLDivElement | null>(null);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
+  const confirmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Confirmation countdown (8 s before order actually sent) ────────────
+  const [pendingCart, setPendingCart] = useState<CartLine[] | null>(null);
+  const [confirmCountdown, setConfirmCountdown] = useState(8);
+  const [submitCooldown, setSubmitCooldown] = useState(false);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  // ── Archive countdown (20 s after ready order is seen) ──────────────────
+  const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
+  const [keptOrderIds, setKeptOrderIds] = useState<Set<number>>(new Set());
+  const [archivedOrders, setArchivedOrders] = useState<Order[]>(() => {
+    try { return JSON.parse(sessionStorage.getItem(`dfg_archived_${qrCode}`) || '[]'); }
+    catch { return []; }
+  });
+  const [showArchived, setShowArchived] = useState(() => {
+    try { return sessionStorage.getItem(`dfg_show_archived_${qrCode}`) === 'true'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
+  }, [archivedOrders, qrCode]);
+  useEffect(() => {
+    sessionStorage.setItem(`dfg_show_archived_${qrCode}`, String(showArchived));
+  }, [showArchived, qrCode]);
 
   // Dismiss search popup when user interacts anywhere outside the search bar / popup
   useEffect(() => {
@@ -79,7 +117,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     };
   }, [query]);
 
-  // Load menu + table
+  // Load menu + table, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -89,6 +127,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         if (!alive) return;
         setMenu(m);
         setTableInfo(t);
+        // Re-hydrate active orders so they survive a refresh
+        try {
+          const active = await fetchActiveOrdersForTable(t.id, qrCode);
+          if (alive && active.length > 0) {
+            setOrders(active);
+            active.forEach(o => { prevStageRef.current[o.id] = o.status; });
+          }
+        } catch { /* non-critical: orders panel just starts empty */ }
       } catch (err) {
         if (alive) notify("error", "Failed to load menu. Please refresh.");
       } finally {
@@ -97,6 +143,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     })();
     return () => { alive = false; };
   }, [qrCode]);
+
+  // Persist cart / history / celebratedIds to sessionStorage
+  useEffect(() => { sessionStorage.setItem(`dfg_cart_${qrCode}`, JSON.stringify(cart)); }, [cart, qrCode]);
+  useEffect(() => { sessionStorage.setItem(`dfg_history_${qrCode}`, JSON.stringify(history)); }, [history, qrCode]);
+  useEffect(() => { sessionStorage.setItem(`dfg_celebrated_${qrCode}`, JSON.stringify([...celebratedIds])); }, [celebratedIds, qrCode]);
 
   // Real-time WebSocket listener for order updates
   useWebSocket(["ORDER_STATUS_UPDATE"], (event) => {
@@ -115,6 +166,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const switchTab = (next: "home" | "menu" | "orders") => {
     setTabDir(tabOrder[next] >= tabOrder[tab] ? "right" : "left");
     setTab(next);
+    sessionStorage.setItem(`dfg_tab_${qrCode}`, next);
   };
 
   // Subtle parallax on hero — translate only, never fade out (full opacity always)
@@ -157,21 +209,81 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const setNote = (id: number, n: string) =>
     setCart((c) => c.map((x) => (x.id === id ? { ...x, notes: n } : x)));
 
-  const submit = async () => {
-    if (!tableInfo || cart.length === 0) return;
+  // Start the actual countdown (extracted so it can be called after duplicate-warning dismiss)
+  const beginCountdown = () => {
+    setPendingCart([...cart]);
+    setConfirmCountdown(8);
+    setCartOpen(false);
+    confirmIntervalRef.current = setInterval(() => {
+      setConfirmCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(confirmIntervalRef.current!);
+          confirmIntervalRef.current = null;
+          confirmOrder();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Phase 1: customer taps "Send Order"
+  const startConfirmation = () => {
+    if (!tableInfo || cart.length === 0 || submitCooldown || pendingCart) return;
+    // Show in-app warning if an order is still in progress
+    if (orders.length > 0 && orders.some(o => o.status !== "ready")) {
+      setShowDuplicateWarning(true);
+      return;
+    }
+    beginCountdown();
+  };
+
+  // Phase 2: actually place the order (called when countdown hits 0)
+  const confirmOrder = async () => {
+    const snapshot = pendingCart;
+    setPendingCart(null);
+    if (!snapshot || !tableInfo) return;
     setSubmitting(true);
     try {
       const order = await placeOrder(qrCode, {
         table_id: tableInfo.id,
-        items: cart.map((c) => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes }))
+        items: snapshot.map(c => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes }))
       });
-      setOrders((cur) => [order, ...cur]);
+      setOrders(cur => [order, ...cur]);
+      prevStageRef.current[order.id] = order.status;
       setCart([]);
-      setCartOpen(false);
-    } catch (err) {
-      notify("error", "Network issue, order failed to send.");
+      switchTab("orders");
+      // 3-sec cooldown
+      setSubmitCooldown(true);
+      setTimeout(() => setSubmitCooldown(false), 3000);
+    } catch {
+      notify("error", "Network issue — order failed to send.");
+      setPendingCart(snapshot); // restore so user can retry
     } finally { setSubmitting(false); }
   };
+
+  // Cancel during countdown — return to cart
+  const cancelConfirmation = () => {
+    if (confirmIntervalRef.current) { clearInterval(confirmIntervalRef.current); confirmIntervalRef.current = null; }
+    setPendingCart(null);
+    setConfirmCountdown(8);
+    setCartOpen(true);
+  };
+
+  // Archive a ready order after the user confirms (or countdown runs out)
+  const archiveOrder = async (orderId: number) => {
+    try {
+      await customerArchiveOrder(qrCode, orderId);
+    } catch { /* non-critical */ }
+    setOrders(cur => cur.filter(o => o.id !== orderId));
+    const archived = orders.find(o => o.id === orderId);
+    if (archived) setArchivedOrders(cur => [{ ...archived, customer_archived_at: new Date().toISOString() }, ...cur]);
+    // Clean up countdown state
+    setArchiveCountdowns(cur => { const n = { ...cur }; delete n[orderId]; return n; });
+    setKeptOrderIds(cur => { const n = new Set(cur); n.delete(orderId); return n; });
+  };
+
+
 
   const scrollToMenu = () => {
     switchTab("menu");
@@ -213,8 +325,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     if (changed) setRecentlyCompleted((cur) => ({ ...cur, ...next }));
   }, [orders]);
 
-  // When user opens Orders Status, celebrate any newly-ready orders once,
-  // then move them into history shortly after.
+  // When user opens Orders Status, celebrate newly-ready orders once,
+  // then start the 20-second archive countdown.
   useEffect(() => {
     if (tab !== "orders") return;
     const readyUnseen = orders.filter(
@@ -226,16 +338,114 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       readyUnseen.forEach((o) => n.add(o.id));
       return n;
     });
-    const t = window.setTimeout(() => {
-      setOrders((cur) => cur.filter((o) => !readyUnseen.find((r) => r.id === o.id)));
-      setHistory((cur) => [...readyUnseen, ...cur]);
-    }, 2600);
-    return () => window.clearTimeout(t);
+    // Start 20-second archive countdown for each newly-seen ready order
+    setArchiveCountdowns((cur) => {
+      const n = { ...cur };
+      readyUnseen.forEach((o) => { if (!(o.id in n) && !keptOrderIds.has(o.id)) n[o.id] = 20; });
+      return n;
+    });
   }, [tab, orders, celebratedIds]);
+
+  // Tick archive countdowns every second
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setArchiveCountdowns((cur) => {
+        const n = { ...cur };
+        let changed = false;
+        Object.keys(n).forEach((k) => {
+          const id = Number(k);
+          if (keptOrderIds.has(id)) return; // paused
+          if (n[id] > 0) { n[id]--; changed = true; }
+          if (n[id] <= 0) {
+            // Auto-archive
+            archiveOrder(id);
+            delete n[id];
+            changed = true;
+          }
+        });
+        return changed ? n : cur;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [keptOrderIds]);
+
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-7xl pb-32" style={{ paddingTop: "var(--safe-top)" }}>
+
+      {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
+      {pendingCart && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md animate-fade-up px-6">
+          {/* Countdown ring */}
+          <div className="relative mb-6">
+            <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
+              <circle cx="48" cy="48" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="6"/>
+              <circle
+                cx="48" cy="48" r="42" fill="none"
+                stroke="hsl(var(--accent))" strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={2 * Math.PI * 42}
+                strokeDashoffset={2 * Math.PI * 42 * (1 - confirmCountdown / 8)}
+                style={{ transition: "stroke-dashoffset 0.9s linear" }}
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center font-display text-3xl font-bold">{confirmCountdown}</span>
+          </div>
+          <h2 className="font-display text-2xl font-semibold mb-1">Confirm your order?</h2>
+          <p className="text-sm text-foreground/55 mb-6 text-center">Sending automatically when timer runs out.<br/>Tap <strong>Cancel</strong> to go back and edit.</p>
+          {/* Mini receipt preview */}
+          <div className="w-full max-w-xs rounded-2xl border border-border bg-card/80 px-4 py-3 mb-6 space-y-1.5 max-h-52 overflow-y-auto">
+            {pendingCart.map(item => (
+              <div key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="font-semibold truncate">{item.quantity}× {item.name}</span>
+                <span className="shrink-0 text-foreground/60">{formatRM(item.price * item.quantity)}</span>
+              </div>
+            ))}
+            <div className="border-t border-border/60 pt-1.5 flex justify-between font-bold">
+              <span>Total</span>
+              <span>{formatRM(pendingCart.reduce((s, i) => s + i.price * i.quantity, 0))}</span>
+            </div>
+          </div>
+          <button
+            onClick={cancelConfirmation}
+            className="w-full max-w-xs rounded-2xl border-2 border-destructive/60 py-3 text-sm font-bold text-destructive transition hover:bg-destructive/5 active:scale-95"
+          >
+            Cancel — go back to cart
+          </button>
+        </div>
+      )}
+
+      {/* ══ DUPLICATE ORDER WARNING DIALOG ══════════════════════════════════ */}
+      {showDuplicateWarning && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0" style={{ background: "rgba(0,0,0,0.55)" }}>
+          <div className="w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up" style={{ background: "hsl(44,70%,97%)", boxShadow: "0 24px 60px rgba(0,0,0,0.28)" }}>
+            <div className="px-6 pt-6 pb-4" style={{ background: "var(--gradient-hero)" }}>
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h2 className="font-display text-xl font-bold text-primary-foreground leading-snug">Order already in progress</h2>
+              <p className="mt-1 text-sm text-primary-foreground/75">Your kitchen is still working on a previous order. Are you sure you want to send another one right now?</p>
+            </div>
+            <div className="px-5 py-4 flex flex-col gap-2.5">
+              <button
+                onClick={() => { setShowDuplicateWarning(false); beginCountdown(); }}
+                className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition active:scale-95"
+                style={{ background: "var(--gradient-hero)" }}
+              >
+                Yes, send another order
+              </button>
+              <button
+                onClick={() => setShowDuplicateWarning(false)}
+                className="w-full rounded-2xl border-2 border-border py-3 text-sm font-semibold text-foreground/70 transition hover:bg-black/5 active:scale-95"
+              >
+                Cancel — keep waiting
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ============ TOP BAR (sticky, app-like) ============ */}
+
       <div className="sticky top-0 z-30 px-5 pt-4 pb-3 cream-frost">
         <div className="absolute top-4 left-5">
           <SettingsModal />
@@ -685,7 +895,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               </button>
             </section>
           ) : (
-            <div className="mx-5 mb-8 space-y-4">
+            <div className="mx-5 mb-8 space-y-6">
               <div className="flex items-end justify-between">
                 <span className="eyebrow">In progress</span>
                 <span className="text-xs text-foreground/50">{orders.length} active</span>
@@ -694,81 +904,196 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 const ai = orderStageIndex(o.status);
                 const isReady = o.status === "ready";
                 const justCelebrated = isReady && celebratedIds.has(o.id);
+                const RC = "hsl(44,70%,97%)";
+                const RS = "hsl(44,35%,91%)";
+                const timeStr = o.created_at
+                  ? new Date(o.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })
+                  : null;
+                const archiveSecs = archiveCountdowns[o.id];
+                const isKept = keptOrderIds.has(o.id);
                 return (
-                  <section
-                    key={o.id}
-                    className={`relative rounded-[24px] glass-dark p-5 text-primary-foreground ${
-                      justCelebrated ? "animate-ready-celebrate" : "animate-scale-in"
-                    }`}
-                  >
-                    {/* Tiny confetti when ready */}
+                  <div key={o.id} className={`relative ${justCelebrated ? "animate-ready-celebrate" : "animate-scale-in"}`}>
                     {justCelebrated && (
-                      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]">
+                      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden z-10">
                         {[...Array(8)].map((_, i) => {
                           const angle = (i / 8) * Math.PI * 2;
-                          const cx = Math.cos(angle) * 70;
-                          const cy = Math.sin(angle) * 70;
                           return (
-                            <span
-                              key={i}
-                              className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full bg-accent animate-confetti"
-                              style={{
-                                "--cx": `${cx}px`,
-                                "--cy": `${cy}px`,
-                                animationDelay: `${i * 40}ms`,
-                              } as React.CSSProperties & Record<"--cx" | "--cy", string>}
-                            />
+                            <span key={i} className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full bg-accent animate-confetti"
+                              style={{ "--cx": `${Math.cos(angle) * 80}px`, "--cy": `${Math.sin(angle) * 80}px`, animationDelay: `${i * 40}ms` } as React.CSSProperties & Record<"--cx"|"--cy",string>}/>
                           );
                         })}
                       </span>
                     )}
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="eyebrow !text-primary-foreground/60">Order</span>
-                        <h2 className="mt-1 font-display text-2xl">#{o.id}</h2>
-                        <p className="mt-1 text-[0.7rem] text-primary-foreground/50">
-                          {o.items?.length || 0} item{(o.items?.length || 0) === 1 ? "" : "s"} · {formatRM(Number(o.total_price))}
-                        </p>
-                      </div>
-                      <span className={`pill ${isReady ? "bg-leaf text-primary-foreground" : "bg-accent text-accent-foreground animate-pulse-ring"}`}>
-                        {STAGE_LABEL[o.status] || o.status}
-                      </span>
-                    </div>
 
-                    <div className="mt-5 flex items-center gap-1">
-                      {ORDER_STAGES.map((s, i) => {
-                        const done = ai > i;
-                        const live = ai === i;
-                        const justDone = recentlyCompleted[o.id] === s;
-                        return (
-                          <div key={s} className="flex flex-1 items-center gap-1">
-                            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold transition-all
-                              ${done ? "bg-leaf text-primary-foreground" : live ? "bg-accent text-accent-foreground scale-110" : "bg-primary-foreground/10 text-primary-foreground/40"}
-                              ${justDone ? "animate-stage-confirm" : ""}`}>
-                              {done ? <Check className="h-4 w-4" /> : i + 1}
-                            </div>
-                            {i < ORDER_STAGES.length - 1 && (
-                              <div className={`h-0.5 flex-1 rounded-full transition-all ${done ? "bg-leaf" : "bg-primary-foreground/15"}`} />
+                    <div style={{ filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.14))" }}>
+
+                      {/* ── SHARP ZIGZAG top edge ── */}
+                      <svg viewBox="0 0 320 10" preserveAspectRatio="none" className="w-full" style={{ display:"block", height:"10px" }}>
+                        <path d="M0,10 L8,0 L16,10 L24,0 L32,10 L40,0 L48,10 L56,0 L64,10 L72,0 L80,10 L88,0 L96,10 L104,0 L112,10 L120,0 L128,10 L136,0 L144,10 L152,0 L160,10 L168,0 L176,10 L184,0 L192,10 L200,0 L208,10 L216,0 L224,10 L232,0 L240,10 L248,0 L256,10 L264,0 L272,10 L280,0 L288,10 L296,0 L304,10 L312,0 L320,10 Z" fill={RC}/>
+                      </svg>
+
+                      {/* ── Receipt body ── */}
+                      <div style={{ background: RC }} className="px-5 pt-1 pb-4">
+                        {/* Header: order # + status pill + archive countdown */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <p className="text-[0.58rem] font-bold uppercase tracking-[0.22em] opacity-40">Order</p>
+                            <h2 className="font-display text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.id}</h2>
+                            <p className="text-[0.7rem] opacity-50 mt-0.5">{o.table_number}{timeStr && ` · ${timeStr}`}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 mt-1">
+                            <span className={`rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wide ${isReady ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground animate-pulse"}`}>
+                              {STAGE_LABEL[o.status]}
+                            </span>
+                            {/* Archive countdown badge */}
+                            {isReady && archiveSecs !== undefined && !isKept && (
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-[0.6rem] text-foreground/50">archiving in <strong>{archiveSecs}s</strong></span>
+                                <button
+                                  onClick={() => setKeptOrderIds(cur => { const n = new Set(cur); n.add(o.id); return n; })}
+                                  className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition"
+                                >Keep ticket</button>
+                              </div>
+                            )}
+                            {isReady && isKept && (
+                              <button
+                                onClick={() => archiveOrder(o.id)}
+                                className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition"
+                              >Archive now</button>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-3 flex justify-between text-[0.65rem] text-primary-foreground/60">
-                      {ORDER_STAGES.map((s) => <span key={s}>{STAGE_LABEL[s]}</span>)}
-                    </div>
+                        </div>
 
-                    {isReady && (
-                      <div className="mt-4 flex items-center gap-2 rounded-2xl bg-leaf/20 px-3 py-2 text-[0.78rem] font-medium text-primary-foreground">
-                        <Sparkles className="h-3.5 w-3.5 text-accent" />
-                        Your order is ready — enjoy! 🌿
+                        <div className="border-t-2 mb-4" style={{ borderColor:"hsl(40,20%,68%)" }}/>
+
+                        {/* Items with per-item status */}
+                        <div className="space-y-3 mb-4">
+                          {(o.items || []).map(item => {
+                            const iReady = item.item_status === "ready";
+                            const iCook  = item.item_status === "preparing";
+                            return (
+                              <div key={item.id}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex gap-2.5 min-w-0">
+                                    <span className="text-xs font-extrabold shrink-0 w-5 mt-px" style={{ color:"hsl(140,30%,28%)" }}>{item.quantity}×</span>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold leading-snug">{item.item_name}</p>
+                                      {item.notes && <p className="text-[0.68rem] opacity-40 italic mt-0.5">"{item.notes}"</p>}
+                                    </div>
+                                  </div>
+                                  {item.price_at_order_time != null && (
+                                    <span className="text-sm font-bold shrink-0" style={{ color:"hsl(140,30%,22%)" }}>
+                                      {formatRM(item.price_at_order_time * item.quantity)}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Per-item status badge — below item name, small */}
+                                <div className="mt-1 ml-7">
+                                  <span className={`inline-flex items-center gap-1 text-[0.56rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
+                                    iReady ? "bg-green-100 text-green-700" :
+                                    iCook  ? "bg-amber-100 text-amber-700" :
+                                    "bg-gray-100 text-gray-500"
+                                  }`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full inline-block ${iReady ? "bg-green-500" : iCook ? "bg-amber-400" : "bg-gray-400"}`}/>
+                                    {iReady ? "Ready" : iCook ? "Cooking" : "Queue"}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="border-t border-dashed mb-4" style={{ borderColor:"hsl(40,20%,68%)" }}/>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-50">Total</span>
+                          <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(Number(o.total_price))}</span>
+                        </div>
                       </div>
-                    )}
-                  </section>
+
+                      {/* ── SVG-MASK PERFORATION (real transparent punch holes) ── */}
+                      <svg viewBox="0 0 400 24" preserveAspectRatio="none" width="100%" height="24" style={{ display:"block" }}>
+                        <defs>
+                          <mask id={`pm-${o.id}`}>
+                            <rect width="400" height="24" fill="white"/>
+                            <circle cx="0"   cy="12" r="13" fill="black"/>
+                            <circle cx="400" cy="12" r="13" fill="black"/>
+                          </mask>
+                        </defs>
+                        <rect width="400" height="24" fill={RC} mask={`url(#pm-${o.id})`}/>
+                        <line x1="22" y1="12" x2="378" y2="12" stroke="hsl(40,20%,68%)" strokeWidth="1.5" strokeDasharray="8,5" strokeLinecap="round"/>
+                      </svg>
+
+                      {/* ── Stage tracker (3-col grid — circles perfectly above labels) ── */}
+                      <div style={{ background: RS }} className="px-5 pt-4 pb-5">
+                        <div className="relative grid grid-cols-3">
+                          {/* Connector lines behind circles */}
+                          <div className="absolute top-4 inset-x-0 flex items-center px-[calc(100%/6)]">
+                            <div className={`h-0.5 flex-1 rounded-full ${ai > 0 ? "bg-primary" : "bg-black/15"}`}/>
+                            <div className="w-8"/>
+                            <div className={`h-0.5 flex-1 rounded-full ${ai > 1 ? "bg-primary" : "bg-black/15"}`}/>
+                          </div>
+                          {ORDER_STAGES.map((s, i) => {
+                            const done = ai > i;
+                            const live = ai === i;
+                            const justDone = recentlyCompleted[o.id] === s;
+                            return (
+                              <div key={s} className="flex flex-col items-center gap-1.5 relative z-10">
+                                <div className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition-all
+                                  ${done ? "bg-primary text-primary-foreground" : live ? "bg-accent text-accent-foreground scale-110" : "bg-black/10 text-black/25"}
+                                  ${justDone ? "animate-stage-confirm" : ""}`}>
+                                  {done ? <Check className="h-4 w-4"/> : i + 1}
+                                </div>
+                                <span className="text-[0.6rem] font-semibold uppercase tracking-wide opacity-40 text-center leading-none">{STAGE_LABEL[s]}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {isReady && (
+                          <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
+                            <Sparkles className="h-3.5 w-3.5 shrink-0"/>
+                            Your order is ready — enjoy! 🌿
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ── SHARP ZIGZAG bottom edge (mirrors top) ── */}
+                      <svg viewBox="0 0 320 10" preserveAspectRatio="none" className="w-full" style={{ display:"block", height:"10px" }}>
+                        <path d="M0,0 L8,10 L16,0 L24,10 L32,0 L40,10 L48,0 L56,10 L64,0 L72,10 L80,0 L88,10 L96,0 L104,10 L112,0 L120,10 L128,0 L136,10 L144,0 L152,10 L160,0 L168,10 L176,0 L184,10 L192,0 L200,10 L208,0 L216,10 L224,0 L232,10 L240,0 L248,10 L256,0 L264,10 L272,0 L280,10 L288,0 L296,10 L304,0 L312,10 L320,0 Z" fill={RS}/>
+                      </svg>
+
+                    </div>
+                  </div>
                 );
               })}
             </div>
           )}
+
+          {/* ── Archived orders section (toggleable, off by default) ─────── */}
+          {archivedOrders.length > 0 && (
+            <div className="mx-5 mb-8">
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                className="flex items-center gap-2 w-full text-left mb-2"
+              >
+                <span className="eyebrow flex-1">Archived tickets</span>
+                <span className="text-[0.65rem] text-foreground/40">{archivedOrders.length} · {showArchived ? "hide ▲" : "show ▼"}</span>
+              </button>
+              {showArchived && (
+                <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card/70">
+                  {archivedOrders.map(o => (
+                    <li key={`arch-${o.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground/70">Order #{o.id}</p>
+                        <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
+                      </div>
+                      <span className="shrink-0 font-display text-foreground/55">{formatRM(Number(o.total_price))}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
 
           {/* History — compact, low-key */}
           {history.length > 0 && (
@@ -832,7 +1157,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           { id: "orders", label: "Orders Status", icon: Receipt },
         ] as const).map(({ id, label, icon: Icon }) => {
           const active = tab === id;
-          const badge = id === "orders" ? orders.length : 0;
+          const badge = id === "orders" ? orders.filter(o => o.status === "ready" && !celebratedIds.has(o.id)).length : 0;
           return (
             <button
               key={id}
@@ -923,8 +1248,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <span className="text-foreground/60">Total</span>
                 <strong className="font-display text-2xl font-semibold">{formatRM(total)}</strong>
               </div>
-              <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo} onClick={submit} className="w-full">
-                {submitting ? "Sending order..." : "Submit order"}
+              <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo || submitCooldown || !!pendingCart} onClick={startConfirmation} className="w-full">
+                {submitCooldown ? "Order sent ✓" : submitting ? "Sending..." : "Send order →"}
               </PetalButton>
             </div>
           </div>
