@@ -71,6 +71,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const heroRef = useRef<HTMLDivElement | null>(null);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const confirmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingCartRef = useRef<CartLine[] | null>(null); // ref-backed copy of pendingCart — avoids stale closure
 
   // ── Confirmation countdown (8 s before order actually sent) ────────────
   const [pendingCart, setPendingCart] = useState<CartLine[] | null>(null);
@@ -150,7 +151,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   useEffect(() => { sessionStorage.setItem(`dfg_celebrated_${qrCode}`, JSON.stringify([...celebratedIds])); }, [celebratedIds, qrCode]);
 
   // Real-time WebSocket listener for order updates
-  useWebSocket(["ORDER_STATUS_UPDATE"], (event) => {
+  // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
+  // ORDER_STATUS_UPDATE fires when the whole order status changes (e.g. direct status patch)
+  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE"], (event) => {
     const updatedOrder = event.payload;
     if (!updatedOrder) return;
     
@@ -211,7 +214,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   // Start the actual countdown (extracted so it can be called after duplicate-warning dismiss)
   const beginCountdown = () => {
-    setPendingCart([...cart]);
+    const snapshot = [...cart]; // capture immediately — don't rely on state for async use
+    setPendingCart(snapshot);
+    pendingCartRef.current = snapshot;
     setConfirmCountdown(8);
     setCartOpen(false);
     confirmIntervalRef.current = setInterval(() => {
@@ -240,7 +245,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   // Phase 2: actually place the order (called when countdown hits 0)
   const confirmOrder = async () => {
-    const snapshot = pendingCart;
+    const snapshot = pendingCartRef.current; // always fresh — avoids stale closure
+    pendingCartRef.current = null;
     setPendingCart(null);
     if (!snapshot || !tableInfo) return;
     setSubmitting(true);
@@ -258,13 +264,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       setTimeout(() => setSubmitCooldown(false), 3000);
     } catch {
       notify("error", "Network issue — order failed to send.");
-      setPendingCart(snapshot); // restore so user can retry
+      pendingCartRef.current = snapshot; // restore so user can retry
+      setPendingCart(snapshot);
     } finally { setSubmitting(false); }
   };
 
   // Cancel during countdown — return to cart
   const cancelConfirmation = () => {
     if (confirmIntervalRef.current) { clearInterval(confirmIntervalRef.current); confirmIntervalRef.current = null; }
+    pendingCartRef.current = null;
     setPendingCart(null);
     setConfirmCountdown(8);
     setCartOpen(true);
@@ -416,8 +424,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {/* ══ DUPLICATE ORDER WARNING DIALOG ══════════════════════════════════ */}
       {showDuplicateWarning && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-6 sm:pb-0" style={{ background: "rgba(0,0,0,0.55)" }}>
-          <div className="w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up" style={{ background: "hsl(44,70%,97%)", boxShadow: "0 24px 60px rgba(0,0,0,0.28)" }}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-5" style={{ background: "rgba(0,0,0,0.60)" }}>
+          <div className="w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up" style={{ background: "hsl(44,70%,97%)", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
             <div className="px-6 pt-6 pb-4" style={{ background: "var(--gradient-hero)" }}>
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
                 <span className="text-2xl">⚠️</span>

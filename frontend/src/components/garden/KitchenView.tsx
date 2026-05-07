@@ -32,7 +32,6 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<typeof STAGES[number]>("queue");
 
   // ── Archive system ────────────────────────────────────────────────────────
   const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
@@ -241,10 +240,8 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
   }
 
   // ─── Main kitchen board ───────────────────────────────────────────────────
-  const visible = grouped.find((g) => g.status === activeTab)!;
-
   return (
-    <div className="relative z-10 mx-auto w-full max-w-7xl pb-16">
+    <div className="relative z-10 mx-auto w-full max-w-[1600px] pb-16">
       <header className="relative px-5 pt-10 pb-6">
         <div className="flex items-start justify-between">
           <div>
@@ -268,144 +265,141 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
         </div>
       </header>
 
-      {/* Stage tabs */}
-      <div className="sticky top-0 z-20 px-5 pb-3 pt-2 backdrop-blur-md"
-        style={{ background: "linear-gradient(hsl(var(--background)/0.95), hsl(var(--background)/0.7))" }}>
-        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted/70 p-1.5">
-          {grouped.map((g) => {
-            const meta = STAGE_META[g.status];
-            const Icon = meta.icon;
-            const active = g.status === activeTab;
-            return (
-              <button
-                key={g.status}
-                onClick={() => setActiveTab(g.status)}
-                className={`relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-semibold transition ${
-                  active ? "bg-background shadow-[var(--shadow-soft)]" : "text-foreground/60"
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${active ? meta.tint : ""}`} />
-                <span className="uppercase tracking-wider">{meta.label}</span>
-                <span className={`absolute -right-1 -top-1 grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1 text-[0.6rem] font-bold ${
-                  g.orders.length > 0 ? "bg-berry text-berry-foreground" : "bg-muted text-foreground/40"
+      {/* ── Three-column board ──────────────────────────────────────────── */}
+      <div className="px-5 grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+        {grouped.map((g) => {
+          const meta = STAGE_META[g.status];
+          const Icon = meta.icon;
+          const colAccent = g.status === 'queue' ? 'border-berry/40' : g.status === 'preparing' ? 'border-accent/40' : 'border-leaf/40';
+          const headerBg = g.status === 'queue' ? 'bg-berry/8' : g.status === 'preparing' ? 'bg-accent/8' : 'bg-leaf/8';
+          // FIFO: sort by created_at ascending (earliest first)
+          const fifo = [...g.orders].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          return (
+            <div key={g.status} className={`flex flex-col rounded-3xl border-2 ${colAccent} overflow-hidden bg-card/60 shadow-[var(--shadow-card)]`}>
+              {/* Column header */}
+              <div className={`sticky top-0 z-10 flex items-center justify-between px-5 py-3.5 ${headerBg} backdrop-blur-md border-b border-border/40`}>
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`h-4 w-4 ${meta.tint}`} />
+                  <span className="font-display text-base font-semibold">{meta.label}</span>
+                </div>
+                <span className={`grid h-6 min-w-[1.5rem] place-items-center rounded-full px-2 text-xs font-bold ${
+                  g.orders.length > 0 ? 'bg-berry text-berry-foreground' : 'bg-muted text-foreground/40'
                 }`}>
                   {g.orders.length}
                 </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+              </div>
 
-      {/* Tickets */}
-      <div className="px-5 pt-4">
-        {visible.orders.length === 0 ? (
-          <div className="relative rounded-3xl border border-dashed border-border bg-card/50 px-6 py-16 text-center">
-            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full bg-muted">
-              {(() => { const Icon = STAGE_META[visible.status].icon; return <Icon className="h-6 w-6 text-foreground/40" />; })()}
-            </div>
-            <p className="font-display text-lg text-foreground/60">No orders here</p>
-            <p className="mt-1 text-sm text-foreground/40">All caught up — beautiful.</p>
-          </div>
-        ) : (
-          <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visible.orders.map((o, idx) => {
-              const meta = STAGE_META[o.status];
-              const countdown = archiveCountdowns[o.id];
-              const isReady = o.status === "ready";
-              return (
-                <li
-                  key={o.id}
-                  className="overflow-hidden rounded-3xl bg-card shadow-[var(--shadow-card)] animate-fade-up"
-                  style={{ animationDelay: `${idx * 50}ms` }}
-                >
-                  <div className="flex items-center justify-between border-b border-border bg-primary/5 px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`grid h-10 w-10 place-items-center rounded-full bg-background ${meta.tint}`}>
-                        <meta.icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-[0.62rem] font-bold uppercase tracking-widest text-foreground/50">{o.table_number}</p>
-                        <h3 className="font-display text-lg font-semibold leading-tight">Order #{o.id}</h3>
-                      </div>
+              {/* Cards */}
+              <div className="flex flex-col gap-4 p-4">
+                {fifo.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-muted">
+                      <Icon className="h-5 w-5 text-foreground/30" />
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <strong className="font-display text-lg">{formatRM(o.total_price)}</strong>
-                      {isReady && countdown !== undefined && (
-                        <span className="text-[0.6rem] text-foreground/50">
-                          archiving in <strong>{countdown}s</strong>
-                        </span>
-                      )}
-                      {isReady && (
-                        <button
-                          onClick={() => manualArchive(o.id)}
-                          className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-leaf/10 text-leaf hover:bg-leaf/20 transition"
-                        >
-                          <Archive className="h-2.5 w-2.5"/> Archive now
-                        </button>
-                      )}
-                    </div>
+                    <p className="text-sm text-foreground/40">All clear</p>
                   </div>
-
-                  <ul className="divide-y divide-border/60 px-5 py-3">
-                    {o.items.map((it) => {
-                      const iKey = `${o.id}-${it.id}`;
-                      const isBusy = updatingItem === iKey;
-                      const itemReady = it.item_status === 'ready';
-                      const itemCooking = it.item_status === 'preparing';
-                      return (
-                        <li key={it.id} className="flex items-start gap-3 py-2.5">
-                          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 font-mono-cute text-sm font-semibold text-accent-foreground">
-                            {it.quantity}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium leading-tight">{it.item_name}</p>
-                            {it.notes && <p className="mt-0.5 text-xs text-berry">↳ {it.notes}</p>}
-                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                              <span className={`inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                                itemReady   ? 'bg-leaf/15 text-leaf' :
-                                itemCooking ? 'bg-accent/20 text-amber-700' :
-                                'bg-berry/10 text-berry'
-                              }`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${
-                                  itemReady ? 'bg-leaf' : itemCooking ? 'bg-accent' : 'bg-berry'
-                                }`}/>
-                                {itemReady ? 'Ready' : itemCooking ? 'Cooking' : 'Queue'}
-                              </span>
-                              {!itemReady && (
-                                <button
-                                  onClick={() => advanceItem(o.id, it.id!, it.item_status || 'queue')}
-                                  disabled={isBusy}
-                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
-                                >
-                                  {isBusy ? '…' : `→ ${itemCooking ? 'Ready' : 'Cooking'}`}
-                                </button>
-                              )}
-                            </div>
+                ) : (
+                  fifo.map((o, idx) => {
+                    const countdown = archiveCountdowns[o.id];
+                    const isReady = o.status === 'ready';
+                    return (
+                      <div
+                        key={o.id}
+                        className="overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-soft)] animate-fade-up border border-border/40"
+                        style={{ animationDelay: `${idx * 40}ms` }}
+                      >
+                        {/* Card header */}
+                        <div className="flex items-center justify-between border-b border-border/50 bg-primary/5 px-4 py-2.5">
+                          <div>
+                            <p className="text-[0.6rem] font-bold uppercase tracking-widest text-foreground/50">{o.table_number}</p>
+                            <p className="font-display text-base font-semibold leading-tight">#{o.id}</p>
                           </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                          <div className="flex flex-col items-end gap-0.5">
+                            <strong className="font-display text-base">{formatRM(o.total_price)}</strong>
+                            {isReady && countdown !== undefined && (
+                              <span className="text-[0.6rem] text-foreground/50">archiving in <strong>{countdown}s</strong></span>
+                            )}
+                            {isReady && (
+                              <button
+                                onClick={() => manualArchive(o.id)}
+                                className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-leaf/10 px-2 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-leaf hover:bg-leaf/20 transition"
+                              >
+                                <Archive className="h-2.5 w-2.5" /> Archive now
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Items */}
+                        <ul className="divide-y divide-border/40 px-4 py-2">
+                          {o.items.map((it) => {
+                            const iKey = `${o.id}-${it.id}`;
+                            const isBusy = updatingItem === iKey;
+                            const itemReady = it.item_status === 'ready';
+                            const itemCooking = it.item_status === 'preparing';
+                            return (
+                              <li key={it.id} className="flex flex-col gap-1.5 py-2.5">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 font-mono-cute text-sm font-semibold text-accent-foreground">
+                                    {it.quantity}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium leading-snug">{it.item_name}</p>
+                                    {it.notes && <p className="mt-0.5 text-xs text-berry">↳ {it.notes}</p>}
+                                  </div>
+                                </div>
+                                {/* Status + advance button on its own row for easy tapping */}
+                                <div className="flex items-center gap-2 pl-9">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide ${
+                                    itemReady   ? 'bg-leaf/15 text-leaf' :
+                                    itemCooking ? 'bg-accent/20 text-amber-700' :
+                                    'bg-berry/10 text-berry'
+                                  }`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${
+                                      itemReady ? 'bg-leaf' : itemCooking ? 'bg-accent' : 'bg-berry'
+                                    }`} />
+                                    {itemReady ? 'Ready' : itemCooking ? 'Cooking' : 'Queue'}
+                                  </span>
+                                  {!itemReady && (
+                                    <button
+                                      onClick={() => advanceItem(o.id, it.id!, it.item_status || 'queue')}
+                                      disabled={isBusy}
+                                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide transition disabled:opacity-40 ${
+                                        itemCooking
+                                          ? 'bg-leaf/15 text-leaf hover:bg-leaf/25'
+                                          : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                      }`}
+                                    >
+                                      {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : `→ ${itemCooking ? 'Ready' : 'Cooking'}`}
+                                    </button>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Kitchen archive section (today only, toggleable) ─────────────── */}
       {archivedOrders.length > 0 && (
-        <div className="mx-auto max-w-5xl mt-8 px-5 pb-10">
+        <div className="mx-auto mt-8 px-5 pb-10">
           <button
             onClick={() => setShowArchive(v => !v)}
             className="flex w-full items-center justify-between rounded-2xl bg-muted/60 px-5 py-3 text-sm font-semibold text-foreground/60 hover:bg-muted transition"
           >
             <span className="flex items-center gap-2">
-              <Archive className="h-4 w-4"/>
+              <Archive className="h-4 w-4" />
               Today's completed orders ({archivedOrders.length})
             </span>
-            {showArchive ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
+            {showArchive ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
 
           {showArchive && (
@@ -436,6 +430,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     </div>
   );
 };
+
 
 
 const kitchenHelpSections: HelpSection[] = [
