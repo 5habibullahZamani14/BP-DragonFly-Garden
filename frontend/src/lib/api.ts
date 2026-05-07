@@ -137,6 +137,13 @@ export const customerArchiveOrder = async (qr: string, orderId: number): Promise
 export const fetchCustomerArchivedOrders = async (tableId: number, qr: string): Promise<Order[]> =>
   safeFetch<Order[]>(`/orders/customer-archived/${tableId}`, undefined, qr);
 
+export const kitchenArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
+  safeFetch<Order>(`/orders/${orderId}/kitchen-archive`, { method: "PATCH" }, qr);
+
+export const fetchKitchenArchivedOrders = async (qr: string): Promise<Order[]> =>
+  safeFetch<Order[]>(`/orders/kitchen-archived`, undefined, qr);
+
+
 export const updateOrderStatus = async (qr: string, id: number, status: string) => {
   const data = await safeFetch<Order>(`/orders/${id}/status`, {
     method: "PATCH",

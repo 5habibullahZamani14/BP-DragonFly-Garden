@@ -253,6 +253,7 @@ const getKitchenOrders = async (filters) => {
       oi.quantity,
       oi.price_at_order_time,
       oi.notes,
+      oi.item_status,
       mi.name AS item_name
     FROM orders o
     INNER JOIN tables t ON t.id = o.table_id
@@ -295,6 +296,7 @@ const getKitchenOrders = async (filters) => {
         id: row.order_item_id,
         menu_item_id: row.menu_item_id,
         item_name: row.item_name,
+        item_status: row.item_status,
         quantity: row.quantity,
         price_at_order_time: row.price_at_order_time,
         notes: row.notes
@@ -377,6 +379,41 @@ const getCustomerArchivedOrdersForTable = async (tableId) => {
   return orders.filter(Boolean);
 };
 
+const kitchenArchiveOrder = async (orderId) => {
+  await run(`UPDATE orders SET kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
+  return fetchOrderById(orderId);
+};
+
+const getKitchenArchivedOrders = async () => {
+  // Today only — kitchen archive resets at end of day via archiveYesterdaysOrders
+  const rows = await all(
+    `SELECT id FROM orders
+     WHERE kitchen_archived_at IS NOT NULL
+       AND date(kitchen_archived_at) = date('now', 'localtime')
+     ORDER BY kitchen_archived_at DESC
+     LIMIT 50`
+  );
+  const orders = await Promise.all(rows.map(r => fetchOrderById(r.id)));
+  return orders.filter(Boolean);
+};
+
+// Run on server startup: mark all non-archived ready orders from PREVIOUS days as archived
+const archiveYesterdaysOrders = async () => {
+  try {
+    await run(
+      `UPDATE orders
+       SET kitchen_archived_at = CURRENT_TIMESTAMP,
+           customer_archived_at = CURRENT_TIMESTAMP
+       WHERE status = 'ready'
+         AND customer_archived_at IS NULL
+         AND date(created_at, 'localtime') < date('now', 'localtime')`
+    );
+    console.log('[archive] End-of-day archival complete for previous days.');
+  } catch (e) {
+    console.error('[archive] archiveYesterdaysOrders failed:', e.message);
+  }
+};
+
 module.exports = {
   createOrder,
   getOrder,
@@ -386,7 +423,10 @@ module.exports = {
   getActiveTableOrders,
   updateItemStatus,
   customerArchiveOrder,
-  getCustomerArchivedOrdersForTable
+  getCustomerArchivedOrdersForTable,
+  kitchenArchiveOrder,
+  getKitchenArchivedOrders,
+  archiveYesterdaysOrders,
 };
 
 

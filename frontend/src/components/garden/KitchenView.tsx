@@ -1,23 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw, Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2, Archive, ChevronDown, ChevronUp } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { fetchKitchenOrders, updateItemStatus, fetchKitchenPasscode } from "@/lib/api";
+import { fetchKitchenOrders, updateItemStatus, fetchKitchenPasscode, kitchenArchiveOrder, fetchKitchenArchivedOrders } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import type { Order } from "@/lib/menu-data";
 
 const STAGES = ["queue", "preparing", "ready"] as const;
 const STAGE_META: Record<string, { label: string; icon: typeof Clock; tint: string }> = {
-  queue: { label: "Queue", icon: Clock, tint: "text-berry" },
-  preparing: { label: "Cooking", icon: ChefHat, tint: "text-accent" },
-  ready: { label: "Ready", icon: BellRing, tint: "text-leaf" },
+  queue:    { label: "Queue",   icon: Clock,    tint: "text-berry" },
+  preparing:{ label: "Cooking", icon: ChefHat,  tint: "text-accent" },
+  ready:    { label: "Ready",   icon: BellRing, tint: "text-leaf" },
 };
 
-// Session duration: 7 days in milliseconds
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-const FALLBACK_PASSCODE = 'kitchen2024'; // used if API is unreachable
+const ARCHIVE_SECS = 60; // ready orders auto-archive after 60 seconds
 
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const FALLBACK_PASSCODE = 'kitchen2024';
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 
 interface Props { qrCode: string; notify: (k: "success" | "error", t: string) => void; }
@@ -31,39 +31,75 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatingItem, setUpdatingItem] = useState<string | null>(null); // "orderId-itemId"
+  const [updatingItem, setUpdatingItem] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<typeof STAGES[number]>("queue");
 
-  // Load passcode from API on mount
+  // ── Archive system ────────────────────────────────────────────────────────
+  const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
+  const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const archiveIntervalsRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+
+  // Start a 60-second countdown for a ready order
+  const startArchiveCountdown = useCallback((orderId: number) => {
+    if (archiveIntervalsRef.current[orderId]) return; // already ticking
+    setArchiveCountdowns(c => ({ ...c, [orderId]: ARCHIVE_SECS }));
+    archiveIntervalsRef.current[orderId] = setInterval(() => {
+      setArchiveCountdowns(c => {
+        const next = (c[orderId] ?? 1) - 1;
+        if (next <= 0) {
+          clearInterval(archiveIntervalsRef.current[orderId]);
+          delete archiveIntervalsRef.current[orderId];
+          // Auto-archive
+          kitchenArchiveOrder(qrCode, orderId).then(updated => {
+            if (updated) {
+              setOrders(cur => cur.filter(o => o.id !== orderId));
+              setArchivedOrders(cur => [updated, ...cur]);
+            }
+          });
+          const { [orderId]: _, ...rest } = c;
+          return rest;
+        }
+        return { ...c, [orderId]: next };
+      });
+    }, 1000);
+  }, [qrCode]);
+
+  // Clear countdowns for orders that are no longer in ready state
+  const cleanupCountdowns = useCallback((readyIds: Set<number>) => {
+    Object.keys(archiveIntervalsRef.current).forEach(k => {
+      const id = Number(k);
+      if (!readyIds.has(id)) {
+        clearInterval(archiveIntervalsRef.current[id]);
+        delete archiveIntervalsRef.current[id];
+        setArchiveCountdowns(c => { const { [id]: _, ...rest } = c; return rest; });
+      }
+    });
+  }, []);
+
+  // Load passcode
   useEffect(() => {
     fetchKitchenPasscode()
-      .then((p) => setKitchenPasscode(p))
-      .catch(() => { /* keep fallback */ })
+      .then(p => setKitchenPasscode(p))
+      .catch(() => {})
       .finally(() => setPasscodeLoading(false));
   }, []);
 
-  // Restore session from localStorage (7-day expiry)
+  // Restore session
   useEffect(() => {
     try {
       const saved = localStorage.getItem("kitchenSession");
       if (saved) {
         const { expiry } = JSON.parse(saved);
-        if (Date.now() < expiry) {
-          setIsLoggedIn(true);
-        } else {
-          localStorage.removeItem("kitchenSession");
-        }
+        if (Date.now() < expiry) setIsLoggedIn(true);
+        else localStorage.removeItem("kitchenSession");
       }
-    } catch {
-      localStorage.removeItem("kitchenSession");
-    }
+    } catch { localStorage.removeItem("kitchenSession"); }
   }, []);
 
   const handleLogin = () => {
     if (passcodeInput === kitchenPasscode) {
-      localStorage.setItem("kitchenSession", JSON.stringify({
-        expiry: Date.now() + SESSION_DURATION_MS,
-      }));
+      localStorage.setItem("kitchenSession", JSON.stringify({ expiry: Date.now() + SESSION_DURATION_MS }));
       setIsLoggedIn(true);
       setLoginError(false);
     } else {
@@ -85,16 +121,26 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     if (!silent) setLoading(false);
   }, [qrCode]);
 
+  // On login: load orders AND today's kitchen archive
   useEffect(() => {
-    if (isLoggedIn) load();
-  }, [load, isLoggedIn]);
+    if (!isLoggedIn) return;
+    load();
+    fetchKitchenArchivedOrders(qrCode).then(setArchivedOrders).catch(() => {});
+  }, [load, isLoggedIn, qrCode]);
 
   useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE"], () => {
     if (isLoggedIn) load(true);
   });
 
+  // Start countdowns for every ready order that doesn't have one yet
+  useEffect(() => {
+    const readyIds = new Set(orders.filter(o => o.status === "ready").map(o => o.id));
+    readyIds.forEach(id => startArchiveCountdown(id));
+    cleanupCountdowns(readyIds);
+  }, [orders, startArchiveCountdown, cleanupCountdowns]);
+
   const grouped = useMemo(() =>
-    STAGES.map((s) => ({ status: s, orders: orders.filter((o) => o.status === s) })),
+    STAGES.map(s => ({ status: s, orders: orders.filter(o => o.status === s) })),
     [orders]);
 
   const advanceItem = async (orderId: number, itemId: number, currentItemStatus: string) => {
@@ -108,6 +154,22 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
       setUpdatingItem(null);
     }
   };
+
+  const manualArchive = async (orderId: number) => {
+    // Cancel any running countdown
+    if (archiveIntervalsRef.current[orderId]) {
+      clearInterval(archiveIntervalsRef.current[orderId]);
+      delete archiveIntervalsRef.current[orderId];
+      setArchiveCountdowns(c => { const { [orderId]: _, ...rest } = c; return rest; });
+    }
+    const updated = await kitchenArchiveOrder(qrCode, orderId);
+    if (updated) {
+      setOrders(cur => cur.filter(o => o.id !== orderId));
+      setArchivedOrders(cur => [updated, ...cur]);
+    }
+  };
+
+
 
   // ─── Login screen ────────────────────────────────────────────────────────
   if (!isLoggedIn) {
@@ -247,7 +309,8 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
           <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {visible.orders.map((o, idx) => {
               const meta = STAGE_META[o.status];
-              const next = NEXT[o.status];
+              const countdown = archiveCountdowns[o.id];
+              const isReady = o.status === "ready";
               return (
                 <li
                   key={o.id}
@@ -264,9 +327,21 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                         <h3 className="font-display text-lg font-semibold leading-tight">Order #{o.id}</h3>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[0.62rem] uppercase tracking-widest text-foreground/40">Total</p>
+                    <div className="flex flex-col items-end gap-1">
                       <strong className="font-display text-lg">{formatRM(o.total_price)}</strong>
+                      {isReady && countdown !== undefined && (
+                        <span className="text-[0.6rem] text-foreground/50">
+                          archiving in <strong>{countdown}s</strong>
+                        </span>
+                      )}
+                      {isReady && (
+                        <button
+                          onClick={() => manualArchive(o.id)}
+                          className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-leaf/10 text-leaf hover:bg-leaf/20 transition"
+                        >
+                          <Archive className="h-2.5 w-2.5"/> Archive now
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -285,9 +360,8 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                             <p className="font-medium leading-tight">{it.item_name}</p>
                             {it.notes && <p className="mt-0.5 text-xs text-berry">↳ {it.notes}</p>}
                             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                              {/* Per-item status pill */}
                               <span className={`inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                                itemReady ? 'bg-leaf/15 text-leaf' :
+                                itemReady   ? 'bg-leaf/15 text-leaf' :
                                 itemCooking ? 'bg-accent/20 text-amber-700' :
                                 'bg-berry/10 text-berry'
                               }`}>
@@ -296,12 +370,11 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                                 }`}/>
                                 {itemReady ? 'Ready' : itemCooking ? 'Cooking' : 'Queue'}
                               </span>
-                              {/* Advance button */}
                               {!itemReady && (
                                 <button
                                   onClick={() => advanceItem(o.id, it.id!, it.item_status || 'queue')}
                                   disabled={isBusy}
-                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
+                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py.0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
                                 >
                                   {isBusy ? '…' : `→ ${itemCooking ? 'Ready' : 'Cooking'}`}
                                 </button>
@@ -312,17 +385,56 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                       );
                     })}
                   </ul>
-
-
                 </li>
               );
             })}
           </ul>
         )}
       </div>
+
+      {/* ── Kitchen archive section (today only, toggleable) ─────────────── */}
+      {archivedOrders.length > 0 && (
+        <div className="mx-auto max-w-5xl px-5 pb-10">
+          <button
+            onClick={() => setShowArchive(v => !v)}
+            className="flex w-full items-center justify-between rounded-2xl bg-muted/60 px-5 py-3 text-sm font-semibold text-foreground/60 hover:bg-muted transition"
+          >
+            <span className="flex items-center gap-2">
+              <Archive className="h-4 w-4"/>
+              Today's completed orders ({archivedOrders.length})
+            </span>
+            {showArchive ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
+          </button>
+
+          {showArchive && (
+            <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {archivedOrders.map(o => (
+                <li key={o.id} className="rounded-2xl border border-border/50 bg-card/60 px-5 py-4 opacity-70">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-[0.6rem] font-bold uppercase tracking-widest text-foreground/40">{o.table_number}</p>
+                      <p className="font-display text-base font-semibold">Order #{o.id}</p>
+                    </div>
+                    <span className="text-sm font-bold text-foreground/60">{formatRM(o.total_price)}</span>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {o.items.map(it => (
+                      <li key={it.id} className="flex gap-2 text-xs text-foreground/60">
+                        <span className="font-bold">{it.quantity}×</span>
+                        <span>{it.item_name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 };
+
 
 const kitchenHelpSections: HelpSection[] = [
   {

@@ -15,6 +15,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const managementRoutes = require("./routes/managementRoutes");
 const { executeArchive } = require("./controllers/paymentController");
 const initializeDatabase = require("./database/init");
+const { archiveYesterdaysOrders } = require("./controllers/orderController");
 const seedDatabase = require("./database/seed");
 
 const app = express();
@@ -76,6 +77,7 @@ const startServer = async () => {
   try {
     await initializeDatabase();
     await seedDatabase();
+    await archiveYesterdaysOrders(); // Clean up any leftover ready orders from previous days
 
     server.listen(PORT, HOST, () => {
       console.log(`Server running on http://${HOST}:${PORT}`);
@@ -91,7 +93,8 @@ const startServer = async () => {
 
         const runArchive = async () => {
           try {
-            const count = await executeArchive();
+          const count = await executeArchive();
+            await archiveYesterdaysOrders();
             console.log(`Scheduled archive completed. Archived ${count} orders.`);
           } catch (err) {
             console.error("Scheduled archive failed:", err);

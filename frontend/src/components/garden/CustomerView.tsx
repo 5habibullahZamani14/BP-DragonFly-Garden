@@ -927,9 +927,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
                     <div style={{ filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.14))" }}>
 
-                      {/* ── SHARP ZIGZAG top edge ── */}
-                      <svg viewBox="0 0 320 10" preserveAspectRatio="none" className="w-full" style={{ display:"block", height:"10px" }}>
-                        <path d="M0,10 L8,0 L16,10 L24,0 L32,10 L40,0 L48,10 L56,0 L64,10 L72,0 L80,10 L88,0 L96,10 L104,0 L112,10 L120,0 L128,10 L136,0 L144,10 L152,0 L160,10 L168,0 L176,10 L184,0 L192,10 L200,0 L208,10 L216,0 L224,10 L232,0 L240,10 L248,0 L256,10 L264,0 L272,10 L280,0 L288,10 L296,0 L304,10 L312,0 L320,10 Z" fill={RC}/>
+                      {/* ── ZIGZAG top edge — fixed 16 px teeth, count auto-adjusts ── */}
+                      <svg width="100%" height="10" style={{ display: "block" }}>
+                        <defs>
+                          <pattern id={`zz-${o.id}`} x="0" y="0" width="16" height="10" patternUnits="userSpaceOnUse">
+                            <polygon points="0,10 8,0 16,10" fill={RC}/>
+                          </pattern>
+                        </defs>
+                        <rect width="100%" height="10" fill={`url(#zz-${o.id})`}/>
                       </svg>
 
                       {/* ── Receipt body ── */}
@@ -945,7 +950,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                             <span className={`rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wide ${isReady ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground animate-pulse"}`}>
                               {STAGE_LABEL[o.status]}
                             </span>
-                            {/* Archive countdown badge */}
                             {isReady && archiveSecs !== undefined && !isKept && (
                               <div className="flex flex-col items-end gap-1">
                                 <span className="text-[0.6rem] text-foreground/50">archiving in <strong>{archiveSecs}s</strong></span>
@@ -987,7 +991,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                     </span>
                                   )}
                                 </div>
-                                {/* Per-item status badge — below item name, small */}
                                 <div className="mt-1 ml-7">
                                   <span className={`inline-flex items-center gap-1 text-[0.56rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
                                     iReady ? "bg-green-100 text-green-700" :
@@ -1010,8 +1013,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         </div>
                       </div>
 
-                      {/* ── SVG-MASK PERFORATION (real transparent punch holes) ── */}
-                      <svg viewBox="0 0 400 24" preserveAspectRatio="none" width="100%" height="24" style={{ display:"block" }}>
+                      {/* ── SVG-MASK PERFORATION — negative margins kill sub-pixel hairlines ── */}
+                      <svg viewBox="0 0 400 24" preserveAspectRatio="none" width="100%" height="24"
+                        style={{ display:"block", marginTop:"-1px", marginBottom:"-1px" }}>
                         <defs>
                           <mask id={`pm-${o.id}`}>
                             <rect width="400" height="24" fill="white"/>
@@ -1023,10 +1027,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <line x1="22" y1="12" x2="378" y2="12" stroke="hsl(40,20%,68%)" strokeWidth="1.5" strokeDasharray="8,5" strokeLinecap="round"/>
                       </svg>
 
-                      {/* ── Stage tracker (3-col grid — circles perfectly above labels) ── */}
-                      <div style={{ background: RS }} className="px-5 pt-4 pb-5">
+                      {/* ── Stage tracker — rounded bottom (as preferred) ── */}
+                      <div style={{ background: RS }} className="px-5 pt-5 pb-5 rounded-b-[22px]">
                         <div className="relative grid grid-cols-3">
-                          {/* Connector lines behind circles */}
                           <div className="absolute top-4 inset-x-0 flex items-center px-[calc(100%/6)]">
                             <div className={`h-0.5 flex-1 rounded-full ${ai > 0 ? "bg-primary" : "bg-black/15"}`}/>
                             <div className="w-8"/>
@@ -1055,11 +1058,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           </div>
                         )}
                       </div>
-
-                      {/* ── SHARP ZIGZAG bottom edge (mirrors top) ── */}
-                      <svg viewBox="0 0 320 10" preserveAspectRatio="none" className="w-full" style={{ display:"block", height:"10px" }}>
-                        <path d="M0,0 L8,10 L16,0 L24,10 L32,0 L40,10 L48,0 L56,10 L64,0 L72,10 L80,0 L88,10 L96,0 L104,10 L112,0 L120,10 L128,0 L136,10 L144,0 L152,10 L160,0 L168,10 L176,0 L184,10 L192,0 L200,10 L208,0 L216,10 L224,0 L232,10 L240,0 L248,10 L256,0 L264,10 L272,0 L280,10 L288,0 L296,10 L304,0 L312,10 L320,0 Z" fill={RS}/>
-                      </svg>
 
                     </div>
                   </div>

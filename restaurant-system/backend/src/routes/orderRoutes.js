@@ -1,36 +1,41 @@
 const express = require("express");
-const { 
-  createOrder, 
-  getOrder, 
+const {
+  createOrder,
+  getOrder,
   getOrders,
   getKitchenOrders,
   updateOrderStatus,
   getActiveTableOrders,
   updateItemStatus,
   customerArchiveOrder,
-  getCustomerArchivedOrdersForTable
+  getCustomerArchivedOrdersForTable,
+  kitchenArchiveOrder,
+  getKitchenArchivedOrders,
 } = require("../controllers/orderController");
-const { 
+const {
   asyncHandler,
   validateOrderCreation,
   validateStatusUpdate,
   validateOrderIdParam,
-  validateOrderQuery
+  validateOrderQuery,
 } = require("../middleware/validation");
 const { requireKitchenCrew } = require("../middleware/role-based-access");
 
 const orderRoutes = (broadcast) => {
   const router = express.Router();
 
+  // ── Create order ──────────────────────────────────────────────────────────
   router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
     const order = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
     res.status(201).json(order);
   }));
 
+  // ── Read orders ───────────────────────────────────────────────────────────
   router.get("/", validateOrderQuery, asyncHandler(async (req, res) => {
     res.json(await getOrders(req.query));
   }));
+
   router.get("/kitchen", validateOrderQuery, asyncHandler(async (req, res) => {
     res.json(await getKitchenOrders(req.query));
   }));
@@ -43,10 +48,15 @@ const orderRoutes = (broadcast) => {
     res.json(await getCustomerArchivedOrdersForTable(req.params.tableId));
   }));
 
+  router.get("/kitchen-archived", asyncHandler(async (req, res) => {
+    res.json(await getKitchenArchivedOrders());
+  }));
+
   router.get("/:id", validateOrderIdParam, asyncHandler(async (req, res) => {
     res.json(await getOrder(req.params.id));
   }));
 
+  // ── Update order / item status ────────────────────────────────────────────
   router.patch("/:id/items/:itemId/status", requireKitchenCrew, asyncHandler(async (req, res) => {
     const { id, itemId } = req.params;
     const { status } = req.body;
@@ -57,6 +67,10 @@ const orderRoutes = (broadcast) => {
 
   router.patch("/:id/customer-archive", asyncHandler(async (req, res) => {
     res.json(await customerArchiveOrder(req.params.id));
+  }));
+
+  router.patch("/:id/kitchen-archive", requireKitchenCrew, asyncHandler(async (req, res) => {
+    res.json(await kitchenArchiveOrder(req.params.id));
   }));
 
   router.patch("/:id/status", requireKitchenCrew, validateOrderIdParam, validateStatusUpdate, asyncHandler(async (req, res) => {
