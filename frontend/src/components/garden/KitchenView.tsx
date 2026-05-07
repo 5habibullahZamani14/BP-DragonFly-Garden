@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2, Archive, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2, Archive, ChevronDown, ChevronUp } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
@@ -139,6 +139,14 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
     cleanupCountdowns(readyIds);
   }, [orders, startArchiveCountdown, cleanupCountdowns]);
 
+  // Clear ALL intervals when component unmounts (prevents memory leaks)
+  useEffect(() => {
+    return () => {
+      Object.values(archiveIntervalsRef.current).forEach(clearInterval);
+      archiveIntervalsRef.current = {};
+    };
+  }, []);
+
   const grouped = useMemo(() =>
     STAGES.map(s => ({ status: s, orders: orders.filter(o => o.status === s) })),
     [orders]);
@@ -249,12 +257,6 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
           <div className="flex gap-2 items-center">
             <SettingsModal />
             <HelpModal title="Kitchen Crew" sections={kitchenHelpSections} />
-            <button
-              onClick={() => load()}
-              className="grid h-11 w-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-90"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
             <button
               onClick={handleLogout}
               title="Log out"
@@ -374,7 +376,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
                                 <button
                                   onClick={() => advanceItem(o.id, it.id!, it.item_status || 'queue')}
                                   disabled={isBusy}
-                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py.0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
+                                  className="inline-flex items-center gap-1 text-[0.58rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-40"
                                 >
                                   {isBusy ? '…' : `→ ${itemCooking ? 'Ready' : 'Cooking'}`}
                                 </button>
@@ -394,7 +396,7 @@ export const KitchenView = ({ qrCode, notify }: Props) => {
 
       {/* ── Kitchen archive section (today only, toggleable) ─────────────── */}
       {archivedOrders.length > 0 && (
-        <div className="mx-auto max-w-5xl px-5 pb-10">
+        <div className="mx-auto max-w-5xl mt-8 px-5 pb-10">
           <button
             onClick={() => setShowArchive(v => !v)}
             className="flex w-full items-center justify-between rounded-2xl bg-muted/60 px-5 py-3 text-sm font-semibold text-foreground/60 hover:bg-muted transition"

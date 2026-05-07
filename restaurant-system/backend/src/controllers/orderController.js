@@ -259,7 +259,7 @@ const getKitchenOrders = async (filters) => {
     INNER JOIN tables t ON t.id = o.table_id
     LEFT JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-    WHERE o.status IN ('queue', 'preparing', 'ready')
+    WHERE o.status IN ('queue', 'preparing', 'ready') AND o.kitchen_archived_at IS NULL
   `;
   const params = [];
 
@@ -324,7 +324,7 @@ const updateOrderStatus = async (orderId, newStatus, role) => {
 const getActiveTableOrders = async (tableId) => {
   const rows = await all(
     `SELECT id FROM orders
-     WHERE table_id = ? AND status IN ('queue','preparing','ready')
+     WHERE table_id = ? AND status IN ('queue','preparing','ready') AND customer_archived_at IS NULL
      ORDER BY created_at ASC`,
     [tableId]
   );
@@ -332,10 +332,11 @@ const getActiveTableOrders = async (tableId) => {
   return orders.filter(Boolean);
 };
 
-// Derive overall order status from its items
+// Derive overall order status from its items (treat NULL as 'queue')
 const deriveOrderStatus = (itemStatuses) => {
-  if (itemStatuses.every(s => s === 'ready')) return 'ready';
-  if (itemStatuses.every(s => s === 'queue')) return 'queue';
+  const normalized = itemStatuses.map(s => s || 'queue');
+  if (normalized.every(s => s === 'ready')) return 'ready';
+  if (normalized.every(s => s === 'queue')) return 'queue';
   return 'preparing';
 };
 
