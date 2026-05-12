@@ -1,3 +1,27 @@
+/*
+ * EmployeesTab.tsx — Management sub-view for staff and payroll.
+ *
+ * I built this tab to serve two purposes: record-keeping and analytics.
+ * It allows managers to manage employee profiles while giving them
+ * a high-level view of their workforce distribution and financial load.
+ *
+ * Technical features:
+ *
+ *   1. Automated ID Generation: When a new employee is saved, the backend
+ *      automatically generates a unique 4-digit ID. I display this clearly
+ *      on the employee cards for quick reference during clock-ins.
+ *
+ *   2. Real-time Analytics: I used 'recharts' to visualize staff 
+ *      distribution. I implemented the useMemo hook to group employees 
+ *      by department and calculate total payroll on the fly, ensuring 
+ *      the charts stay responsive even as the staff list grows.
+ *
+ *   3. Archive System: Instead of a hard delete, I implemented an 
+ *      archiving toggle. This preserves historical data for audits 
+ *      (important for the "Grand Archive") while removing the employee 
+ *      from active lists like the Payment Counter login.
+ */
+
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

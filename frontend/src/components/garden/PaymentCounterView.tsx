@@ -1,3 +1,36 @@
+/*
+ * PaymentCounterView.tsx — The digital cash register for cafe staff.
+ *
+ * I built this view to handle the final stage of the customer journey:
+ * paying the bill. It is designed to be used by a cashier or manager
+ * at a physical payment counter.
+ *
+ * Technical highlights:
+ *
+ *   1. Shift Management: I implemented an employee-based login system.
+ *      Staff enter their Employee ID and Name to "clock in" for their
+ *      shift. Like the other views, I cache this session for 7 days
+ *      in localStorage.
+ *
+ *   2. Working Hours Enforcement: To ensure security, I added a background
+ *      timer that checks the restaurant's operating hours every minute.
+ *      If the current time falls outside the allowed window (e.g. after
+ *      closing), I automatically log the staff member out.
+ *
+ *   3. Dynamic Billing: The bill is calculated in real-time. I factored
+ *      in the subtotal, service charge (default 10%), and VAT (government
+ *      tax). I also built a "Process Payment" dialog that handles partial
+ *      payments and change calculation automatically.
+ *
+ *   4. Last-Minute Additions: I added a feature allowing staff to append
+ *      items to an order directly from the payment screen. This is useful
+ *      when a guest grabs a drink or snack right as they are paying.
+ *
+ *   5. WebSocket Integration: I listen for NEW_ORDER and NEW_PAYMENT
+ *      events so the list of unpaid orders stays synchronized across
+ *      all devices in the cafe.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

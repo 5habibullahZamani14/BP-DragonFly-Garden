@@ -1,5 +1,15 @@
-// Mock menu data — only used when the live API isn't reachable (e.g. preview).
-// Mirrors the real backend shape so production calls behave identically.
+/*
+ * menu-data.ts — Fallback data and TypeScript definitions.
+ *
+ * I maintained this file as a "safe fallback". While the application
+ * fetches live data from the SQLite database in production, these
+ * mocks allow the UI to remain functional for rapid prototyping,
+ * design previews, or when the backend is temporarily unreachable.
+ *
+ * I ensured the types (MenuItem, Order) exactly mirror the JSON 
+ * structures returned by the Express API to prevent runtime errors
+ * when switching between live and mock modes.
+ */
 
 export type MenuItem = {
   id: number;

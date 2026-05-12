@@ -1,3 +1,16 @@
+/*
+ * SettingsTab.tsx — Global configuration and manager profile UI.
+ *
+ * I created this component to centralize all restaurant-wide settings, including:
+ *   • Working hours that trigger automatic employee logout.
+ *   • Kitchen passcode management for secure board access.
+ *   • Manager profile editing with password change support.
+ *   • Password recovery via email using the RESEND service.
+ *
+ * The UI uses our design system's Card, Input, and Button components to present
+ * a clean, accessible form. State is persisted through the backend API and
+ * reflected instantly in the UI via optimistic updates.
+ */
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

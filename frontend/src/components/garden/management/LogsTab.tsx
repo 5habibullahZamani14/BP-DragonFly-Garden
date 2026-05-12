@@ -1,3 +1,26 @@
+/*
+ * LogsTab.tsx — The "Grand Archive" audit interface.
+ *
+ * I built this tab to provide absolute transparency into the system's
+ * history. Every major action—from a price change to an ingredient
+ * restock—is logged with a timestamp and the actor's identity.
+ *
+ * Key features:
+ *
+ *   1. Activity Visualization: I added a stacked bar chart to show
+ *      the volume of activity across categories (Employee, Inventory, 
+ *      Order, System). This helps managers spot unusual spikes in activity.
+ *
+ *   2. Audit Trail: The table provides a granular view of every change.
+ *      I implemented category filters so managers can focus on specific
+ *      areas (e.g. only looking at inventory stock-outs).
+ *
+ *   3. Data Portability: I implemented a CSV export function that 
+ *      dynamically parses the current log view into a downloadable file. 
+ *      This is essential for the restaurant's end-of-month reporting 
+ *      and compliance.
+ */
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

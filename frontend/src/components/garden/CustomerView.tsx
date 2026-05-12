@@ -1,3 +1,36 @@
+/*
+ * CustomerView.tsx — The primary guest interface for the garden cafe.
+ *
+ * I built this component to be the heartbeat of the customer experience.
+ * It handles the full journey from arriving (table detection) and browsing
+ * the menu to placing orders and tracking them in real-time.
+ *
+ * High-level architecture:
+ *
+ *   1. State & Persistence: I use a mix of local state for the UI and
+ *      sessionStorage for the cart and order history. This ensures that
+ *      if a guest accidentally refreshes the page or their phone locks,
+ *      their cart and tracking status are preserved.
+ *
+ *   2. Role Detection: The component relies on the qrCode prop to identify
+ *      which table the customer is sitting at. It fetches the table info
+ *      on mount to personalize the "Welcome" message.
+ *
+ *   3. Real-time Updates: I integrated the useWebSocket hook to listen for
+ *      ORDER_STATUS_UPDATE and ITEM_STATUS_UPDATE events. This means when
+ *      the kitchen starts cooking or finishes a dish, the guest's progress
+ *      tracker updates instantly without them needing to refresh.
+ *
+ *   4. Order Confirmation: To prevent accidental orders, I implemented a
+ *      two-phase system. When "Send Order" is tapped, a circular countdown
+ *      starts. The guest has 8 seconds to cancel before the order is
+ *      atomically sent to the backend.
+ *
+ *   5. Receipt UI: The order tracking uses a "zig-zag" receipt design with
+ *      SVG-masked perforations to give it a physical feel that matches
+ *      the garden's rustic aesthetic.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, Leaf, Star, Plus, Minus, ShoppingBag, Check, Flame, X,

@@ -1,3 +1,34 @@
+/*
+ * ManagementView.tsx — The administrative nerve center of the restaurant.
+ *
+ * I designed this view as a secure dashboard where managers can oversee
+ * the entire operation. It is protected by a login screen that requires
+ * a Manager ID and Password, both verified against the backend.
+ *
+ * Key architecture features:
+ *
+ *   1. Secure Authentication: I implemented a two-step login process.
+ *      Successful logins are stored in localStorage with a 7-day expiry
+ *      (matching the kitchen's session model). I also built a password
+ *      recovery flow that uses the backend email service (Resend) to
+ *      send credentials to the manager's registered email.
+ *
+ *   2. Tabbed Navigation: To keep the interface clean, I used a tabbed
+ *      system. The "Overview" acts as a portal with large cards, while
+ *      the individual tabs (Settings, Employees, Inventory, etc.) handle
+ *      the heavy lifting. I persist the activeTab in sessionStorage so
+ *      if the manager refreshes the page, they land right back where they
+ *      were.
+ *
+ *   3. Shared Modals: The SettingsModal and HelpModal are placed at the
+ *      top level so they remain accessible throughout the management
+ *      experience, even on the login screen.
+ *
+ *   4. Contextual Help: At the bottom of this file, I defined a detailed
+ *      managerHelpSections array. This provides an on-screen manual for
+ *      every administrative task, from adding tables to managing inventory.
+ */
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

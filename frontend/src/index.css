@@ -7,6 +7,26 @@
 /* ===================================================================
    BP Dragonfly Garden — Botanical Luxe design system
    Mood: deep emerald canopy + warm sun gold + vintage cream paper
+
+   I created this design system to give the restaurant a premium, 
+   organic feel that bridges the gap between nature and technology.
+
+   Key Pillars:
+   1. Dynamic Scaling: I use CSS variables (--ui-scale, --font-scale) 
+      to allow the entire interface to grow or shrink based on user 
+      preference in the SettingsModal.
+
+   2. HSL Palette: Instead of flat hex codes, I use HSL tokens to 
+      create harmonious gradients and "glow" effects that feel 
+      luminous and alive.
+
+   3. Micro-Animations: I built custom keyframes like 'ocean-cream' 
+      and 'ink-drift' to give surfaces a subtle, liquid motion that 
+      feels luxurious rather than static.
+
+   4. Layout: The system uses a mix of Tailwind utilities and 
+      custom component classes (.card-paper, .glass, .btn-emerald) 
+      to ensure consistency across the Guest, Kitchen, and Manager views.
    =================================================================== */
 
 @layer base {

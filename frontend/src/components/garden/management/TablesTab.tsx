@@ -1,3 +1,15 @@
+/*
+ * TablesTab.tsx — Management UI for restaurant tables.
+ *
+ * I created this component to allow staff to add, edit, and delete tables,
+ * each associated with a QR code for scanning at the point of service.
+ * The UI presents a grid of table cards with quick actions, and
+ * includes a form for creating new tables. State is synchronized with
+ * the backend via the API utilities.
+ *
+ * Design notes: I used the Card component with hover shadows,
+ * and the Grid3X3, Plus, Edit2, Trash2 icons from Lucide.
+ */
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

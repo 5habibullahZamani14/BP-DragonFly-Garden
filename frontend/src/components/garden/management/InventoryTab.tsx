@@ -1,3 +1,23 @@
+/*
+ * InventoryTab.tsx — The supply chain management system.
+ *
+ * I designed this component to ensure the restaurant never runs out
+ * of ingredients. It is divided into three distinct sub-sections:
+ *
+ *   1. Overview Analytics: I implemented a horizontal bar chart that
+ *      sorts items by their stock health. This makes it instantly 
+ *      obvious which items are reaching their critical thresholds.
+ *
+ *   2. Raw Stock Levels: This is the manual control center where 
+ *      managers can log new deliveries or adjust stock counts.
+ *
+ *   3. Menu Recipes Builder: This is the most complex part of the system.
+ *      I built a relational editor where managers link raw ingredients 
+ *      to menu items. When an order is placed, the backend uses these 
+ *      recipes to automatically deduct the correct gram/ml quantities 
+ *      from the raw stock.
+ */
+
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
