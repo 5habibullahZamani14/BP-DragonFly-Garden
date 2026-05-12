@@ -1,9 +1,31 @@
+/*
+ * LandingView.tsx — Default screen shown when no valid QR code is present.
+ *
+ * This view is what a user sees if they navigate to the app's URL directly
+ * without a QR code in the query string, or if the QR code they scanned does
+ * not match any of the four known role patterns.
+ *
+ * The design goal is to give a first-time visitor a clear, friendly instruction:
+ * look for the QR code on your table and scan it. It doubles as the brand
+ * introduction — the butterfly hero image, the cafe name with italic accent
+ * on "Dragonfly", and the tagline "Where nature, fun & memories grow."
+ *
+ * The four sparkle elements are positioned absolutely inside the QR instruction
+ * card at computed offsets so they distribute evenly without hard-coded
+ * coordinates for each one. The animationDelay stagger creates a sequenced
+ * twinkling effect rather than all four flickering together.
+ *
+ * This component has no state or side effects — it is a pure presentational
+ * component that renders the same output every time.
+ */
+
 import { QrCode, Leaf, Sparkles } from "lucide-react";
 import butterflyHero from "@/assets/butterfly-hero.png";
 
 export const LandingView = () => (
   <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 py-12 text-center">
-    {/* Hero butterfly — no halo, no shape, just the creature */}
+    {/* Hero butterfly image — the main brand visual. alt text is descriptive because
+        this image carries meaningful visual content even if decorative in context. */}
     <img
       src={butterflyHero}
       alt="Golden butterfly with outstretched wings"
@@ -19,11 +41,13 @@ export const LandingView = () => (
       Where nature, fun &amp; memories grow.
     </p>
 
-    {/* Premium QR card with gilded border */}
-      <div className="relative mt-10 w-full max-w-sm">
-        <div className="relative rounded-[28px] bg-card p-6 shadow-[var(--shadow-deep)]"
-          style={{ background: "linear-gradient(145deg, hsl(var(--card)), hsl(var(--secondary)))" }}>
-        {/* Sparkles */}
+    {/* QR instruction card — the primary call to action. */}
+    <div className="relative mt-10 w-full max-w-sm">
+      <div
+        className="relative rounded-[28px] bg-card p-6 shadow-[var(--shadow-deep)]"
+        style={{ background: "linear-gradient(145deg, hsl(var(--card)), hsl(var(--secondary)))" }}
+      >
+        {/* Animated sparkles distributed across the card corners. */}
         {[...Array(4)].map((_, i) => (
           <span key={i} className="sparkle" style={{
             top: `${20 + (i * 23) % 60}%`, left: `${10 + (i * 31) % 80}%`,
@@ -31,8 +55,10 @@ export const LandingView = () => (
           }} />
         ))}
         <div className="relative">
-          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl text-primary-foreground shadow-[var(--shadow-deep)]"
-            style={{ background: "var(--gradient-emerald)" }}>
+          <div
+            className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl text-primary-foreground shadow-[var(--shadow-deep)]"
+            style={{ background: "var(--gradient-emerald)" }}
+          >
             <QrCode className="h-7 w-7" />
           </div>
           <h2 className="font-display text-2xl font-bold">Scan your table</h2>

@@ -1,3 +1,46 @@
+/*
+ * KitchenView.tsx — Real-time kitchen crew order management board.
+ *
+ * This view is what the kitchen crew sees on their wall-mounted tablet.
+ * It is protected by a numeric passcode (fetched from the backend) and
+ * presents a three-column board showing all active orders grouped by status:
+ * Queue → Cooking → Ready. Orders within each column are sorted FIFO
+ * (oldest first) so the crew always works through the queue in order.
+ *
+ * Key design decisions:
+ *
+ *   Authentication: The crew logs in with a passcode rather than a username
+ *   and password. The passcode is stored in restaurant_settings and can be
+ *   changed by the manager. A successful login is cached in localStorage for
+ *   7 days (SESSION_DURATION_MS) so the crew does not need to re-enter it
+ *   every shift. The session is cleared on manual logout or expiry.
+ *
+ *   Per-item status advances: Rather than marking entire orders as done,
+ *   kitchen crew mark individual items (e.g. "Farm Herbal Soup → Ready").
+ *   The overall order status is automatically derived from the item statuses
+ *   by the backend (deriveOrderStatus): all items ready → order ready,
+ *   any item preparing → order preparing.
+ *
+ *   Auto-archive countdown: When an order reaches the Ready column, a 60-second
+ *   countdown starts (ARCHIVE_SECS). If the crew does not manually archive it
+ *   first, it is automatically moved to the kitchen archive after 60 seconds.
+ *   The countdown is tracked per-order in archiveCountdowns state and ticked
+ *   by a setInterval stored in archiveIntervalsRef. All intervals are cleared
+ *   on component unmount to prevent memory leaks.
+ *
+ *   WebSocket: The board subscribes to NEW_ORDER, ORDER_STATUS_UPDATE, and
+ *   ITEM_STATUS_UPDATE events. On any event it silently re-fetches orders
+ *   from the backend (silent = no loading spinner) so the board stays current.
+ *
+ *   Kitchen archive: Orders that the crew has cleared are kept in a collapsible
+ *   "Today's completed orders" section at the bottom of the board. This gives
+ *   the crew a reference without cluttering the active board.
+ *
+ *   Help sections: The kitchenHelpSections array at the bottom of this file
+ *   defines the content of the in-app help modal, written in plain language
+ *   for kitchen staff who may not be technically experienced.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, ChefHat, BellRing, KeyRound, LogOut, Loader2, Archive, ChevronDown, ChevronUp } from "lucide-react";
 import { PetalButton } from "./PetalButton";
