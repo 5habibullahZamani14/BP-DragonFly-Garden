@@ -1,12 +1,39 @@
+/*
+ * WingedAccent.tsx — Decorative insect perched on card corners.
+ *
+ * This component places a small dragonfly or butterfly image on the top
+ * corner of a card or button to give the UI its characteristic garden feel.
+ * The parent element must have position: relative (or absolute/fixed) for
+ * the absolute positioning to work correctly.
+ *
+ * The creature to show, which corner to use, and whether to mirror the image
+ * are all derived deterministically from the seed string using a simple hash
+ * function. This means the same menu item always shows the same creature in
+ * the same corner, giving the layout a consistent but varied look — without
+ * needing to hardcode a creature for each item.
+ *
+ * The hash function is a variant of FNV-1a (Fowler-Noll-Vo), which produces
+ * a well-distributed 32-bit integer from any string input. Using Math.imul
+ * keeps the multiplication within 32-bit integer bounds in JavaScript.
+ *
+ * Corner placement rules:
+ *   A creature whose PNG faces LEFT is placed on the TOP-RIGHT corner so it
+ *   appears to look inward toward the card content. A creature facing RIGHT
+ *   is placed on the TOP-LEFT. Mirroring flips the facing direction, so the
+ *   corner assignment is derived from the final (post-mirror) facing.
+ *
+ * The wing-flap animation plays continuously but at a slow duty cycle so the
+ * creature appears still most of the time, then briefly flutters. The
+ * animationDelay is derived from the hash so multiple instances do not all
+ * flap in synchrony.
+ */
+
 import dragonflySide from "@/assets/dragonfly-side.png";
 import dragonflySide2 from "@/assets/dragonfly-side-2.png";
 import dragonflyPerched from "@/assets/dragonfly-perched.png";
 import butterflySide from "@/assets/butterfly-side.png";
 
-// 4 side-view creatures — 3 dragonflies + 1 butterfly. They perch on the
-// top-left or top-right corner of orderable item cards with feet on the rim.
-// `naturalFacing` records which way the source PNG faces so we can pick the
-// correct corner (a left-facing bug sits on the top-right, vice versa).
+/* Four creature assets — 3 dragonflies and 1 butterfly. */
 const ASSETS: { src: string; naturalFacing: "left" | "right" }[] = [
   { src: dragonflySide, naturalFacing: "left" },
   { src: dragonflySide2, naturalFacing: "left" },
@@ -14,7 +41,7 @@ const ASSETS: { src: string; naturalFacing: "left" | "right" }[] = [
   { src: butterflySide, naturalFacing: "left" },
 ];
 
-// Tiny deterministic PRNG so each placement looks consistent across re-renders
+/* FNV-1a hash — maps any string to a stable unsigned 32-bit integer. */
 const hash = (s: string) => {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -25,28 +52,23 @@ const hash = (s: string) => {
 };
 
 interface WingedAccentProps {
-  /** Stable seed — controls which creature, corner, flip, rotation. */
+  /** Stable seed — controls which creature, corner, flip, and rotation are chosen. */
   seed: string;
-  /** Tailwind size, default h-20 w-20. */
+  /** Tailwind size classes, default h-20 w-20. */
   size?: string;
-  /** Force a specific corner. Otherwise chosen from seed. Only top corners are supported. */
+  /** Override the seed-chosen corner. Only top corners are supported. */
   corner?: "tl" | "tr";
-  /** Force flip (mirror). Otherwise chosen from seed. */
+  /** Override the seed-chosen horizontal flip. */
   flip?: boolean;
   /** Override the seed-derived rotation (in degrees). */
   rotate?: number;
-  /** Horizontal offset in px applied on top of the corner anchor (negative = left). */
+  /** Horizontal offset in px on top of the corner anchor (negative = left). */
   offsetX?: number;
-  /** Vertical offset in px applied on top of the corner anchor (negative = up). */
+  /** Vertical offset in px on top of the corner anchor (negative = up). */
   offsetY?: number;
   className?: string;
 }
 
-/**
- * A small dragonfly/butterfly perched on the corner of a card or button.
- * Stays still ~90% of the time then briefly flutters its wings.
- * Parent must be `position: relative` (or similar).
- */
 export const WingedAccent = ({
   seed,
   size = "h-20 w-20",
@@ -60,22 +82,21 @@ export const WingedAccent = ({
   const h = hash(seed);
   const { src: asset, naturalFacing } = ASSETS[h % ASSETS.length];
 
-  // Rule: a creature facing LEFT sits on the TOP-RIGHT (looks inward), and
-  // one facing RIGHT sits on the TOP-LEFT. Decide whether to mirror, then
-  // derive the corner from the resulting facing direction.
+  /* Determine mirroring, then derive the final facing direction. */
   const mirror = flip ?? ((h >> 5) & 1) === 1;
   const finalFacing: "left" | "right" =
     mirror ? (naturalFacing === "left" ? "right" : "left") : naturalFacing;
+
+  /* A left-facing creature looks inward from the top-right; right-facing from top-left. */
   const pickedCorner = corner ?? (finalFacing === "left" ? "tr" : "tl");
-  // scaleX value: -1 if we're mirroring relative to the source PNG.
   const scaleX = mirror ? -1 : 1;
 
-  // Tiny natural rotation jitter (-3..3deg)
+  /* Tiny rotation jitter (−3° to +3°) makes the perch look more natural. */
   const rot = rotate ?? ((h >> 7) % 7) - 3;
-  // Stagger flap delay so multiple instances don't sync
+
+  /* Stagger the flap animation so multiple instances on screen do not sync. */
   const delay = ((h >> 11) % 14000) / 1000;
 
-  // Perched positioning: the bug's belly/legs hover just above the card edge.
   const cornerClass = {
     tl: "-left-2 -top-9",
     tr: "-right-2 -top-9",

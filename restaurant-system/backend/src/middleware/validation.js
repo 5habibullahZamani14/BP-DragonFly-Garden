@@ -1,9 +1,38 @@
+/*
+ * validation.js — Input validation middleware and global error handling.
+ *
+ * I centralised all request validation here so that the route files and
+ * controllers stay focused on their business logic and do not repeat the
+ * same input-checking code. Each exported validate* function is a standard
+ * Express middleware: it sanitises and checks the request, then either
+ * calls next() to continue or calls next(error) to jump straight to the
+ * global error handler at the bottom of this file.
+ *
+ * The two most important exports are:
+ *   asyncHandler  — wraps any async route handler so that thrown errors
+ *                   are automatically forwarded to Express's error handling
+ *                   chain instead of crashing the process.
+ *   errorHandler  — the final Express error middleware that formats all
+ *                   errors into a consistent JSON response.
+ */
+
+/* Valid order status values, used by multiple validators. */
 const ORDER_STATUSES = ["queue", "preparing", "ready"];
+
+/* Hard limits to protect against abusive or malformed requests. */
 const MAX_ORDER_ITEMS = 25;
 const MAX_ITEM_QUANTITY = 99;
 const MAX_NOTES_LENGTH = 250;
+
+/* Pattern used by validateQrCodeParam to verify table QR codes in URL params. */
 const QR_CODE_PATTERN = /^table-\d+$/;
 
+/*
+ * createHttpError builds an Error object with a statusCode property.
+ * Express's error handler (below) reads statusCode to decide which HTTP
+ * status to send. This is a lightweight alternative to bringing in an
+ * http-errors library dependency.
+ */
 const createHttpError = (statusCode, message, details) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -15,10 +44,22 @@ const createHttpError = (statusCode, message, details) => {
   return error;
 };
 
+/*
+ * asyncHandler wraps an async route handler function so that any Promise
+ * rejection inside it is passed to Express's next() function. Without this
+ * wrapper, an unhandled rejection in an async handler would leave the request
+ * hanging without a response.
+ */
 const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
 
+/*
+ * sanitizeNotes cleans and validates a free-text notes field. It trims
+ * whitespace, collapses internal whitespace runs to single spaces, enforces
+ * the character limit, and converts empty strings and nullish values to null
+ * so the database stores a clean NULL instead of an empty string.
+ */
 const sanitizeNotes = (notes) => {
   if (notes === undefined || notes === null || notes === "") {
     return null;
@@ -37,6 +78,12 @@ const sanitizeNotes = (notes) => {
   return sanitized || null;
 };
 
+/*
+ * toPositiveInteger converts any value to a positive integer, returning null
+ * if the value is not a valid positive integer. This is used throughout the
+ * validators to normalise IDs and quantities that arrive as strings from the
+ * request body or URL parameters.
+ */
 const toPositiveInteger = (value) => {
   const numericValue = Number(value);
 
@@ -47,6 +94,13 @@ const toPositiveInteger = (value) => {
   return numericValue;
 };
 
+/*
+ * validateOrderCreation checks and sanitises the body of a POST /orders request.
+ * It validates that table_id is a positive integer, that items is a non-empty
+ * array within the size limit, and that each item has a valid menu_item_id and
+ * quantity. It also aggregates duplicate menu_item_id entries so the database
+ * never receives two rows for the same item in one order.
+ */
 const validateOrderCreation = (req, res, next) => {
   const tableId = toPositiveInteger(req.body?.table_id);
   const items = req.body?.items;
@@ -64,6 +118,11 @@ const validateOrderCreation = (req, res, next) => {
   }
 
   try {
+    /*
+     * I use a Map keyed by menu_item_id to accumulate quantities across
+     * duplicate entries. If the same item appears twice in the request,
+     * their quantities are summed and the first item's notes are kept.
+     */
     const aggregatedItems = new Map();
 
     for (let index = 0; index < items.length; index += 1) {
@@ -111,6 +170,7 @@ const validateOrderCreation = (req, res, next) => {
       });
     }
 
+    /* Replace the raw request body with the cleaned, validated version. */
     req.body = {
       table_id: tableId,
       items: [...aggregatedItems.values()]
@@ -122,6 +182,11 @@ const validateOrderCreation = (req, res, next) => {
   }
 };
 
+/*
+ * validateStatusUpdate checks that the request body contains a valid status
+ * string for a PATCH /orders/:id/status request. It normalises to lowercase
+ * so the kitchen crew does not have to worry about capitalisation.
+ */
 const validateStatusUpdate = (req, res, next) => {
   const rawStatus = req.body?.status;
 
@@ -139,6 +204,11 @@ const validateStatusUpdate = (req, res, next) => {
   next();
 };
 
+/*
+ * validateOrderIdParam validates the :id or :orderId URL parameter.
+ * It converts the string from the URL to a positive integer and writes it
+ * back so controllers always receive a clean numeric string.
+ */
 const validateOrderIdParam = (req, res, next) => {
   const rawOrderId = req.params?.id ?? req.params?.orderId;
   const orderId = toPositiveInteger(rawOrderId);
@@ -158,6 +228,11 @@ const validateOrderIdParam = (req, res, next) => {
   next();
 };
 
+/*
+ * validateOrderQuery sanitises the optional query parameters that can be
+ * passed to GET /orders: table_id and status. Both are optional, but if
+ * present they must be valid values.
+ */
 const validateOrderQuery = (req, res, next) => {
   const sanitizedQuery = {};
 
@@ -189,6 +264,11 @@ const validateOrderQuery = (req, res, next) => {
   next();
 };
 
+/*
+ * validateQrCodeParam validates the :qrCode URL parameter used on the
+ * GET /tables/qr/:qrCode route. It only accepts the table-N format because
+ * that is the only QR code type that maps to a physical table lookup.
+ */
 const validateQrCodeParam = (req, res, next) => {
   const qrCode = typeof req.params?.qrCode === "string" ? req.params.qrCode.trim().toLowerCase() : "";
 
@@ -200,6 +280,11 @@ const validateQrCodeParam = (req, res, next) => {
   next();
 };
 
+/*
+ * validatePaymentCreation validates the body of a POST payment request.
+ * It requires a payment method, a positive amount, and the employee's
+ * ID and name so the payment is attributable in the logs.
+ */
 const validatePaymentCreation = (req, res, next) => {
   const paymentMethodId = toPositiveInteger(req.body?.payment_method_id);
   const amountPaid = Number(req.body?.amount_paid);
@@ -228,6 +313,11 @@ const validatePaymentCreation = (req, res, next) => {
   next();
 };
 
+/*
+ * validateVATEdit validates a VAT rate change request. The rate must be
+ * between 0 and 1 (representing 0% to 100%), and the employee making
+ * the change must be identified.
+ */
 const validateVATEdit = (req, res, next) => {
   const vatRate = Number(req.body?.vat_rate);
   const employeeId = req.body?.employee_id?.toString().trim();
@@ -250,6 +340,11 @@ const validateVATEdit = (req, res, next) => {
   next();
 };
 
+/*
+ * validateAddItem validates a request to add an extra item to an existing
+ * order at the payment counter. The employee must be identified because
+ * this action is logged in the audit trail.
+ */
 const validateAddItem = (req, res, next) => {
   const menuItemId = toPositiveInteger(req.body?.menu_item_id);
   const quantity = toPositiveInteger(req.body?.quantity);
@@ -280,10 +375,25 @@ const validateAddItem = (req, res, next) => {
   next();
 };
 
+/*
+ * notFoundHandler is registered after all route groups and generates a 404
+ * error for any request that did not match any defined route. It passes the
+ * error to errorHandler below.
+ */
 const notFoundHandler = (req, res, next) => {
   next(createHttpError(404, `Route not found: ${req.method} ${req.originalUrl}`));
 };
 
+/*
+ * errorHandler is the global error-handling middleware. Express recognises it
+ * as an error handler because it has four parameters (err, req, res, next).
+ * It must be registered last in server.js after all other middleware.
+ *
+ * It handles three specific error types specially:
+ *   entity.parse.failed — malformed JSON in the request body
+ *   SQLITE_CONSTRAINT    — a database unique/foreign-key constraint violation
+ * Everything else uses the statusCode set by createHttpError, defaulting to 500.
+ */
 const errorHandler = (err, req, res, next) => {
   console.error("Error:", err);
 

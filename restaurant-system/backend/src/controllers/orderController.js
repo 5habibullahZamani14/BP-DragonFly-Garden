@@ -1,5 +1,27 @@
+/*
+ * orderController.js — Business logic for all order operations.
+ *
+ * This controller handles the complete order lifecycle: creation, status
+ * updates, archiving, and retrieval in various formats for the different
+ * views (customer, kitchen, management). The most important function here
+ * is createOrder, which uses a database transaction to ensure that the order
+ * row and all its item rows are written atomically — if any insert fails,
+ * the whole order is rolled back so the database never ends up in a partial state.
+ *
+ * A few design decisions worth noting:
+ *   - Inventory is deducted at order creation time, not when the order is served.
+ *     This was the simplest approach that gives the manager useful stock tracking.
+ *   - Order status can be updated at two levels: the overall order status
+ *     (queue/preparing/ready) and individual item statuses. The overall status
+ *     is automatically derived from the item statuses by deriveOrderStatus.
+ *   - "Archiving" is a soft operation: it just timestamps two nullable columns
+ *     (customer_archived_at and kitchen_archived_at). The order data stays in
+ *     the database so the payment counter can still access it.
+ */
+
 const db = require("../database/db");
 
+/* Standard Promise wrappers for the three SQLite operations used in this file. */
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -33,6 +55,12 @@ const run = (sql, params = []) =>
     });
   });
 
+/*
+ * fetchOrderById is a shared helper used by almost every function in this file.
+ * It fetches a single order with all its items in one consistent shape. Having
+ * this helper means every function that returns order data returns the same
+ * structure, so the frontend only needs to handle one format.
+ */
 const fetchOrderById = async (orderId) => {
   const order = await get(
     `
@@ -80,6 +108,19 @@ const fetchOrderById = async (orderId) => {
   };
 };
 
+/*
+ * createOrder handles the full order creation flow inside a SQLite transaction.
+ * The steps are:
+ *   1. Verify the table exists.
+ *   2. Fetch all referenced menu items in one query and build a lookup map.
+ *   3. Validate that every item is available.
+ *   4. Calculate the total price.
+ *   5. Insert the order row.
+ *   6. Insert each order_item row.
+ *   7. For each item, deduct its ingredients from inventory and log the deduction.
+ *   8. Commit the transaction and return the full order object.
+ * If any step throws, the transaction is rolled back.
+ */
 const createOrder = async (orderData) => {
   const { table_id: tableId, items } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
@@ -88,6 +129,7 @@ const createOrder = async (orderData) => {
     throw new Error("Table not found");
   }
 
+  /* Fetch all referenced menu items in a single query using an IN clause. */
   const uniqueMenuItemIds = [...new Set(items.map((item) => item.menu_item_id))];
   const placeholders = uniqueMenuItemIds.map(() => "?").join(", ");
   const menuItems = await all(
@@ -99,8 +141,10 @@ const createOrder = async (orderData) => {
     uniqueMenuItemIds
   );
 
+  /* Build a Map for O(1) lookup of each menu item during the order insertion loop. */
   const menuItemMap = new Map(menuItems.map((item) => [item.id, item]));
 
+  /* Validate availability before opening the transaction. */
   for (const item of items) {
     const menuItem = menuItemMap.get(item.menu_item_id);
 
@@ -116,6 +160,7 @@ const createOrder = async (orderData) => {
   await run("BEGIN TRANSACTION");
 
   try {
+    /* Calculate the total price by summing quantity × price for each line item. */
     const totalPrice = Number(
       items
         .reduce((total, item) => {
@@ -125,6 +170,7 @@ const createOrder = async (orderData) => {
         .toFixed(2)
     );
 
+    /* Insert the parent order row with status "queue". */
     const orderInsert = await run(
       `
         INSERT INTO orders (table_id, status, total_price)
@@ -133,6 +179,7 @@ const createOrder = async (orderData) => {
       [tableId, "queue", totalPrice]
     );
 
+    /* Insert each item and deduct its ingredients from inventory. */
     for (const item of items) {
       const menuItem = menuItemMap.get(item.menu_item_id);
 
@@ -144,29 +191,34 @@ const createOrder = async (orderData) => {
         [orderInsert.lastID, item.menu_item_id, item.quantity, menuItem.price, item.notes]
       );
 
+      /*
+       * Deduct ingredients from inventory. If no recipe is defined for a menu
+       * item, this loop simply has no rows to iterate and nothing is deducted.
+       */
       const ingredients = await all(
         "SELECT inventory_item_id, quantity_required FROM menu_item_ingredients WHERE menu_item_id = ?",
         [item.menu_item_id]
       );
-      
+
       for (const ing of ingredients) {
         const amountToDeduct = ing.quantity_required * item.quantity;
         await run(
           "UPDATE inventory_items SET current_stock = current_stock - ? WHERE id = ?",
           [amountToDeduct, ing.inventory_item_id]
         );
-        
+
+        /* Log the deduction in the central audit log so the manager can see it. */
         const invItem = await get("SELECT name FROM inventory_items WHERE id = ?", [ing.inventory_item_id]);
-        
+
         if (invItem) {
           await run(
             `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
              VALUES (?, ?, ?, ?, ?, ?)`,
             [
-              'INVENTORY', 'DEDUCT', 'System (Customer Order)', 
-              ing.inventory_item_id.toString(), invItem.name, 
-              JSON.stringify({ 
-                menu_item: menuItem.name, 
+              "INVENTORY", "DEDUCT", "System (Customer Order)",
+              ing.inventory_item_id.toString(), invItem.name,
+              JSON.stringify({
+                menu_item: menuItem.name,
                 amount_deducted: amountToDeduct,
                 order_id: orderInsert.lastID
               })
@@ -190,6 +242,7 @@ const createOrder = async (orderData) => {
   }
 };
 
+/* getOrder returns a single order by ID, throwing if it does not exist. */
 const getOrder = async (orderId) => {
   const order = await fetchOrderById(orderId);
 
@@ -200,6 +253,11 @@ const getOrder = async (orderId) => {
   return order;
 };
 
+/*
+ * getOrders returns a filtered list of orders. It is used by the management
+ * dashboard. The WHERE 1=1 trick allows optional AND clauses to be appended
+ * cleanly without checking whether a WHERE keyword has already been used.
+ */
 const getOrders = async (filters) => {
   const { table_id: tableId, status } = filters;
 
@@ -237,6 +295,13 @@ const getOrders = async (filters) => {
   return all(query, params);
 };
 
+/*
+ * getKitchenOrders returns all active, non-archived orders for the kitchen board.
+ * The result is assembled row-by-row from a join — SQLite does not support
+ * JSON aggregation, so I collect flat rows and group them in JavaScript instead.
+ * Orders are sorted oldest-first (FIFO) so the kitchen crew works through them
+ * in the order they were received.
+ */
 const getKitchenOrders = async (filters) => {
   const { status } = filters;
 
@@ -272,6 +337,7 @@ const getKitchenOrders = async (filters) => {
 
   const rows = await all(query, params);
 
+  /* Group flat rows into nested order objects with an items array. */
   const orders = [];
   const orderMap = new Map();
 
@@ -307,6 +373,12 @@ const getKitchenOrders = async (filters) => {
   return orders;
 };
 
+/*
+ * updateOrderStatus updates an order's overall status. The transition is not
+ * currently enforced against STATUS_TRANSITIONS (that validation happens in the
+ * route middleware) so this function simply writes the new status and returns
+ * the refreshed order.
+ */
 const updateOrderStatus = async (orderId, newStatus, role) => {
   const existingOrder = await get(`SELECT id, status FROM orders WHERE id = ?`, [orderId]);
 
@@ -314,13 +386,16 @@ const updateOrderStatus = async (orderId, newStatus, role) => {
     throw new Error("Order not found");
   }
 
-  // Add your status transition logic here
-
   await run(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, orderId]);
 
   return fetchOrderById(orderId);
 };
 
+/*
+ * getActiveTableOrders fetches all orders for a table that are still active
+ * (not customer-archived). The customer view calls this on load to restore
+ * any in-progress orders the customer placed earlier in their visit.
+ */
 const getActiveTableOrders = async (tableId) => {
   const rows = await all(
     `SELECT id FROM orders
@@ -332,42 +407,55 @@ const getActiveTableOrders = async (tableId) => {
   return orders.filter(Boolean);
 };
 
-// Derive overall order status from its items (treat NULL as 'queue')
+/*
+ * deriveOrderStatus calculates the overall order status from the statuses of
+ * its individual items. The rules are:
+ *   - All items ready → ready
+ *   - All items in queue → queue
+ *   - Any other combination → preparing
+ * A null item_status is treated as "queue" for backwards compatibility.
+ */
 const deriveOrderStatus = (itemStatuses) => {
-  const normalized = itemStatuses.map(s => s || 'queue');
-  if (normalized.every(s => s === 'ready')) return 'ready';
-  if (normalized.every(s => s === 'queue')) return 'queue';
-  return 'preparing';
+  const normalized = itemStatuses.map(s => s || "queue");
+  if (normalized.every(s => s === "ready")) return "ready";
+  if (normalized.every(s => s === "queue")) return "queue";
+  return "preparing";
 };
 
+/*
+ * updateItemStatus updates one item's status within an order and then
+ * automatically recomputes and updates the order's overall status from
+ * the new set of item statuses. A history record is inserted if the overall
+ * status changes as a result.
+ */
 const updateItemStatus = async (orderId, itemId, newStatus) => {
-  const validStatuses = ['queue', 'preparing', 'ready'];
+  const validStatuses = ["queue", "preparing", "ready"];
   if (!validStatuses.includes(newStatus)) throw new Error(`Invalid status: ${newStatus}`);
 
-  // Update the specific item
   await run(`UPDATE order_items SET item_status = ? WHERE id = ? AND order_id = ?`,
     [newStatus, itemId, orderId]);
 
-  // Derive new overall order status from all items
+  /* Recalculate overall order status from all items. */
   const items = await all(`SELECT item_status FROM order_items WHERE order_id = ?`, [orderId]);
   const derived = deriveOrderStatus(items.map(i => i.item_status));
 
-  // Update order status if changed
   const current = await get(`SELECT status FROM orders WHERE id = ?`, [orderId]);
   if (current && current.status !== derived) {
     await run(`UPDATE orders SET status = ? WHERE id = ?`, [derived, orderId]);
     await run(`INSERT INTO order_status_history (order_id, status, changed_by) VALUES (?, ?, ?)`,
-      [orderId, derived, 'kitchen-item-advance']);
+      [orderId, derived, "kitchen-item-advance"]);
   }
 
   return fetchOrderById(orderId);
 };
 
+/* customerArchiveOrder timestamps the customer_archived_at column to dismiss an order. */
 const customerArchiveOrder = async (orderId) => {
   await run(`UPDATE orders SET customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
   return fetchOrderById(orderId);
 };
 
+/* getCustomerArchivedOrdersForTable returns the last 30 dismissed orders for a table. */
 const getCustomerArchivedOrdersForTable = async (tableId) => {
   const rows = await all(
     `SELECT id FROM orders
@@ -380,13 +468,17 @@ const getCustomerArchivedOrdersForTable = async (tableId) => {
   return orders.filter(Boolean);
 };
 
+/* kitchenArchiveOrder timestamps the kitchen_archived_at column to clear an order from the board. */
 const kitchenArchiveOrder = async (orderId) => {
   await run(`UPDATE orders SET kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
   return fetchOrderById(orderId);
 };
 
+/*
+ * getKitchenArchivedOrders returns orders the kitchen has cleared today.
+ * The limit of 50 and the date filter keep the history panel manageable.
+ */
 const getKitchenArchivedOrders = async () => {
-  // Today only — kitchen archive resets at end of day via archiveYesterdaysOrders
   const rows = await all(
     `SELECT id FROM orders
      WHERE kitchen_archived_at IS NOT NULL
@@ -398,7 +490,12 @@ const getKitchenArchivedOrders = async () => {
   return orders.filter(Boolean);
 };
 
-// Run on server startup: mark all non-archived ready orders from PREVIOUS days as archived
+/*
+ * archiveYesterdaysOrders runs on server startup and at 01:30 each night.
+ * It automatically archives any "ready" orders that were created before today
+ * and were never manually archived. This prevents stale orders from previous
+ * days from appearing on the kitchen board when staff arrive in the morning.
+ */
 const archiveYesterdaysOrders = async () => {
   try {
     await run(
@@ -409,9 +506,9 @@ const archiveYesterdaysOrders = async () => {
          AND customer_archived_at IS NULL
          AND date(created_at, 'localtime') < date('now', 'localtime')`
     );
-    console.log('[archive] End-of-day archival complete for previous days.');
+    console.log("[archive] End-of-day archival complete for previous days.");
   } catch (e) {
-    console.error('[archive] archiveYesterdaysOrders failed:', e.message);
+    console.error("[archive] archiveYesterdaysOrders failed:", e.message);
   }
 };
 
@@ -429,5 +526,3 @@ module.exports = {
   getKitchenArchivedOrders,
   archiveYesterdaysOrders,
 };
-
-

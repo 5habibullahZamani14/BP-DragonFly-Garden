@@ -1,6 +1,25 @@
+/*
+ * paymentController.js — Business logic for the payment counter.
+ *
+ * This controller handles everything the payment counter needs: listing
+ * unpaid orders, processing payment transactions, adjusting VAT, adding
+ * items post-order, and archiving completed orders at end of shift.
+ *
+ * The central helper in this file is fetchOrderWithPayments, which builds a
+ * richer order object than the one returned by orderController — it includes
+ * the VAT-inclusive total, a list of payment transactions, and the remaining
+ * balance. Almost every function here calls this helper before and after
+ * making changes so it can return a fully-computed snapshot to the frontend.
+ *
+ * All write operations (processPayment, editOrderVAT, addOrderItem, executeArchive)
+ * use explicit BEGIN/COMMIT/ROLLBACK transactions because they touch multiple
+ * tables atomically.
+ */
+
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 
+/* Standard Promise wrappers for the three SQLite operations used in this file. */
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -34,6 +53,16 @@ const run = (sql, params = []) =>
     });
   });
 
+/*
+ * fetchOrderWithPayments is the payment-aware equivalent of the orderController's
+ * fetchOrderById. It includes VAT and service charge calculations, the full
+ * payments list, the total amount paid so far, and the remaining balance.
+ *
+ * The total_with_vat calculation applies service charge first, then VAT —
+ * this is the standard billing formula used in Malaysian F&B establishments.
+ * Both rates are stored on the order row so historical records are accurate
+ * even if the restaurant later changes its default rates in settings.
+ */
 const fetchOrderWithPayments = async (orderId) => {
   const order = await get(
     `
@@ -106,6 +135,14 @@ const fetchOrderWithPayments = async (orderId) => {
   };
 };
 
+/*
+ * processPayment records a payment transaction against an order. It validates
+ * that the order is not already fully paid, that the payment method exists,
+ * and that the amount is positive and does not exceed the remaining balance.
+ * After inserting the payment row it recalculates payment_status:
+ *   remaining ≤ 0.01 → paid  (the ≤ 0.01 tolerance handles floating-point rounding)
+ *   remaining > 0.01 → partially_paid
+ */
 const processPayment = async (orderId, paymentData) => {
   const { payment_method_id, amount_paid, employee_id, employee_name } = paymentData;
 
@@ -114,7 +151,7 @@ const processPayment = async (orderId, paymentData) => {
     throw createHttpError(404, "Order not found");
   }
 
-  if (order.payment_status === 'paid') {
+  if (order.payment_status === "paid") {
     throw createHttpError(400, "Order is already fully paid");
   }
 
@@ -141,7 +178,7 @@ const processPayment = async (orderId, paymentData) => {
 
     const newTotalPaid = order.total_paid + amount;
     const newRemaining = order.total_with_vat - newTotalPaid;
-    const newStatus = newRemaining <= 0.01 ? 'paid' : 'partially_paid';
+    const newStatus = newRemaining <= 0.01 ? "paid" : "partially_paid";
 
     await run(
       `UPDATE orders SET payment_status = ? WHERE id = ?`,
@@ -157,11 +194,17 @@ const processPayment = async (orderId, paymentData) => {
   }
 };
 
+/* getPaymentMethods returns the list of accepted payment methods. */
 const getPaymentMethods = async (req, res) => {
   const methods = await all(`SELECT id, name FROM payment_methods ORDER BY id ASC`);
   res.json(methods);
 };
 
+/*
+ * listOrdersByPaymentStatus is a shared helper used by getUnpaidOrders and
+ * getPaidOrders. It fetches all orders matching any of the given payment
+ * statuses and returns them with their payment details attached.
+ */
 const listOrdersByPaymentStatus = async (statuses) => {
   const placeholders = statuses.map(() => "?").join(", ");
   const rows = await all(
@@ -177,16 +220,19 @@ const listOrdersByPaymentStatus = async (statuses) => {
   return Promise.all(rows.map((row) => fetchOrderWithPayments(row.id)));
 };
 
+/* getUnpaidOrders returns all orders that still have an outstanding balance. */
 const getUnpaidOrders = async (req, res) => {
   const orders = await listOrdersByPaymentStatus(["unpaid", "partially_paid"]);
   res.json(orders.filter(Boolean));
 };
 
+/* getPaidOrders returns all orders that have been fully settled. */
 const getPaidOrders = async (req, res) => {
   const orders = await listOrdersByPaymentStatus(["paid"]);
   res.json(orders.filter(Boolean));
 };
 
+/* getOrderPayments returns just the payments array for a specific order. */
 const getOrderPayments = async (req, res) => {
   const order = await fetchOrderWithPayments(req.params.orderId);
 
@@ -197,6 +243,11 @@ const getOrderPayments = async (req, res) => {
   res.json(order.payments);
 };
 
+/*
+ * editOrderVAT allows the payment counter to adjust the VAT rate on an order.
+ * The old and new values are recorded in payment_logs so the manager can see
+ * exactly what was changed and who changed it.
+ */
 const editOrderVAT = async (req, res) => {
   const { vat_rate, employee_id, employee_name } = req.body;
   const orderId = req.params.orderId;
@@ -226,6 +277,12 @@ const editOrderVAT = async (req, res) => {
   res.json(await fetchOrderWithPayments(orderId));
 };
 
+/*
+ * addOrderItem adds an extra item to an existing order from the payment counter.
+ * The order total is recalculated after insertion. If the order was previously
+ * marked "paid", adding a new item resets the payment_status to "partially_paid"
+ * because the customer now owes more money.
+ */
 const addOrderItem = async (req, res) => {
   const { menu_item_id, quantity, notes, employee_id, employee_name } = req.body;
   const orderId = req.params.orderId;
@@ -261,6 +318,10 @@ const addOrderItem = async (req, res) => {
       `,
       [orderId, menu_item_id, quantity, menuItem.price, notes]
     );
+    /*
+     * Reset payment_status to "partially_paid" if it was already "paid",
+     * because the order total has now increased.
+     */
     await run(
       `UPDATE orders SET total_price = ?, payment_status = CASE WHEN payment_status = 'paid' THEN 'partially_paid' ELSE payment_status END WHERE id = ?`,
       [nextTotal, orderId]
@@ -281,6 +342,13 @@ const addOrderItem = async (req, res) => {
   res.status(201).json(await fetchOrderWithPayments(orderId));
 };
 
+/*
+ * executeArchive moves all "paid" orders into the archived_orders table and
+ * deletes them from the live orders table. The order data is serialised to JSON
+ * before deletion so the full record is preserved even after the orders are gone.
+ * This function is called both from archivePaidOrders (manual trigger) and from
+ * the nightly scheduler in server.js.
+ */
 const executeArchive = async () => {
   const paidOrders = await listOrdersByPaymentStatus(["paid"]);
   const ordersToArchive = paidOrders.filter(Boolean);
@@ -318,11 +386,13 @@ const executeArchive = async () => {
   return ordersToArchive.length;
 };
 
+/* archivePaidOrders is the HTTP handler that calls executeArchive and returns the count. */
 const archivePaidOrders = async (req, res) => {
   const archived_count = await executeArchive();
   res.json({ archived_count });
 };
 
+/* getArchivedOrders returns the full archive list, most recent first. */
 const getArchivedOrders = async (req, res) => {
   const orders = await all(
     `

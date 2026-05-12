@@ -1,7 +1,37 @@
+/*
+ * api.ts — Centralised HTTP client for all backend requests.
+ *
+ * Every API call in the application goes through this file. I wrote it this
+ * way for two reasons:
+ *   1. It keeps the base URL in one place. Changing VITE_API_BASE in the
+ *      environment is enough to point the whole app at a different server.
+ *   2. All role-authenticated requests need the qr_code query parameter
+ *      appended. The apiUrl helper handles this so individual call sites
+ *      do not have to remember to add it.
+ *
+ * The safeFetch function throws on any non-2xx HTTP status so callers can
+ * use try/catch or let errors propagate to the component's error boundary.
+ *
+ * The generic api object at the bottom (api.get, api.post, etc.) is a
+ * convenience wrapper for the management dashboard which makes many one-off
+ * requests that do not need the role QR code appended.
+ */
+
 import type { MenuItem, Order } from "./menu-data";
 
+/*
+ * API_BASE is the root URL of the backend server. During development this
+ * defaults to http://localhost:5000, matching the Express dev server port.
+ * In production on the Raspberry Pi it is set to the device's LAN address.
+ */
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
 
+/*
+ * apiUrl builds the full request URL. When a qrCode is provided it appends
+ * ?qr_code=... so the backend's role detection middleware can identify the
+ * caller's role. It handles both URLs that already have query parameters
+ * (uses & separator) and clean URLs (uses ? separator).
+ */
 const apiUrl = (path: string, qrCode?: string) => {
   const base = `${API_BASE}${path}`;
   if (!qrCode) return base;
@@ -9,6 +39,12 @@ const apiUrl = (path: string, qrCode?: string) => {
   return `${base}${sep}qr_code=${encodeURIComponent(qrCode)}`;
 };
 
+/*
+ * safeFetch wraps the native fetch API with error handling and JSON parsing.
+ * Any non-2xx response throws an Error with the HTTP status code and text,
+ * so calling code can display or log the failure without inspecting the raw
+ * Response object.
+ */
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
   const url = apiUrl(path, qr);
   const res = await fetch(url, init);
@@ -18,7 +54,14 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
   return (await res.json()) as T;
 };
 
+// ── Type definitions ──────────────────────────────────────────────────────────
+
 type PaymentMethod = { id: number; name: string };
+
+/*
+ * PaymentOrder extends the base Order type with payment-specific fields:
+ * VAT rate, service charge, payment status, totals, and the payments array.
+ */
 export type PaymentOrder = Order & {
   table_id: number;
   vat_rate: number;
@@ -37,29 +80,41 @@ export type PaymentOrder = Order & {
     payment_method: string;
   }>;
 };
+
 type PaymentPayload = {
   payment_method_id: number;
   amount_paid: number;
   employee_id?: string;
   employee_name?: string;
 };
+
 type VatPayload = {
   vat_rate: number;
   employee_id: string;
   employee_name: string;
 };
+
 type AddOrderItemPayload = {
   menu_item_id: number;
   quantity: number;
   employee_id?: string;
   employee_name?: string;
 };
+
 type ApiBody = Record<string, unknown> | unknown[] | null;
 
+// ── Menu ─────────────────────────────────────────────────────────────────────
+
+/* fetchMenu returns all available menu items. No role required. */
 export const fetchMenu = async (): Promise<MenuItem[]> => {
   return await safeFetch<MenuItem[]>("/menu");
 };
 
+/*
+ * fetchTable looks up a table by QR code. If the server returns nothing
+ * (unlikely in normal operation), it falls back to parsing the table number
+ * from the QR code string directly so the UI always has a table reference.
+ */
 export const fetchTable = async (qr: string) => {
   const data = await safeFetch<{ id: number; table_number: string }>(`/tables/qr/${encodeURIComponent(qr)}`);
   if (data) return data;
@@ -67,9 +122,14 @@ export const fetchTable = async (qr: string) => {
   return { id: m ? Number(m[1]) : 1, table_number: m ? `Table ${m[1]}` : "Table 1" };
 };
 
+// ── Kitchen ───────────────────────────────────────────────────────────────────
+
+/* fetchKitchenOrders returns all active orders for the kitchen board. */
 export const fetchKitchenOrders = async (qr: string): Promise<Order[]> => {
   return await safeFetch<Order[]>("/orders/kitchen", undefined, qr);
 };
+
+// ── Payment counter ───────────────────────────────────────────────────────────
 
 export const fetchUnpaidOrders = async (qr: string): Promise<PaymentOrder[]> => {
   const data = await safeFetch<PaymentOrder[]>("/payments/unpaid", undefined, qr);
@@ -109,6 +169,8 @@ export const archivePaidOrders = async (qr: string): Promise<{ archived_count: n
   }, qr);
 };
 
+// ── Customer orders ───────────────────────────────────────────────────────────
+
 export const placeOrder = async (
   qr: string,
   body: { table_id: number; items: { menu_item_id: number; quantity: number; notes?: string }[] }
@@ -143,14 +205,13 @@ export const kitchenArchiveOrder = async (qr: string, orderId: number): Promise<
 export const fetchKitchenArchivedOrders = async (qr: string): Promise<Order[]> =>
   safeFetch<Order[]>(`/orders/kitchen-archived`, undefined, qr);
 
-
 export const updateOrderStatus = async (qr: string, id: number, status: string) => {
   const data = await safeFetch<Order>(`/orders/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   }, qr);
-  return data && 'id' in data ? data : null;
+  return data && "id" in data ? data : null;
 };
 
 export const fetchMenuItems = async (qr: string): Promise<MenuItem[]> => {
@@ -170,7 +231,12 @@ export const addOrderItem = async (
   }, qr);
 };
 
-// Simple API wrapper for general use
+// ── Generic API wrapper (used by the management dashboard) ────────────────────
+
+/*
+ * The api object provides a clean interface for the management dashboard's
+ * many one-off fetch calls that do not need the role QR code appended.
+ */
 export const api = {
   get: (path: string) => safeFetch(path),
   post: (path: string, body?: ApiBody) => safeFetch(path, {
@@ -191,18 +257,17 @@ export const api = {
   delete: (path: string) => safeFetch(path, { method: "DELETE" })
 };
 
-// =====================================
-// MANAGEMENT API
-// =====================================
+// ── Management API ────────────────────────────────────────────────────────────
+
 export const fetchSettings = async () => safeFetch<any>("/management/settings");
-export const updateSetting = async (key: string, value: any) => 
+export const updateSetting = async (key: string, value: any) =>
   safeFetch<any>(`/management/settings/${key}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value })
   });
 
-export const fetchEmployees = async (includeArchived = false) => 
+export const fetchEmployees = async (includeArchived = false) =>
   safeFetch<any[]>(`/management/employees?include_archived=${includeArchived}`);
 export const createEmployee = async (data: any) =>
   safeFetch<any>("/management/employees", {
@@ -243,8 +308,9 @@ export const fetchLogs = async (category?: string) => {
   const query = category ? `?category=${category}` : "";
   return safeFetch<any[]>(`/management/logs${query}`);
 };
+
 export const fetchTables = async () => safeFetch<any[]>("/tables");
-export const createTable = async (data: any) => 
+export const createTable = async (data: any) =>
   safeFetch<any>("/tables", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -257,13 +323,10 @@ export const updateTable = async (id: number, data: any) =>
     body: JSON.stringify(data)
   });
 export const deleteTable = async (id: number) =>
-  safeFetch<any>(`/tables/${id}`, {
-    method: "DELETE"
-  });
+  safeFetch<any>(`/tables/${id}`, { method: "DELETE" });
 
-// =====================================
-// MANAGER AUTH & PROFILE
-// =====================================
+// ── Manager auth & profile ────────────────────────────────────────────────────
+
 export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; name?: string; message?: string }> => {
   const res = await fetch(`${API_BASE}/management/auth`, {
     method: "POST",

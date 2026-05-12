@@ -1,10 +1,20 @@
-/**
- * Order Status History Utilities
- * Handles recording and retrieving order status changes
+/*
+ * order-status-history.js — Utilities for recording and querying order status changes.
+ *
+ * I wrote this module to keep all the status-history SQL in one place. Every
+ * time an order's status changes, the controller calls recordStatusChange to
+ * insert a timestamped row into the order_status_history table. This gives
+ * both the kitchen crew and the manager a complete audit trail of how each
+ * order moved through the system.
+ *
+ * The query helpers (run, all) are defined locally here because this module
+ * does not need the full set of helpers used in the controllers. Keeping them
+ * self-contained avoids a shared utility import that would add coupling.
  */
 
 const db = require("../database/db");
 
+/* Promise wrapper for db.run — used for INSERT statements. */
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.run(sql, params, function runCallback(err) {
@@ -16,6 +26,7 @@ const run = (sql, params = []) =>
     });
   });
 
+/* Promise wrapper for db.all — used for SELECT statements that return multiple rows. */
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -27,11 +38,11 @@ const all = (sql, params = []) =>
     });
   });
 
-/**
- * Record an order status change in history
- * @param {number} orderId - The ID of the order
- * @param {string} newStatus - The new status
- * @param {string} changedBy - Optional identifier of who made the change (e.g., "kitchen", "system")
+/*
+ * recordStatusChange inserts a new row into order_status_history whenever
+ * an order's status changes. The changedBy parameter identifies who or what
+ * triggered the change — for example "kitchen" when a crew member updates
+ * status, or "system" for automated archiving.
  */
 const recordStatusChange = async (orderId, newStatus, changedBy = "system") => {
   await run(
@@ -43,10 +54,10 @@ const recordStatusChange = async (orderId, newStatus, changedBy = "system") => {
   );
 };
 
-/**
- * Get the status history for an order
- * @param {number} orderId - The ID of the order
- * @returns {Promise<Array>} Array of status changes in chronological order
+/*
+ * getStatusHistory returns the full list of status changes for a given order,
+ * ordered chronologically. This is used when displaying the order timeline
+ * to the customer or in the management audit logs.
  */
 const getStatusHistory = async (orderId) => {
   const history = await all(
@@ -67,10 +78,10 @@ const getStatusHistory = async (orderId) => {
   return history || [];
 };
 
-/**
- * Get the latest status change for an order
- * @param {number} orderId - The ID of the order
- * @returns {Promise<Object|null>} The latest status change record or null
+/*
+ * getLatestStatusChange returns only the most recent status change for an
+ * order. This is more efficient than fetching the full history when you only
+ * need to know the current state.
  */
 const getLatestStatusChange = async (orderId) => {
   const latestChange = await all(
@@ -92,11 +103,11 @@ const getLatestStatusChange = async (orderId) => {
   return latestChange && latestChange.length > 0 ? latestChange[0] : null;
 };
 
-/**
- * Get all orders that have changed status since a given time
- * Useful for real-time updates on the customer/kitchen side
- * @param {string} sinceTime - ISO datetime string or DATETIME format
- * @returns {Promise<Array>} Array of distinct order IDs that changed since the time
+/*
+ * getOrdersChangedSince returns the IDs of all orders that had a status
+ * change after the given datetime. The polling-based update flow used
+ * before WebSockets were introduced relied on this function — it is kept
+ * here in case it proves useful for diagnostics or future features.
  */
 const getOrdersChangedSince = async (sinceTime) => {
   const orders = await all(
@@ -112,10 +123,11 @@ const getOrdersChangedSince = async (sinceTime) => {
   return orders ? orders.map((o) => o.order_id) : [];
 };
 
-/**
- * Get orders grouped by current status (useful for kitchen dashboard)
- * @param {string} changedAfter - Optional: only show changes after this datetime
- * @returns {Promise<Object>} Object with status as key and array of orders as value
+/*
+ * getOrdersByStatus returns all active orders grouped by their current status.
+ * The optional changedAfter parameter can limit results to orders that have
+ * changed since a given time, which was useful during the polling phase of
+ * development before WebSocket push was in place.
  */
 const getOrdersByStatus = async (changedAfter = null) => {
   let query = `

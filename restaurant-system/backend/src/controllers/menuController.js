@@ -1,5 +1,18 @@
+/*
+ * menuController.js — Business logic for menu retrieval and popular item tracking.
+ *
+ * This controller handles three concerns: serving the full menu to customers,
+ * serving the category list for the filter tabs, and recomputing which item
+ * should be highlighted as the most popular based on order history.
+ *
+ * The recomputePopular endpoint was designed to be called on a schedule (weekly)
+ * so the popular spotlight on the customer menu stays current without any
+ * manual intervention from the manager.
+ */
+
 const db = require("../database/db");
 
+/* Promise wrappers for SQLite operations. */
 const all = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -22,6 +35,13 @@ const run = (sql, params = []) =>
     });
   });
 
+/*
+ * getMenu returns all currently available menu items, each with its category
+ * information and flags for popular/promo status. I normalise the boolean
+ * columns (is_available, is_popular, is_promo) from SQLite's 0/1 integers to
+ * JavaScript booleans so the frontend does not have to do this conversion itself.
+ * Items are ordered by category display_order first, then alphabetically by name.
+ */
 const getMenu = async (req, res) => {
   const query = `
     SELECT
@@ -57,6 +77,11 @@ const getMenu = async (req, res) => {
   }
 };
 
+/*
+ * getCategories returns the full list of categories sorted by display_order.
+ * The customer view uses this to render the category filter chips at the top
+ * of the menu — tapping a chip scrolls the menu to that section.
+ */
 const getCategories = async (req, res) => {
   const query = `
     SELECT id, name, display_order
@@ -72,11 +97,22 @@ const getCategories = async (req, res) => {
   }
 };
 
+/*
+ * recomputePopular analyses the order history to find the top N most-ordered
+ * items over the last lookback_days days. It clears the is_popular flag on
+ * everything, then sets it on the winner(s). The response includes the winner
+ * names and their unit totals so the caller can verify the result.
+ *
+ * Both parameters are clamped to safe ranges: lookback_days to 1–90,
+ * and top to 1–5. This prevents accidental or malicious requests from running
+ * unreasonably expensive aggregation queries.
+ */
 const recomputePopular = async (req, res) => {
   const lookbackDays = Math.max(1, Math.min(90, Number(req.body?.lookback_days) || 7));
   const topN = Math.max(1, Math.min(5, Number(req.body?.top) || 1));
 
   try {
+    /* Find the top N items by units sold in the lookback window. */
     const ranked = await all(
       `
         SELECT order_items.menu_item_id AS id, SUM(order_items.quantity) AS units_sold
@@ -90,6 +126,7 @@ const recomputePopular = async (req, res) => {
       [`-${lookbackDays} days`, topN]
     );
 
+    /* Clear the popular flag from all items before setting it on the winners. */
     await run(`UPDATE menu_items SET is_popular = 0`);
 
     const winners = [];
