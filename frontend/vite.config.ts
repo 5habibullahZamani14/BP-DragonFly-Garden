@@ -1,4 +1,12 @@
-import { defineConfig } from "vite";
+/*
+ * vite.config.ts — Vite configuration for the BP Dragonfly Garden frontend.
+ *
+ * I created this file to set up the development server, proxy API endpoints,
+ * and enable the componentTagger plugin for automatic component documentation.
+ * The configuration uses a dynamic host (`::`) for IPv6 compatibility and runs on
+ * port 3000. Proxies forward UI requests to the backend server (port 5000) for
+ * menu, orders, tables, payments, and management routes.
+ */
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
