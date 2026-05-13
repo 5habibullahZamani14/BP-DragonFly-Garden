@@ -28,11 +28,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchEmployees, createEmployee, updateEmployee } from "@/lib/api";
+import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export const EmployeesTab = () => {
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -90,7 +91,7 @@ export const EmployeesTab = () => {
     }
   };
 
-  const handleEdit = (emp: any) => {
+  const handleEdit = (emp: EmployeeRecord) => {
     setFormData({
       name: emp.name,
       department: emp.department || "Waiter",
@@ -128,7 +129,7 @@ export const EmployeesTab = () => {
   };
 
   const { groupedEmployees, pieData, barData } = useMemo(() => {
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, EmployeeRecord[]> = {};
     const deptCounts: Record<string, number> = {};
     const payroll: Record<string, number> = {};
 

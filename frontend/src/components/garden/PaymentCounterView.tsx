@@ -67,7 +67,8 @@ interface Employee {
   id: string;
 }
 
-
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) => {
   const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | null>(null);
@@ -100,7 +101,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         } else {
           localStorage.removeItem("paymentCounterLogin");
         }
-      } catch (e) {
+      } catch {
         localStorage.removeItem("paymentCounterLogin");
       }
     }
@@ -110,7 +111,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     try {
       const employees = await fetchEmployees(false);
       const matched = employees.find(
-        (emp: any) => emp.employee_id === loginInputId && emp.name.toLowerCase() === loginInputName.toLowerCase()
+        (emp) => emp.employee_id === loginInputId && emp.name.toLowerCase() === loginInputName.toLowerCase()
       );
 
       if (matched) {
@@ -126,7 +127,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       } else {
         notify("error", "Invalid Employee ID or Name");
       }
-    } catch (e) {
+    } catch {
       notify("error", "Failed to verify employee");
     }
   };
@@ -230,8 +231,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       setPaymentAmount("");
       // Don't reset selectedPaymentMethod so it stays on Cash
       loadData(); // This should refresh the lists
-    } catch (error: any) {
-      notify("error", error?.message || "Failed to process payment");
+    } catch (error) {
+      notify("error", getErrorMessage(error, "Failed to process payment"));
     } finally {
       setIsProcessing(false);
     }
@@ -254,8 +255,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         setNewItemId("");
         setNewItemQuantity("1");
         loadData(); // Refresh data to show the new item
-    } catch (error: any) {
-        notify("error", error?.message || "Failed to add item");
+    } catch (error) {
+        notify("error", getErrorMessage(error, "Failed to add item"));
     }
   };
 
@@ -583,4 +584,3 @@ const paymentHelpSections: HelpSection[] = [
     )
   },
 ];
-

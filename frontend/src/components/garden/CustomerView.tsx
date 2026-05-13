@@ -31,7 +31,7 @@
  *      the garden's rustic aesthetic.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, Leaf, Star, Plus, Minus, ShoppingBag, Check, Flame, X,
   Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight,
@@ -49,6 +49,8 @@ const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
 const STAGE_LABEL: Record<string, string> = { queue: "Received", preparing: "Cooking", ready: "Ready to serve" };
 const orderStageIndex = (status: string) => ORDER_STAGES.findIndex((stage) => stage === status);
+const TABS = ["home", "menu", "orders"] as const;
+type CustomerTab = typeof TABS[number];
 
 type Notify = (kind: "success" | "error", text: string) => void;
 
@@ -91,10 +93,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     catch { return new Set(); }
   });
   const [cartOpen, setCartOpen] = useState(false);
-  const [tab, setTab] = useState<"home" | "menu" | "orders">(() => {
+  const [tab, setTab] = useState<CustomerTab>(() => {
     try {
       const s = sessionStorage.getItem(`dfg_tab_${qrCode}`);
-      return (["home","menu","orders"] as const).includes(s as any) ? s as "home"|"menu"|"orders" : "home";
+      return TABS.includes(s as CustomerTab) ? s as CustomerTab : "home";
     } catch { return "home"; }
   });
   // Direction of the last tab change — for swoosh-in animation
@@ -176,7 +178,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
     })();
     return () => { alive = false; };
-  }, [qrCode]);
+  }, [notify, qrCode]);
 
   // Persist cart / history / celebratedIds to sessionStorage
   useEffect(() => { sessionStorage.setItem(`dfg_cart_${qrCode}`, JSON.stringify(cart)); }, [cart, qrCode]);
@@ -187,8 +189,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
   // ORDER_STATUS_UPDATE fires when the whole order status changes (e.g. direct status patch)
   useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE"], (event) => {
-    const updatedOrder = event.payload;
-    if (!updatedOrder) return;
+    const updatedOrder = event.payload as Order | null;
+    if (!updatedOrder?.id) return;
     
     setOrders((cur) => {
       // Only update if this order belongs to our current active session
@@ -312,7 +314,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   };
 
   // Archive a ready order after the user confirms (or countdown runs out)
-  const archiveOrder = async (orderId: number) => {
+  const archiveOrder = useCallback(async (orderId: number) => {
     try {
       await customerArchiveOrder(qrCode, orderId);
     } catch { /* non-critical */ }
@@ -322,7 +324,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     // Clean up countdown state
     setArchiveCountdowns(cur => { const n = { ...cur }; delete n[orderId]; return n; });
     setKeptOrderIds(cur => { const n = new Set(cur); n.delete(orderId); return n; });
-  };
+  }, [orders, qrCode]);
 
 
 
@@ -385,7 +387,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       readyUnseen.forEach((o) => { if (!(o.id in n) && !keptOrderIds.has(o.id)) n[o.id] = 20; });
       return n;
     });
-  }, [tab, orders, celebratedIds]);
+  }, [tab, orders, celebratedIds, keptOrderIds]);
 
   // Tick archive countdowns every second
   useEffect(() => {
@@ -408,7 +410,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, [keptOrderIds]);
+  }, [archiveOrder, keptOrderIds]);
 
 
   return (

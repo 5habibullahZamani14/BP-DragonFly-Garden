@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchInventory, createInventoryItem, updateInventoryStock, fetchRecipes, updateRecipe, fetchMenuItems } from "@/lib/api";
+import type { InventoryItem, Recipe, RecipeIngredient } from "@/lib/api";
+import type { MenuItem } from "@/lib/menu-data";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
@@ -32,16 +34,16 @@ export const InventoryTab = () => {
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">("overview");
   
   // Stock State
-  const [inventory, setInventory] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
 
   // Recipe State
-  const [menuItems, setMenuItems] = useState<any[]>([]);
-  const [recipes, setRecipes] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedMenuItem, setSelectedMenuItem] = useState<number | null>(null);
-  const [editingRecipe, setEditingRecipe] = useState<any[]>([]);
+  const [editingRecipe, setEditingRecipe] = useState<RecipeIngredient[]>([]);
 
   useEffect(() => {
     loadData();
@@ -110,7 +112,7 @@ export const InventoryTab = () => {
     setEditingRecipe([...editingRecipe, { inventory_item_id: inventory[0].id, quantity_required: 1 }]);
   };
 
-  const updateIngredientInRecipe = (index: number, field: string, value: any) => {
+  const updateIngredientInRecipe = (index: number, field: keyof RecipeIngredient, value: string) => {
     const updated = [...editingRecipe];
     updated[index] = { ...updated[index], [field]: value };
     setEditingRecipe(updated);
@@ -126,8 +128,8 @@ export const InventoryTab = () => {
     if (!selectedMenuItem) return;
     try {
       await updateRecipe(selectedMenuItem, editingRecipe.map(ing => ({
-        inventory_item_id: parseInt(ing.inventory_item_id),
-        quantity_required: parseFloat(ing.quantity_required)
+        inventory_item_id: parseInt(String(ing.inventory_item_id)),
+        quantity_required: parseFloat(String(ing.quantity_required))
       })));
       setSelectedMenuItem(null);
       loadData();

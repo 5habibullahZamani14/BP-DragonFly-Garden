@@ -49,6 +49,9 @@ interface ManagementViewProps {
   notify: (kind: "success" | "error", text: string) => void;
 }
 
+const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables"] as const;
+type ManagerTab = typeof MANAGER_TABS[number];
+
 export const ManagementView = ({ notify }: ManagementViewProps) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginId, setLoginId] = useState("");
@@ -59,11 +62,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSending, setForgotSending] = useState(false);
   const [forgotMsg, setForgotMsg] = useState("");
-  const [activeTab, setActiveTab] = useState<"overview" | "settings" | "employees" | "inventory" | "logs" | "tables">(() => {
+  const [activeTab, setActiveTab] = useState<ManagerTab>(() => {
     try {
       const s = sessionStorage.getItem("mgr_active_tab");
-      return (["overview","settings","employees","inventory","logs","tables"] as const).includes(s as any)
-        ? s as "overview"|"settings"|"employees"|"inventory"|"logs"|"tables" : "overview";
+      return MANAGER_TABS.includes(s as ManagerTab) ? s as ManagerTab : "overview";
     } catch { return "overview"; }
   });
 
@@ -412,4 +414,3 @@ const managerHelpSections: HelpSection[] = [
     )
   },
 ];
-

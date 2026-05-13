@@ -16,10 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchTables, createTable, updateTable, deleteTable } from "@/lib/api";
+import type { TableRecord } from "@/lib/api";
 import { Grid3X3, Plus, QrCode, Edit2, Trash2 } from "lucide-react";
 
 export const TablesTab = () => {
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });

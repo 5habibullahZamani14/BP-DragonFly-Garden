@@ -21,23 +21,20 @@
  *      and compliance.
  */
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchLogs } from "@/lib/api";
+import type { LogEntry } from "@/lib/api";
 import { FileText, Download, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export const LogsTab = () => {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
 
-  useEffect(() => {
-    loadLogs();
-  }, [categoryFilter]);
-
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchLogs(categoryFilter);
@@ -47,7 +44,11 @@ export const LogsTab = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [categoryFilter]);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
 
   const downloadCSV = () => {
     if (logs.length === 0) return;
@@ -63,7 +64,7 @@ export const LogsTab = () => {
         log.action,
         log.actor_name || "System",
         log.target_name || "-",
-        `"\${log.details ? log.details.replace(/"/g, '""') : ''}"`
+        `"${log.details ? log.details.replace(/"/g, '""') : ''}"`
       ];
       csvRows.push(row.join(","));
     });
@@ -72,13 +73,13 @@ export const LogsTab = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dragonfly-garden-logs-\${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `dragonfly-garden-logs-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
   // Prepare chart data
-  const chartData = logs.reduce((acc: any[], log) => {
+  const chartData = logs.reduce<Record<string, string | number>[]>((acc, log) => {
     const existing = acc.find(item => item.name === log.category);
     if (existing) {
       existing[log.action] = (existing[log.action] || 0) + 1;
@@ -171,7 +172,7 @@ export const LogsTab = () => {
                     <tr key={log.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap text-gray-500">{new Date(log.timestamp).toLocaleString()}</td>
                       <td className="px-4 py-3 font-medium">
-                        <span className={`px-2 py-1 rounded-full text-xs \${
+                        <span className={`px-2 py-1 rounded-full text-xs ${
                           log.category === 'INVENTORY' ? 'bg-orange-100 text-orange-800' :
                           log.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-800' :
                           'bg-gray-100 text-gray-800'

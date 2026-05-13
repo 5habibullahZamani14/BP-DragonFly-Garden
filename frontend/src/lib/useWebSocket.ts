@@ -51,11 +51,11 @@ const getWsBase = () => {
 const WS_BASE = getWsBase();
 
 /* The four event types the backend can push over WebSocket. */
-export type WSEventType = "NEW_ORDER" | "ORDER_STATUS_UPDATE" | "NEW_PAYMENT" | "INVENTORY_UPDATE";
+export type WSEventType = "NEW_ORDER" | "ORDER_STATUS_UPDATE" | "ITEM_STATUS_UPDATE" | "NEW_PAYMENT" | "INVENTORY_UPDATE";
 
 interface WSEvent {
   type: WSEventType;
-  payload: any;
+  payload: unknown;
 }
 
 type EventCallback = (event: WSEvent) => void;
@@ -98,8 +98,8 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (eventTypesRef.current.includes(data.type)) {
-            callbackRef.current(data);
+          if (typeof data?.type === "string" && eventTypesRef.current.includes(data.type as WSEventType)) {
+            callbackRef.current(data as WSEvent);
           }
         } catch (e) {
           console.error("Failed to parse WebSocket message", e);

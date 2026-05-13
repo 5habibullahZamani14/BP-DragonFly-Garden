@@ -7,6 +7,7 @@
  * port 3000. Proxies forward UI requests to the backend server (port 5000) for
  * menu, orders, tables, payments, and management routes.
  */
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";

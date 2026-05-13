@@ -103,6 +103,99 @@ type AddOrderItemPayload = {
 
 type ApiBody = Record<string, unknown> | unknown[] | null;
 
+export type ManagementSettings = {
+  work_hours?: {
+    start: string;
+    end: string;
+  };
+  [key: string]: unknown;
+};
+
+export type EmployeeRecord = {
+  id: number;
+  employee_id: string;
+  name: string;
+  department?: string;
+  salary?: number;
+  bonuses?: number;
+  shift_start?: string;
+  shift_end?: string;
+  employment_type?: string;
+  contact_info?: string;
+  hire_date?: string;
+  is_archived?: number;
+};
+
+export type EmployeePayload = {
+  name?: string;
+  department?: string;
+  salary?: number;
+  bonuses?: number;
+  shift_start?: string;
+  shift_end?: string;
+  employment_type?: string;
+  contact_info?: string;
+  is_archived?: number;
+};
+
+export type InventoryItem = {
+  id: number;
+  name: string;
+  category: string;
+  unit: string;
+  current_stock: number;
+  max_stock: number;
+  low_stock_threshold_percent: number;
+};
+
+export type InventoryPayload = {
+  name?: string;
+  category?: string;
+  unit?: string;
+  current_stock?: number;
+  max_stock?: number;
+  low_stock_threshold_percent?: number;
+};
+
+export type RecipeIngredient = {
+  inventory_item_id: number | string;
+  quantity_required: number | string;
+};
+
+export type Recipe = {
+  id: number;
+  ingredients?: RecipeIngredient[];
+};
+
+export type LogEntry = {
+  id: number;
+  timestamp: string;
+  category: string;
+  action: string;
+  actor_name?: string;
+  target_name?: string;
+  target_id?: number | string;
+  details?: string;
+};
+
+export type TableRecord = {
+  id: number;
+  table_number: string;
+  qr_code: string;
+};
+
+export type TablePayload = {
+  table_number: string;
+  qr_code: string;
+};
+
+export type ManagerProfile = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+};
+
 // ── Menu ─────────────────────────────────────────────────────────────────────
 
 /* fetchMenu returns all available menu items. No role required. */
@@ -259,46 +352,46 @@ export const api = {
 
 // ── Management API ────────────────────────────────────────────────────────────
 
-export const fetchSettings = async () => safeFetch<any>("/management/settings");
-export const updateSetting = async (key: string, value: any) =>
-  safeFetch<any>(`/management/settings/${key}`, {
+export const fetchSettings = async () => safeFetch<ManagementSettings>("/management/settings");
+export const updateSetting = async (key: string, value: unknown) =>
+  safeFetch<ManagementSettings>(`/management/settings/${key}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value })
   });
 
 export const fetchEmployees = async (includeArchived = false) =>
-  safeFetch<any[]>(`/management/employees?include_archived=${includeArchived}`);
-export const createEmployee = async (data: any) =>
-  safeFetch<any>("/management/employees", {
+  safeFetch<EmployeeRecord[]>(`/management/employees?include_archived=${includeArchived}`);
+export const createEmployee = async (data: EmployeePayload) =>
+  safeFetch<EmployeeRecord>("/management/employees", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
-export const updateEmployee = async (id: number, data: any) =>
-  safeFetch<any>(`/management/employees/${id}`, {
+export const updateEmployee = async (id: number, data: EmployeePayload) =>
+  safeFetch<EmployeeRecord>(`/management/employees/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
 
-export const fetchInventory = async () => safeFetch<any[]>("/management/inventory");
-export const createInventoryItem = async (data: any) =>
-  safeFetch<any>("/management/inventory", {
+export const fetchInventory = async () => safeFetch<InventoryItem[]>("/management/inventory");
+export const createInventoryItem = async (data: InventoryPayload) =>
+  safeFetch<InventoryItem>("/management/inventory", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
-export const updateInventoryStock = async (id: number, data: any) =>
-  safeFetch<any>(`/management/inventory/${id}`, {
+export const updateInventoryStock = async (id: number, data: InventoryPayload) =>
+  safeFetch<InventoryItem>(`/management/inventory/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
 
-export const fetchRecipes = async () => safeFetch<any[]>("/management/recipes");
-export const updateRecipe = async (menuItemId: number, ingredients: any[]) =>
-  safeFetch<any>(`/management/recipes/${menuItemId}`, {
+export const fetchRecipes = async () => safeFetch<Recipe[]>("/management/recipes");
+export const updateRecipe = async (menuItemId: number, ingredients: RecipeIngredient[]) =>
+  safeFetch<Recipe>(`/management/recipes/${menuItemId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ingredients })
@@ -306,24 +399,24 @@ export const updateRecipe = async (menuItemId: number, ingredients: any[]) =>
 
 export const fetchLogs = async (category?: string) => {
   const query = category ? `?category=${category}` : "";
-  return safeFetch<any[]>(`/management/logs${query}`);
+  return safeFetch<LogEntry[]>(`/management/logs${query}`);
 };
 
-export const fetchTables = async () => safeFetch<any[]>("/tables");
-export const createTable = async (data: any) =>
-  safeFetch<any>("/tables", {
+export const fetchTables = async () => safeFetch<TableRecord[]>("/tables");
+export const createTable = async (data: TablePayload) =>
+  safeFetch<TableRecord>("/tables", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
-export const updateTable = async (id: number, data: any) =>
-  safeFetch<any>(`/tables/${id}`, {
+export const updateTable = async (id: number, data: TablePayload) =>
+  safeFetch<TableRecord>(`/tables/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
 export const deleteTable = async (id: number) =>
-  safeFetch<any>(`/tables/${id}`, { method: "DELETE" });
+  safeFetch<{ success?: boolean }>(`/tables/${id}`, { method: "DELETE" });
 
 // ── Manager auth & profile ────────────────────────────────────────────────────
 
@@ -341,7 +434,7 @@ export const fetchManagerProfile = async (): Promise<{ id: string; name: string;
 
 export const updateManagerProfile = async (data: {
   name?: string; id?: string; password?: string; email?: string; phone?: string;
-}): Promise<{ success: boolean; profile: any }> =>
+}): Promise<{ success: boolean; profile: ManagerProfile }> =>
   safeFetch("/management/manager-profile", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
