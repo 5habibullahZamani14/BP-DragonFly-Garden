@@ -989,25 +989,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                             <h2 className="font-display text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.id}</h2>
                             <p className="text-[0.7rem] opacity-50 mt-0.5">{o.table_number}{timeStr && ` · ${timeStr}`}</p>
                           </div>
-                          <div className="flex flex-col items-end gap-1.5 mt-1">
-                            <span className={`rounded-full px-3 py-1 text-[0.65rem] font-bold uppercase tracking-wide ${isReady ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground animate-pulse"}`}>
-                              {STAGE_LABEL[o.status]}
-                            </span>
-                            {isReady && archiveSecs !== undefined && !isKept && (
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-[0.6rem] text-foreground/50">archiving in <strong>{archiveSecs}s</strong></span>
-                                <button
-                                  onClick={() => setKeptOrderIds(cur => { const n = new Set(cur); n.add(o.id); return n; })}
-                                  className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition"
-                                >Keep ticket</button>
-                              </div>
-                            )}
-                            {isReady && isKept && (
-                              <button
-                                onClick={() => archiveOrder(o.id)}
-                                className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition"
-                              >Archive now</button>
-                            )}
+                          <div>
+                            <button
+                              onClick={() => archiveOrder(o.id)}
+                              className="text-[0.6rem] font-bold px-3 py-1 rounded-full bg-black/5 text-foreground/50 hover:bg-black/10 transition flex items-center gap-1"
+                            >
+                              <X className="h-3 w-3" /> Dismiss
+                            </button>
                           </div>
                         </div>
 
@@ -1034,16 +1022,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="mt-1 ml-7">
-                                  <span className={`inline-flex items-center gap-1 text-[0.56rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
-                                    iReady ? "bg-green-100 text-green-700" :
-                                    iCook  ? "bg-amber-100 text-amber-700" :
-                                    "bg-gray-100 text-gray-500"
-                                  }`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full inline-block ${iReady ? "bg-green-500" : iCook ? "bg-amber-400" : "bg-gray-400"}`}/>
-                                    {iReady ? "Ready" : iCook ? "Cooking" : "Queue"}
-                                  </span>
-                                </div>
                               </div>
                             );
                           })}
@@ -1054,52 +1032,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-50">Total</span>
                           <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(Number(o.total_price))}</span>
                         </div>
-                      </div>
-
-                      {/* ── SVG-MASK PERFORATION — negative margins kill sub-pixel hairlines ── */}
-                      <svg viewBox="0 0 400 24" preserveAspectRatio="none" width="100%" height="24"
-                        style={{ display:"block", marginTop:"-1px", marginBottom:"-1px" }}>
-                        <defs>
-                          <mask id={`pm-${o.id}`}>
-                            <rect width="400" height="24" fill="white"/>
-                            <circle cx="0"   cy="12" r="13" fill="black"/>
-                            <circle cx="400" cy="12" r="13" fill="black"/>
-                          </mask>
-                        </defs>
-                        <rect width="400" height="24" fill={RC} mask={`url(#pm-${o.id})`}/>
-                        <line x1="22" y1="12" x2="378" y2="12" stroke="hsl(40,20%,68%)" strokeWidth="1.5" strokeDasharray="8,5" strokeLinecap="round"/>
-                      </svg>
-
-                      {/* ── Stage tracker — rounded bottom (as preferred) ── */}
-                      <div style={{ background: RS }} className="px-5 pt-5 pb-5 rounded-b-[22px]">
-                        <div className="relative grid grid-cols-3">
-                          <div className="absolute top-4 inset-x-0 flex items-center px-[calc(100%/6)]">
-                            <div className={`h-0.5 flex-1 rounded-full ${ai > 0 ? "bg-primary" : "bg-black/15"}`}/>
-                            <div className="w-8"/>
-                            <div className={`h-0.5 flex-1 rounded-full ${ai > 1 ? "bg-primary" : "bg-black/15"}`}/>
-                          </div>
-                          {ORDER_STAGES.map((s, i) => {
-                            const done = ai > i;
-                            const live = ai === i;
-                            const justDone = recentlyCompleted[o.id] === s;
-                            return (
-                              <div key={s} className="flex flex-col items-center gap-1.5 relative z-10">
-                                <div className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition-all
-                                  ${done ? "bg-primary text-primary-foreground" : live ? "bg-accent text-accent-foreground scale-110" : "bg-black/10 text-black/25"}
-                                  ${justDone ? "animate-stage-confirm" : ""}`}>
-                                  {done ? <Check className="h-4 w-4"/> : i + 1}
-                                </div>
-                                <span className="text-[0.6rem] font-semibold uppercase tracking-wide opacity-40 text-center leading-none">{STAGE_LABEL[s]}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {isReady && (
-                          <div className="mt-3 flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">
-                            <Sparkles className="h-3.5 w-3.5 shrink-0"/>
-                            Your order is ready — enjoy! 🌿
-                          </div>
-                        )}
                       </div>
 
                     </div>

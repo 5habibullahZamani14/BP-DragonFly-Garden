@@ -35,6 +35,7 @@ const {
   validateOrderQuery,
 } = require("../middleware/validation");
 const { requireKitchenCrew } = require("../middleware/role-based-access");
+const printerService = require("../services/printerService");
 
 /*
  * orderRoutes is a factory function rather than a plain router export.
@@ -54,6 +55,11 @@ const orderRoutes = (broadcast) => {
   router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
     const order = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
+    
+    // Print 2 physical copies: one for kitchen, one for customer
+    printerService.printTicket(order).catch(err => console.error("Printer 1 failed:", err));
+    printerService.printTicket(order).catch(err => console.error("Printer 2 failed:", err));
+
     res.status(201).json(order);
   }));
 

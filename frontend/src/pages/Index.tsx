@@ -36,18 +36,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { GardenAtmosphere } from "@/components/garden/GardenAtmosphere";
 import { LandingView } from "@/components/garden/LandingView";
 import { CustomerView } from "@/components/garden/CustomerView";
-import { KitchenView } from "@/components/garden/KitchenView";
 import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
 import { ManagementView } from "@/components/garden/ManagementView";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 /* QR code patterns — must match the patterns used in the backend middleware. */
 const TABLE_QR_PATTERN = /^table-\d+$/;
-const KITCHEN_QR_PATTERN = /^kitchen-crew-[a-z0-9_-]+$/i;
 const PAYMENT_QR_PATTERN = /^payment-counter-[a-z0-9_-]+$/i;
 const MANAGER_QR_PATTERN = /^manager-[a-z0-9_-]+$/i;
 
-type Role = "landing" | "customer" | "kitchen" | "payment" | "manager";
+type Role = "landing" | "customer" | "payment" | "manager";
 
 /*
  * detectRole reads the current URL and returns the role and QR code string.
@@ -58,7 +56,6 @@ const detectRole = (): { role: Role; qrCode: string } => {
   const params = new URLSearchParams(window.location.search);
   const qr = (params.get("qr") || "").trim().toLowerCase();
   if (MANAGER_QR_PATTERN.test(qr)) return { role: "manager", qrCode: qr };
-  if (KITCHEN_QR_PATTERN.test(qr)) return { role: "kitchen", qrCode: qr };
   if (PAYMENT_QR_PATTERN.test(qr)) return { role: "payment", qrCode: qr };
   if (TABLE_QR_PATTERN.test(qr)) return { role: "customer", qrCode: qr };
   /* Default to customer preview if no QR is present (development convenience). */
@@ -102,7 +99,7 @@ const Index = () => {
    */
   const view = new URLSearchParams(window.location.search).get("view");
   const role: Role = (view as Role) || initial.role;
-  const qr = role === "manager" ? "manager-demo" : role === "kitchen" ? "kitchen-crew-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
+  const qr = role === "manager" ? "manager-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
 
   return (
     <main className="relative min-h-screen overflow-x-hidden">
@@ -111,7 +108,7 @@ const Index = () => {
        * background. It is disabled for the staff views (kitchen, payment,
        * manager) because those views need a clean, distraction-free interface.
        */}
-      <GardenAtmosphere disableEffects={role === "payment" || role === "manager" || role === "kitchen"} />
+      <GardenAtmosphere disableEffects={role === "payment" || role === "manager"} />
 
       {/* Toast banner — positioned at the top-centre of the screen. */}
       {toast && (
@@ -133,7 +130,6 @@ const Index = () => {
 
       {/* Render exactly one view based on the detected role. */}
       {role === "manager" && <ManagementView qrCode={qr} notify={notify} />}
-      {role === "kitchen" && <KitchenView qrCode={qr} notify={notify} />}
       {role === "payment" && <PaymentCounterView qrCode={qr} notify={notify} />}
       {role === "customer" && <CustomerView qrCode={qr} notify={notify} />}
       {role === "landing" && <LandingView />}
