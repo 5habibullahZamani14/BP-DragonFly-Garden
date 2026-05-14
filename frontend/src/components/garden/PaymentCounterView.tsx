@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Eye, EyeOff, LogOut } from "lucide-react";
-import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings } from "@/lib/api";
+import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings, printFinalBill } from "@/lib/api";
 import type { PaymentOrder } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { HelpModal, HelpSection } from "./HelpModal";
@@ -220,12 +220,23 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
     setIsProcessing(true);
     try {
-      await processPayment(qrCode, selectedOrder.id, {
+      const paymentOrder = await processPayment(qrCode, selectedOrder.id, {
         payment_method_id: parseInt(selectedPaymentMethod),
         amount_paid: finalAmount,
         employee_id: loggedInEmployee.id,
         employee_name: loggedInEmployee.name
       });
+
+      if (paymentOrder && paymentOrder.payment_status === "paid") {
+        try {
+          await printFinalBill(qrCode, selectedOrder.id, loggedInEmployee.name);
+          notify("success", "Payment successful! Final receipt printing.");
+        } catch (e) {
+          notify("error", "Payment successful but printer failed!");
+        }
+      } else {
+        notify("success", "Partial payment recorded.");
+      }
 
       setSelectedOrder(null);
       setPaymentAmount("");
@@ -337,7 +348,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                   <Card key={order.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-white pb-4">
                       <CardTitle className="flex items-center justify-between">
-                        <span className="text-xl">Table {order.table_number}</span>
+                        <span className="text-xl">{order.table_number}</span>
                         <Badge variant={order.remaining > 0 ? "destructive" : "secondary"} className="text-sm px-3 py-1">
                           RM {order.remaining.toFixed(2)}
                         </Badge>
@@ -354,7 +365,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <div className="border-t border-gray-200 pt-4 space-y-1 text-sm text-gray-600">
                         <div className="flex justify-between"><p>Subtotal:</p><p>RM {order.total_price.toFixed(2)}</p></div>
                         <div className="flex justify-between"><p>Service Charge ({(order.service_charge_rate || 0.10) * 100}%):</p><p>RM {(order.total_price * (order.service_charge_rate || 0.10)).toFixed(2)}</p></div>
-                        <div className="flex justify-between"><p>VAT ({order.vat_rate * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0.10)) * order.vat_rate).toFixed(2)}</p></div>
+                        <div className="flex justify-between"><p>SST ({order.vat_rate * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0.10)) * order.vat_rate).toFixed(2)}</p></div>
                         <div className="flex justify-between font-bold text-gray-900 text-lg mt-2 pt-2 border-t border-gray-200">
                           <p>Total:</p><p>RM {order.total_with_vat.toFixed(2)}</p>
                         </div>
@@ -372,7 +383,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         <DialogContent className="sm:max-w-[425px]">
                           <DialogHeader>
                             <DialogTitle>Process Payment</DialogTitle>
-                            <DialogDescription>Table {order.table_number}</DialogDescription>
+                            <DialogDescription>{order.table_number}</DialogDescription>
                           </DialogHeader>
                           
                           <div className="space-y-6 mt-4">
@@ -425,7 +436,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div className="flex flex-col sm:flex-row gap-3 pt-4">
                               <Button onClick={handleProcessPayment} disabled={isProcessing} className="flex-1" size="lg">
-                                {isProcessing ? "Processing..." : "Process"}
+                                {isProcessing ? "Processing..." : "Process Payment"}
                               </Button>
                               <Button variant="outline" onClick={() => setAddingItem(true)} size="lg" className="sm:flex-none">
                                 Add Item

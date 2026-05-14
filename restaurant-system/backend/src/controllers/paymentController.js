@@ -180,10 +180,17 @@ const processPayment = async (orderId, paymentData) => {
     const newRemaining = order.total_with_vat - newTotalPaid;
     const newStatus = newRemaining <= 0.01 ? "paid" : "partially_paid";
 
-    await run(
-      `UPDATE orders SET payment_status = ? WHERE id = ?`,
-      [newStatus, orderId]
-    );
+    if (newStatus === "paid") {
+      await run(
+        `UPDATE orders SET payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [newStatus, orderId]
+      );
+    } else {
+      await run(
+        `UPDATE orders SET payment_status = ? WHERE id = ?`,
+        [newStatus, orderId]
+      );
+    }
 
     await run("COMMIT");
 
@@ -414,5 +421,6 @@ module.exports = {
   getOrderPayments,
   archivePaidOrders,
   getArchivedOrders,
-  executeArchive
+  executeArchive,
+  fetchOrderWithPayments
 };

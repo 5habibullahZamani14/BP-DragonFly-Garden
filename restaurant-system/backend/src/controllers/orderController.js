@@ -160,8 +160,8 @@ const createOrder = async (orderData) => {
   await run("BEGIN TRANSACTION");
 
   try {
-    /* Calculate the total price by summing quantity × price for each line item. */
-    const totalPrice = Number(
+    /* Calculate the additional price by summing quantity × price for each line item. */
+    const additionalPrice = Number(
       items
         .reduce((total, item) => {
           const menuItem = menuItemMap.get(item.menu_item_id);
@@ -170,26 +170,50 @@ const createOrder = async (orderData) => {
         .toFixed(2)
     );
 
-    /* Insert the parent order row with status "queue". */
-    const orderInsert = await run(
-      `
-        INSERT INTO orders (table_id, status, total_price)
-        VALUES (?, ?, ?)
-      `,
-      [tableId, "queue", totalPrice]
-    );
+    let orderId;
+    let isAddOn = false;
+
+    const activeOrder = await get(`SELECT id, total_price FROM orders WHERE table_id = ? AND payment_status = 'unpaid'`, [tableId]);
+
+    if (activeOrder) {
+      isAddOn = true;
+      orderId = activeOrder.id;
+      const newTotal = Number((activeOrder.total_price + additionalPrice).toFixed(2));
+      await run(`UPDATE orders SET total_price = ?, status = 'queue' WHERE id = ?`, [newTotal, orderId]);
+    } else {
+      /* Insert the parent order row with status "queue". */
+      const orderInsert = await run(
+        `
+          INSERT INTO orders (table_id, status, total_price, payment_status)
+          VALUES (?, ?, ?, 'unpaid')
+        `,
+        [tableId, "queue", additionalPrice]
+      );
+      orderId = orderInsert.lastID;
+    }
+
+    const insertedOrderItems = [];
 
     /* Insert each item and deduct its ingredients from inventory. */
     for (const item of items) {
       const menuItem = menuItemMap.get(item.menu_item_id);
 
-      await run(
+      const itemInsert = await run(
         `
           INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes)
           VALUES (?, ?, ?, ?, ?)
         `,
-        [orderInsert.lastID, item.menu_item_id, item.quantity, menuItem.price, item.notes]
+        [orderId, item.menu_item_id, item.quantity, menuItem.price, item.notes]
       );
+      
+      insertedOrderItems.push({
+        id: itemInsert.lastID,
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        price_at_order_time: menuItem.price,
+        notes: item.notes,
+        item_name: menuItem.name,
+      });
 
       /*
        * Deduct ingredients from inventory. If no recipe is defined for a menu
@@ -220,7 +244,7 @@ const createOrder = async (orderData) => {
               JSON.stringify({
                 menu_item: menuItem.name,
                 amount_deducted: amountToDeduct,
-                order_id: orderInsert.lastID
+                order_id: orderId
               })
             ]
           );
@@ -230,7 +254,8 @@ const createOrder = async (orderData) => {
 
     await run("COMMIT");
 
-    return fetchOrderById(orderInsert.lastID);
+    const fullOrder = await fetchOrderById(orderId);
+    return { order: fullOrder, isAddOn, newItems: insertedOrderItems };
   } catch (transactionError) {
     try {
       await run("ROLLBACK");
@@ -512,6 +537,22 @@ const archiveYesterdaysOrders = async () => {
   }
 };
 
+/* markOrderPaid sets the payment_status to paid and archives the order. */
+const markOrderPaid = async (orderId) => {
+  await run("BEGIN TRANSACTION");
+  try {
+    await run("UPDATE orders SET payment_status = 'paid', customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?", [orderId]);
+    await run(
+      `INSERT INTO order_status_history (order_id, status, changed_by) VALUES (?, 'paid', 'Cashier')`,
+      [orderId]
+    );
+    await run("COMMIT");
+  } catch (err) {
+    await run("ROLLBACK");
+    throw err;
+  }
+};
+
 module.exports = {
   createOrder,
   getOrder,
@@ -525,4 +566,5 @@ module.exports = {
   kitchenArchiveOrder,
   getKitchenArchivedOrders,
   archiveYesterdaysOrders,
+  markOrderPaid
 };

@@ -290,7 +290,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         table_id: tableInfo.id,
         items: snapshot.map(c => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes }))
       });
-      setOrders(cur => [order, ...cur]);
+      setOrders(cur => {
+        if (cur.some(o => o.id === order.id)) {
+          return cur.map(o => o.id === order.id ? order : o);
+        }
+        return [order, ...cur];
+      });
       prevStageRef.current[order.id] = order.status;
       setCart([]);
       switchTab("orders");

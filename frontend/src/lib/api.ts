@@ -262,6 +262,14 @@ export const archivePaidOrders = async (qr: string): Promise<{ archived_count: n
   }, qr);
 };
 
+export const printFinalBill = async (qr: string, orderId: number, cashierName: string): Promise<PaymentOrder | null> => {
+  return await safeFetch(`/orders/${orderId}/checkout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cashierName }),
+  }, qr);
+};
+
 // ── Customer orders ───────────────────────────────────────────────────────────
 
 export const placeOrder = async (

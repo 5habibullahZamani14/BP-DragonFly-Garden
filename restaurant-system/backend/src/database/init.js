@@ -181,6 +181,7 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "status", "TEXT NOT NULL DEFAULT 'pending'");
   await ensureColumn("orders", "total_price", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");
   /* item_status tracks individual dish readiness within an order. */

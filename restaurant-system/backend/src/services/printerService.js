@@ -1,23 +1,7 @@
 /*
  * printerService.js — Thermal printer integration for order tickets.
- *
- * This service handles formatting order data as a plain-text receipt and
- * sending it to a thermal printer. Because the printer is not yet physically
- * connected during this phase of development, the service has two operational
- * modes:
- *
- *   1. Fallback (no PRINTER_COMMAND set): The formatted ticket is written to a
- *      .txt file in the backend/logs directory. This lets us verify the ticket
- *      content looks correct without needing the hardware connected.
- *
- *   2. Live printing (PRINTER_COMMAND set): The formatted ticket text is piped
- *      into the shell command defined by PRINTER_COMMAND. On the Raspberry Pi
- *      this will be something like `lp -d thermal_printer` or a custom ESC/POS
- *      binary. The service streams the ticket to the process's stdin and waits
- *      for it to exit cleanly.
- *
- * Both modes write to the logs directory first so there is always a file record
- * of every print attempt, regardless of whether the hardware print succeeded.
+ * Rewritten to support Advanced C# GDI Printing with Rich Text tags
+ * and distinct receipt layouts (Checklist vs Final Bill).
  */
 
 const fs = require("fs");
@@ -25,179 +9,181 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const printerService = {
-  /*
-   * formatTicket converts an order object into a human-readable plain-text
-   * receipt. The format uses fixed-width ASCII art borders so it looks correct
-   * on a standard 42-character-wide thermal roll. Each line item shows the
-   * quantity, unit price, and line total.
-   */
-  formatTicket: (order) => {
-    const timestamp = new Date().toLocaleString();
-
-    let ticket = "";
-    ticket += "================================\n";
-    ticket += "      RESTAURANT ORDERS        \n";
-    ticket += "================================\n\n";
-    ticket += `Order #${order.id}\n`;
+  formatChecklistTicket: (order, itemsToPrint, isAddOn) => {
+    const timestamp = new Date().toLocaleString('en-GB');
+    let ticket = "\n";
+    
+    ticket += `[CENTER]No. 1/1\n`;
+    ticket += `[CENTER][H1] ${isAddOn ? "ADD-ON" : "NEW ORDER"}\n`;
+    
+    const leftHeader = `${timestamp.substring(0, 16)}`;
+    const rightHeader = `${order.id}`;
+    ticket += `${leftHeader}${rightHeader.padStart(28 - leftHeader.length, ' ')}\n`;
+    ticket += `Send by: Cashier\n`;
     ticket += `Table: ${order.table_number}\n`;
-    ticket += `Time: ${timestamp}\n`;
-    ticket += `Status: ${order.status}\n\n`;
-    ticket += "--------------------------------\n";
-    ticket += "ITEMS:\n";
-    ticket += "--------------------------------\n";
+    ticket += "----------------------------\n";
+    
+    itemsToPrint.forEach(item => {
+      
+      const words = item.item_name.split(' ');
+      const nameLines = [];
+      let curLine = "";
+      for (let w of words) {
+         if ((curLine + w).length > 22) {
+            if (curLine) nameLines.push(curLine.trim());
+            while (w.length > 22) {
+               nameLines.push(w.substring(0, 22));
+               w = w.substring(22);
+            }
+            curLine = w + " ";
+         } else {
+            curLine += w + " ";
+         }
+      }
+      if (curLine.trim()) nameLines.push(curLine.trim());
 
-    if (Array.isArray(order.items)) {
-      order.items.forEach((item, index) => {
-        const lineTotal = item.quantity * item.price_at_order_time;
-        ticket += `${index + 1}. ${item.item_name}\n`;
-        ticket += `   Qty: ${item.quantity} x $${item.price_at_order_time.toFixed(2)} = $${lineTotal.toFixed(2)}\n`;
-
-        if (item.notes) {
-          ticket += `   Note: ${item.notes}\n`;
+      const qtyStr = `${item.quantity}x`.padEnd(4, ' ');
+      
+      nameLines.forEach((line, idx) => {
+        if (idx === 0) {
+          ticket += `${qtyStr} ${line}\n`;
+        } else {
+          ticket += `     ${line}\n`;
         }
       });
-    }
 
-    ticket += "\n--------------------------------\n";
-    ticket += `TOTAL: $${order.total_price.toFixed(2)}\n`;
-    ticket += "--------------------------------\n\n";
-    ticket += "Please prepare items above\n";
-    ticket += "================================\n";
+      if (item.notes) {
+        // Wrap notes too
+        const noteWords = item.notes.split(' ');
+        let curNote = "     Note: ";
+        for (let nw of noteWords) {
+          if ((curNote + nw).length > 28) {
+            ticket += `${curNote.trimEnd()}\n`;
+            curNote = "     " + nw + " ";
+          } else {
+            curNote += nw + " ";
+          }
+        }
+        if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
+      }
+      ticket += `[RIGHT][SQUARE]\n`;
+      ticket += "----------------------------\n";
+    });
     
-    // Feed the paper past the tear bar
-    ticket += "\n\n\n\n\n\n";
-    
-    // Add universal ESC/POS partial cut command (GS V 0)
-    ticket += "\x1D\x56\x00";
-
+    ticket += "\n\n";
     return ticket;
   },
 
-  /*
-   * printTicket formats the ticket and sends it to the printer. It always
-   * saves a copy to the logs directory, then conditionally spawns the printer
-   * command if PRINTER_COMMAND is set in the environment.
-   */
-  printTicket: (order) =>
+  formatFinalReceipt: (order, cashierName) => {
+    const timestamp = new Date().toLocaleString('en-GB');
+    let ticket = "\n";
+    
+    ticket += "[CENTER][H1] BP DragonFly\n";
+    ticket += "[CENTER]FORMOSA ETEN SDN. BHD.\n";
+    ticket += "[CENTER]REG NO: 201601030589\n";
+    ticket += "[CENTER]SST NO: P11-1809-32000074\n";
+    ticket += "[CENTER]NO. 6H-1-19, PENANG\n";
+    ticket += "----------------------------\n";
+    
+    ticket += `Invoice no: ${order.id}\n`;
+    ticket += `Date: ${timestamp.substring(0, 16)}\n`;
+    ticket += `Cashier: ${cashierName}\n`;
+    ticket += `Table: ${order.table_number}\n`;
+    ticket += "\n";
+    ticket += `[H1] ORDER ${order.id}\n`;
+    ticket += "----------------------------\n";
+    ticket += "Qty Item          Price(MYR)\n";
+    ticket += "----------------------------\n";
+    
+    let totalQty = 0;
+    
+    order.items.forEach(item => {
+      totalQty += item.quantity;
+      const qtyStr = item.quantity.toString().padEnd(3, ' ');
+      // 28 chars total. Qty(3)+space(1)+name(16)+price(8) = 28 chars
+      const nameStr = item.item_name.substring(0, 16).padEnd(16, ' ');
+      const lineTotal = (item.quantity * item.price_at_order_time).toFixed(2);
+      const priceStr = lineTotal.padStart(8, ' ');
+      
+      ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
+      ticket += `    (${item.price_at_order_time.toFixed(2)})\n`;
+    });
+    
+    ticket += "----------------------------\n";
+    ticket += `Qty ${totalQty}\n`;
+    
+    const subtotal = Number(order.total_price || 0);
+    const sst = subtotal * (order.vat_rate || 0.06);
+    const serviceCharge = subtotal * (order.service_charge_rate || 0.10);
+    const rawTotal = subtotal + sst + serviceCharge;
+    
+    const roundedTotal = Math.round(rawTotal * 20) / 20;
+    const rounding = roundedTotal - rawTotal;
+    
+    ticket += `Subtotal            ${subtotal.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += `SST (6%)            ${sst.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += `SERVICE CHARGE (10%)${serviceCharge.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += `Bill rounding       ${rounding.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += "----------------------------\n";
+    
+    ticket += `[BOLD]Total (MYR)         ${roundedTotal.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += "----------------------------\n";
+    
+    ticket += "\n";
+    ticket += "[CENTER]This is an official receipt\n";
+    ticket += "[CENTER]Thank you for visiting us\n";
+    ticket += "[CENTER]We hope to see you again!\n";
+    ticket += "\n\n";
+    
+    return ticket;
+  },
+
+  printChecklistTicket: async (order, itemsToPrint, isAddOn) => {
+    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn);
+    return await printerService.executePrint(ticket, `order_${order.id}_checklist`);
+  },
+
+  printFinalReceipt: async (order, cashierName) => {
+    const ticket = printerService.formatFinalReceipt(order, cashierName);
+    return await printerService.executePrint(ticket, `order_${order.id}_final`);
+  },
+
+  executePrint: (ticket, filenamePrefix) =>
     new Promise((resolve, reject) => {
       try {
-        const ticket = printerService.formatTicket(order);
-
-        /* Log the ticket content to the server console for debugging. */
-        console.log("\n========== PRINTING TICKET ==========");
+        console.log(`\n========== PRINTING ${filenamePrefix} ==========`);
         console.log(ticket);
         console.log("=====================================\n");
 
-        /* Save a file copy regardless of whether live printing is configured. */
         const logsDir = path.join(__dirname, "../../logs");
-        if (!fs.existsSync(logsDir)) {
-          fs.mkdirSync(logsDir, { recursive: true });
-        }
+        if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `order_${order.id}_${timestamp}.txt`;
+        const filename = `${filenamePrefix}_${timestamp}.txt`;
         const filepath = path.join(logsDir, filename);
         fs.writeFileSync(filepath, ticket);
 
-        const printerCommand = process.env.PRINTER_COMMAND;
-
-        /* If no printer command is configured, resolve with the file save result. */
-        if (!printerCommand) {
-          resolve({
-            success: true,
-            message: `Ticket saved for order #${order.id}`,
-            filename
-          });
-          return;
-        }
-
-        const usesFile = printerCommand.includes("{FILE}");
-        let printerProcess;
-        if (usesFile) {
-          const exePath = "C:\\Anything Important\\BP-DragonFly-Garden\\print_gdi.exe";
-          const printerName = "BP_DragonFly_Garden_Confirmed";
-          
-          const proc = require("child_process").spawn(exePath, [filepath, printerName], { shell: false });
-          let stdout = "";
-          let stderr = "";
-          proc.stdout.on("data", (data) => stdout += data);
-          proc.stderr.on("data", (data) => stderr += data);
-          
-          proc.on("close", (code) => {
-            if (code === 0 && stdout.includes("Success")) {
-              resolve({ success: true, message: `Ticket saved and printed for order #${order.id}`, filename });
-            } else {
-              reject({ success: false, message: "Printer command failed", error: `Code: ${code}, Stdout: ${stdout}, Stderr: ${stderr}` });
-            }
-          });
-          proc.on("error", (err) => {
-             reject({ success: false, message: "Printer command failed", error: err.message });
-          });
-          return;
-        } else {
-          /*
-           * Spawn the printer process. Pipe stdin so we can stream the ticket text.
-           */
-          printerProcess = spawn(printerCommand, {
-            shell: true,
-            stdio: ["pipe", "ignore", "pipe"]
-          });
-        }
-
+        const exePath = "C:\\Anything Important\\BP-DragonFly-Garden\\print_gdi.exe";
+        const printerName = "BP_DragonFly_Garden_Confirmed";
+        
+        const proc = spawn(exePath, [filepath, printerName], { shell: false });
+        let stdout = "";
         let stderr = "";
-
-        printerProcess.stderr.on("data", (chunk) => {
-          stderr += chunk.toString();
-        });
-
-        printerProcess.on("error", (processError) => {
-          reject({
-            success: false,
-            message: "Error printing ticket",
-            error: processError.message
-          });
-        });
-
-        printerProcess.on("close", (code) => {
-          if (code !== 0) {
-            reject({
-              success: false,
-              message: "Printer command failed",
-              error: stderr.trim() || `Exit code ${code}`
-            });
-            return;
+        proc.stdout.on("data", (data) => stdout += data);
+        proc.stderr.on("data", (data) => stderr += data);
+        
+        proc.on("close", (code) => {
+          if (code === 0 && stdout.includes("Success")) {
+            resolve({ success: true, message: `Ticket printed`, filename });
+          } else {
+            reject({ success: false, message: "Printer command failed", error: `Code: ${code}, Stdout: ${stdout}, Stderr: ${stderr}` });
           }
-
-          resolve({
-            success: true,
-            message: `Ticket printed for order #${order.id}`,
-            filename
-          });
         });
-
-        /* Write the ticket text to the process's stdin only if we aren't using {FILE} */
-        if (!usesFile) {
-          printerProcess.stdin.write(ticket);
-          printerProcess.stdin.end();
-        }
+        proc.on("error", (err) => reject({ success: false, message: "Printer command failed", error: err.message }));
       } catch (error) {
-        reject({
-          success: false,
-          message: "Error printing ticket",
-          error: error.message
-        });
+        reject({ success: false, message: "Error printing ticket", error: error.message });
       }
-    }),
-
-  /*
-   * configurePrinter is a stub for future hardware configuration. On the
-   * Raspberry Pi this will be expanded to set printer-specific options such
-   * as paper width, character encoding, and cut settings.
-   */
-  configurePrinter: (config) => {
-    console.log("Printer configuration:", config);
-    return true;
-  }
+    })
 };
 
 module.exports = printerService;

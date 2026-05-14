@@ -53,21 +53,57 @@ const orderRoutes = (broadcast) => {
    * in real time without polling.
    */
   router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
-    const order = await createOrder(req.body);
+    const { order, isAddOn, newItems } = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
     
-    // Print 2 physical copies with a 4 second pause between them so they can be torn manually
-    (async () => {
-      try {
-        await printerService.printTicket(order);
-        await new Promise(resolve => setTimeout(resolve, 4000));
-        await printerService.printTicket(order);
-      } catch (err) {
-        console.error("Printer failed:", err);
-      }
-    })();
+    // If the cashier adds an item at the counter right before paying, they can pass silent: true to skip kitchen print
+    if (!req.body.silent) {
+      // Print 2 physical copies with a 6 second pause between them so they can be torn manually
+      (async () => {
+        try {
+          if (isAddOn) {
+            await printerService.printChecklistTicket(order, newItems, true);
+            await new Promise(resolve => setTimeout(resolve, 6000));
+            await printerService.printChecklistTicket(order, newItems, true);
+          } else {
+            await printerService.printChecklistTicket(order, order.items, false);
+            await new Promise(resolve => setTimeout(resolve, 6000));
+            await printerService.printChecklistTicket(order, order.items, false);
+          }
+        } catch (err) {
+          console.error("Printer failed:", err);
+        }
+      })();
+    }
 
     res.status(201).json(order);
+  }));
+
+  router.post("/:id/checkout", asyncHandler(async (req, res) => {
+    const { cashierName } = req.body;
+    // We must use fetchOrderWithPayments from paymentController to get vat_rate, service_charge_rate, and total_with_vat
+    const { fetchOrderWithPayments } = require("../controllers/paymentController");
+    const order = await fetchOrderWithPayments(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    
+    try {
+      await printerService.printFinalReceipt(order, cashierName || "Cashier");
+    } catch (err) {
+      console.error("Printer failed:", err);
+    }
+    
+    res.json(order);
+  }));
+
+  router.patch("/:id/pay", asyncHandler(async (req, res) => {
+    const { markOrderPaid, getOrder } = require("../controllers/orderController");
+    await markOrderPaid(req.params.id);
+    const order = await getOrder(req.params.id);
+    broadcast({ type: "ORDER_STATUS_CHANGED", payload: order });
+    res.json(order);
   }));
 
   /*
