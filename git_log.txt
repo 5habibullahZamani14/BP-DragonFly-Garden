@@ -1,0 +1,59 @@
+﻿commit 7b016f35472cc2ebf29b77eb16870ed513de5488
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Thu May 14 07:50:51 2026 +0800
+
+    feat: implement customer-facing interface with real-time order tracking and menu management
+
+commit 2e6fa910aba0b26093201e1684c72d712d60ea09
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Wed May 13 08:41:59 2026 +0800
+
+    fixed some bugs that resulted from earlier cleanup and would crash the app
+
+commit 14202c5a5ef0345551e68dacfc74ebe8717a3ca1
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Tue May 12 16:48:56 2026 +0800
+
+    feat: add Vite configuration with API proxy settings and component tagging support
+
+commit d4121cd1a80e8700e001acf308808a587fcfcb37
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Tue May 12 16:29:38 2026 +0800
+
+    feat: add reusable AlertDialog component using Radix UI primitives
+
+commit f652da662985a6f90c8be0325ce7f6e5efd2ab42
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Tue May 12 16:23:20 2026 +0800
+
+    feat: implement comprehensive restaurant management dashboard with settings, employee, inventory, and table controls
+
+commit ab5b3c63ca0d1e013244f9e15bddacb55b0bad36
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Tue May 12 15:25:00 2026 +0800
+
+    feat: implement real-time kitchen order management board with auto-archiving and secure pass-code authentication
+
+commit af7dc1f104af491cbd12823c2b3bad7cc05889f1
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Tue May 12 14:58:52 2026 +0800
+
+    feat: initialize BP DragonFly Garden project with full-stack QR-based ordering system architecture
+
+commit 3b7f1b282e66587e40a216b09c166f0311feb071
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Thu May 7 13:32:55 2026 +0800
+
+    feat: add KitchenView dashboard with secure access, real-time order tracking, and auto-archiving functionality
+
+commit e124f04d52a6ad855c082b28cbf100438739b9c9
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Thu May 7 12:39:59 2026 +0800
+
+    feat: add KitchenView component with auto-archiving logic and secure passcode-protected access
+
+commit 285ff78977ce94ddde43ff146c0666a6a916bda6
+Author: Habibullah Zamani <zhabibullah6@gmail.com>
+Date:   Thu May 7 12:05:16 2026 +0800
+
+    feat: implement full-stack order management system with WebSocket real-time updates and customer interface components

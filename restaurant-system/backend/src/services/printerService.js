@@ -105,15 +105,20 @@ const printerService = {
           return;
         }
 
+        let commandToRun = printerCommand;
+        const usesFile = commandToRun.includes("{FILE}");
+        
+        if (usesFile) {
+          commandToRun = commandToRun.replace(/{FILE}/g, filepath);
+        }
+
         /*
-         * Spawn the printer process. stdio is set to pipe stdin (so we can
-         * write the ticket text) and ignore stdout (we do not need the output).
-         * stderr is captured so we can include it in the rejection message if
-         * the process exits with a non-zero code.
+         * Spawn the printer process. If the command uses a file directly, we
+         * ignore stdin. Otherwise, we pipe stdin so we can stream the ticket text.
          */
-        const printerProcess = spawn(printerCommand, {
+        const printerProcess = spawn(commandToRun, {
           shell: true,
-          stdio: ["pipe", "ignore", "pipe"]
+          stdio: usesFile ? ["ignore", "ignore", "pipe"] : ["pipe", "ignore", "pipe"]
         });
 
         let stderr = "";
@@ -147,9 +152,11 @@ const printerService = {
           });
         });
 
-        /* Write the ticket text to the process's stdin and signal end-of-input. */
-        printerProcess.stdin.write(ticket);
-        printerProcess.stdin.end();
+        /* Write the ticket text to the process's stdin only if we aren't using {FILE} */
+        if (!usesFile) {
+          printerProcess.stdin.write(ticket);
+          printerProcess.stdin.end();
+        }
       } catch (error) {
         reject({
           success: false,
