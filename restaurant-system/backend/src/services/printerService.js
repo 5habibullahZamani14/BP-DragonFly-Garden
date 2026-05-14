@@ -63,6 +63,12 @@ const printerService = {
     ticket += "--------------------------------\n\n";
     ticket += "Please prepare items above\n";
     ticket += "================================\n";
+    
+    // Feed the paper past the tear bar
+    ticket += "\n\n\n\n\n\n";
+    
+    // Add universal ESC/POS partial cut command (GS V 0)
+    ticket += "\x1D\x56\x00";
 
     return ticket;
   },
@@ -105,21 +111,38 @@ const printerService = {
           return;
         }
 
-        let commandToRun = printerCommand;
-        const usesFile = commandToRun.includes("{FILE}");
-        
+        const usesFile = printerCommand.includes("{FILE}");
+        let printerProcess;
         if (usesFile) {
-          commandToRun = commandToRun.replace(/{FILE}/g, filepath);
+          const exePath = "C:\\Anything Important\\BP-DragonFly-Garden\\print_gdi.exe";
+          const printerName = "BP_DragonFly_Garden_Confirmed";
+          
+          const proc = require("child_process").spawn(exePath, [filepath, printerName], { shell: false });
+          let stdout = "";
+          let stderr = "";
+          proc.stdout.on("data", (data) => stdout += data);
+          proc.stderr.on("data", (data) => stderr += data);
+          
+          proc.on("close", (code) => {
+            if (code === 0 && stdout.includes("Success")) {
+              resolve({ success: true, message: `Ticket saved and printed for order #${order.id}`, filename });
+            } else {
+              reject({ success: false, message: "Printer command failed", error: `Code: ${code}, Stdout: ${stdout}, Stderr: ${stderr}` });
+            }
+          });
+          proc.on("error", (err) => {
+             reject({ success: false, message: "Printer command failed", error: err.message });
+          });
+          return;
+        } else {
+          /*
+           * Spawn the printer process. Pipe stdin so we can stream the ticket text.
+           */
+          printerProcess = spawn(printerCommand, {
+            shell: true,
+            stdio: ["pipe", "ignore", "pipe"]
+          });
         }
-
-        /*
-         * Spawn the printer process. If the command uses a file directly, we
-         * ignore stdin. Otherwise, we pipe stdin so we can stream the ticket text.
-         */
-        const printerProcess = spawn(commandToRun, {
-          shell: true,
-          stdio: usesFile ? ["ignore", "ignore", "pipe"] : ["pipe", "ignore", "pipe"]
-        });
 
         let stderr = "";
 

@@ -56,9 +56,16 @@ const orderRoutes = (broadcast) => {
     const order = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
     
-    // Print 2 physical copies: one for kitchen, one for customer
-    printerService.printTicket(order).catch(err => console.error("Printer 1 failed:", err));
-    printerService.printTicket(order).catch(err => console.error("Printer 2 failed:", err));
+    // Print 2 physical copies with a 4 second pause between them so they can be torn manually
+    (async () => {
+      try {
+        await printerService.printTicket(order);
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        await printerService.printTicket(order);
+      } catch (err) {
+        console.error("Printer failed:", err);
+      }
+    })();
 
     res.status(201).json(order);
   }));
