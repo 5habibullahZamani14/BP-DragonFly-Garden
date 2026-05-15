@@ -76,6 +76,8 @@ const fetchOrderWithPayments = async (orderId) => {
         o.service_charge_rate,
         o.payment_status,
         o.created_at,
+        o.customer_archived_at,
+        o.kitchen_archived_at,
         (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id

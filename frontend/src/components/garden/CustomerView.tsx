@@ -188,11 +188,22 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Real-time WebSocket listener for order updates
   // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
   // ORDER_STATUS_UPDATE fires when the whole order status changes (e.g. direct status patch)
-  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE"], (event) => {
+  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE", "NEW_PAYMENT"], (event) => {
     const updatedOrder = event.payload as Order | null;
     if (!updatedOrder?.id) return;
     
     setOrders((cur) => {
+      // If the backend marked it as archived (e.g., fully paid), remove from active orders
+      if (updatedOrder.customer_archived_at) {
+        if (cur.some(o => o.id === updatedOrder.id)) {
+          setArchivedOrders(prev => {
+            if (prev.some(a => a.id === updatedOrder.id)) return prev;
+            return [updatedOrder, ...prev];
+          });
+        }
+        return cur.filter(o => o.id !== updatedOrder.id);
+      }
+      
       // Only update if this order belongs to our current active session
       if (cur.some(o => o.id === updatedOrder.id)) {
         return cur.map((o) => o.id === updatedOrder.id ? updatedOrder : o);
