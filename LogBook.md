@@ -5,7 +5,7 @@
 **Host organisation:** BP DragonFly Garden  
 **Degree programme:** Bachelor's in Computer Science / Software Engineering  
 **Project:** QR-code-based table ordering and restaurant management system  
-**Current progress (as of 12 May 2026):** ~30% complete — core ordering system functional
+**Current progress (as of 14 May 2026):** ~40% complete — core ordering system functional and hardware printer integration established
 
 Legend: 📅 = Supervisor meeting | 🛠️ = Development work | 🔬 = Research/Survey | 📝 = Planning/Documentation
 
@@ -70,6 +70,7 @@ Legend: 📅 = Supervisor meeting | 🛠️ = Development work | 🔬 = Research
 | 08 May 2026 | Friday | Development | 🛠️ Implemented the Inventory tab in the Management Dashboard. The manager can add raw ingredients with stock levels, set the maximum stock and low-stock threshold percentage, and link ingredients to menu items via the recipe editor. When the threshold is breached, the item is highlighted in the UI. |
 | 11 May 2026 | Monday | Development | 🛠️ **Major milestone**: replaced HTTP polling with WebSockets. Previously, the Kitchen View polled /orders/kitchen every few seconds. Replaced with a WebSocket server attached to the same HTTP server. The backend now broadcasts NEW_ORDER, ORDER_STATUS_UPDATE, ITEM_STATUS_UPDATE, and NEW_PAYMENT events to all connected clients in real time. Implemented the useWebSocket hook on the frontend with automatic reconnection. |
 | 12 May 2026 | Tuesday | Documentation | 📝 Began the documentation and cleanup phase in preparation for **Meeting 4** (tomorrow, 13 May). Removed all AI/scaffolding artifacts from the repository: deleted fix.js, update-payment.cjs, .replit, replit.md, and raw AI session text files. Rewrote README.md with a professional project overview. Added comprehensive inline code comments to all backend source files (server, database, middleware, controllers, routes, services). Started the LOGBOOK.md. |
+| 14 May 2026 | Thursday | Development | 🛠️ Finalized POS receipt and kitchen checklist printing integration using a custom C# GDI engine (`print_gdi.exe`) specifically adapted for 58mm thermal printers. Handled character cutoff by strictly enforcing a 28-character line limit. Implemented custom rich-text tags (`[H1]`, `[BOLD]`, `[CENTER]`, `[SQUARE]`, `[RIGHT]`), word-wrapping for long items, and massive right-aligned Unicode `□` checkboxes for the kitchen. Completely automated the order lifecycle: payments now trigger immediate receipt printing, database archiving, and a `NEW_PAYMENT` WebSocket broadcast that instantly dismisses paid tickets from the live Customer UI. Also compiled the GDI engine using Courier New (size 7) with anti-aliasing disabled to achieve perfectly dark, crisp thermal prints, and ran a secure database script to purge test orders and restore inventory stock. |
 
 ## Upcoming — 13 May 2026 onwards
 
@@ -114,4 +115,4 @@ Legend: 📅 = Supervisor meeting | 🛠️ = Development work | 🔬 = Research
 | Backend API + WebSocket | 5000 | Also serves compiled frontend in production |
 | Frontend (dev only) | 5173 | Vite dev server, proxies API to port 5000 |
 
-_Logbook maintained by HZ. Last updated: 12 May 2026._
+_Logbook maintained by HZ. Last updated: 14 May 2026._
