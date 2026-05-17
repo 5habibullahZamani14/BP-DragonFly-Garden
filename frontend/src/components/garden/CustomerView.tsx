@@ -1046,7 +1046,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <div className="border-t border-dashed mb-4" style={{ borderColor:"hsl(40,20%,68%)" }}/>
                         <div className="flex items-center justify-between">
                           <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-50">Total</span>
-                          <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(Number(o.total_price))}</span>
+                          <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
                         </div>
                       </div>
 
@@ -1075,7 +1075,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <p className="font-semibold text-foreground/70">Order #{o.id}</p>
                         <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
                       </div>
-                      <span className="shrink-0 font-display text-foreground/55">{formatRM(Number(o.total_price))}</span>
+                      <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
                     </li>
                   ))}
                 </ul>
@@ -1099,7 +1099,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="truncate font-medium text-foreground/70">Order #{o.id}</span>
                       <span className="truncate text-foreground/40">· {(o.items?.length || 0)} item{(o.items?.length || 0) === 1 ? "" : "s"}</span>
                     </div>
-                    <span className="shrink-0 font-display text-foreground/55">{formatRM(Number(o.total_price))}</span>
+                    <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
                   </li>
                 ))}
               </ul>

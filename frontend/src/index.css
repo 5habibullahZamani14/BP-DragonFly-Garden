@@ -666,3 +666,24 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #qr-code-print-area, #qr-code-print-area * {
+    visibility: visible;
+  }
+  #qr-code-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+  }
+}

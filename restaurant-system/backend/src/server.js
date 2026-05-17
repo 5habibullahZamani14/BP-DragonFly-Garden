@@ -23,9 +23,8 @@ const orderRoutes = require("./routes/orderRoutes");
 const tableRoutes = require("./routes/tableRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const managementRoutes = require("./routes/managementRoutes");
-const { executeArchive } = require("./controllers/paymentController");
+const { executeArchive, forceArchiveLeftovers } = require("./controllers/paymentController");
 const initializeDatabase = require("./database/init");
-const { archiveYesterdaysOrders } = require("./controllers/orderController");
 const seedDatabase = require("./database/seed");
 
 /*
@@ -153,8 +152,11 @@ const startServer = async () => {
     /* Insert default menu items, tables, and settings if the database is empty. */
     await seedDatabase();
 
-    /* Move any ready orders left over from yesterday into the archive. */
-    await archiveYesterdaysOrders();
+    /* Move any leftover orders from yesterday into the Grand Archive. */
+    const leftoversCount = await forceArchiveLeftovers();
+    if (leftoversCount > 0) {
+      console.log(`[Startup] Cleaned up ${leftoversCount} leftover order(s) from previous days.`);
+    }
 
     server.listen(PORT, HOST, () => {
       console.log(`Server running on http://${HOST}:${PORT}`);
@@ -176,9 +178,9 @@ const startServer = async () => {
 
         const runArchive = async () => {
           try {
-          const count = await executeArchive();
-            await archiveYesterdaysOrders();
-            console.log(`Scheduled archive completed. Archived ${count} orders.`);
+            const count = await executeArchive();
+            const leftoverCount = await forceArchiveLeftovers();
+            console.log(`Scheduled archive completed. Archived ${count} paid orders and ${leftoverCount} leftover orders.`);
           } catch (err) {
             console.error("Scheduled archive failed:", err);
           }

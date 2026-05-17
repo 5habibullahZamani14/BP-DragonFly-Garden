@@ -17,7 +17,15 @@
  * requests that do not need the role QR code appended.
  */
 
-import type { MenuItem, Order } from "./menu-data";
+import type { MenuItem, Order as BaseOrder } from "./menu-data";
+
+export type Order = BaseOrder & {
+  order_type?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  collection_time?: string;
+  delivery_address?: string;
+};
 
 /*
  * API_BASE is the root URL of the backend server. During development this
@@ -101,6 +109,17 @@ type AddOrderItemPayload = {
   employee_name?: string;
 };
 
+type CounterOrderPayload = {
+  table_id: number;
+  order_type: string;
+  customer_name?: string;
+  customer_phone?: string;
+  collection_time?: string;
+  delivery_address?: string;
+  items: { menu_item_id: number; quantity: number; notes?: string }[];
+  silent?: boolean;
+};
+
 type ApiBody = Record<string, unknown> | unknown[] | null;
 
 export type ManagementSettings = {
@@ -146,6 +165,8 @@ export type InventoryItem = {
   current_stock: number;
   max_stock: number;
   low_stock_threshold_percent: number;
+  usage_unit?: string;
+  usage_conversion?: number;
 };
 
 export type InventoryPayload = {
@@ -155,6 +176,8 @@ export type InventoryPayload = {
   current_stock?: number;
   max_stock?: number;
   low_stock_threshold_percent?: number;
+  usage_unit?: string;
+  usage_conversion?: number;
 };
 
 export type RecipeIngredient = {
@@ -267,6 +290,17 @@ export const printFinalBill = async (qr: string, orderId: number, cashierName: s
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cashierName }),
+  }, qr);
+};
+
+export const createCounterOrder = async (
+  qr: string,
+  body: CounterOrderPayload
+): Promise<Order> => {
+  return await safeFetch<Order>("/orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   }, qr);
 };
 

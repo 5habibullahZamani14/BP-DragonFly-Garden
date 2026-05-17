@@ -58,17 +58,17 @@ const orderRoutes = (broadcast) => {
     
     // If the cashier adds an item at the counter right before paying, they can pass silent: true to skip kitchen print
     if (!req.body.silent) {
-      // Print 2 physical copies with a 6 second pause between them so they can be torn manually
+      // Print 2 physical copies for DINE_IN, otherwise just 1 copy
       (async () => {
         try {
-          if (isAddOn) {
-            await printerService.printChecklistTicket(order, newItems, true);
+          const copies = order.order_type === 'DINE_IN' ? 2 : 1;
+          const itemsToPrint = isAddOn ? newItems : order.items;
+          
+          await printerService.printChecklistTicket(order, itemsToPrint, isAddOn);
+          
+          if (copies > 1) {
             await new Promise(resolve => setTimeout(resolve, 6000));
-            await printerService.printChecklistTicket(order, newItems, true);
-          } else {
-            await printerService.printChecklistTicket(order, order.items, false);
-            await new Promise(resolve => setTimeout(resolve, 6000));
-            await printerService.printChecklistTicket(order, order.items, false);
+            await printerService.printChecklistTicket(order, itemsToPrint, isAddOn);
           }
         } catch (err) {
           console.error("Printer failed:", err);

@@ -71,7 +71,15 @@ const fetchOrderById = async (orderId) => {
         t.qr_code,
         o.status,
         o.total_price,
-        o.created_at
+        o.created_at,
+        o.order_type,
+        o.customer_name,
+        o.customer_phone,
+        o.collection_time,
+        o.delivery_address,
+        o.vat_rate,
+        o.service_charge_rate,
+        (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id
       WHERE o.id = ?
@@ -122,7 +130,15 @@ const fetchOrderById = async (orderId) => {
  * If any step throws, the transaction is rolled back.
  */
 const createOrder = async (orderData) => {
-  const { table_id: tableId, items } = orderData;
+  const { 
+    table_id: tableId, 
+    items, 
+    order_type = 'DINE_IN', 
+    customer_name = null, 
+    customer_phone = null, 
+    collection_time = null, 
+    delivery_address = null 
+  } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
 
   if (!table) {
@@ -184,10 +200,10 @@ const createOrder = async (orderData) => {
       /* Insert the parent order row with status "queue". */
       const orderInsert = await run(
         `
-          INSERT INTO orders (table_id, status, total_price, payment_status)
-          VALUES (?, ?, ?, 'unpaid')
+          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address)
+          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?)
         `,
-        [tableId, "queue", additionalPrice]
+        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address]
       );
       orderId = orderInsert.lastID;
     }
@@ -220,27 +236,28 @@ const createOrder = async (orderData) => {
        * item, this loop simply has no rows to iterate and nothing is deducted.
        */
       const ingredients = await all(
-        "SELECT inventory_item_id, quantity_required FROM menu_item_ingredients WHERE menu_item_id = ?",
+        `SELECT m.inventory_item_id, m.quantity_required, i.usage_conversion, i.name 
+         FROM menu_item_ingredients m
+         JOIN inventory_items i ON m.inventory_item_id = i.id
+         WHERE m.menu_item_id = ?`,
         [item.menu_item_id]
       );
 
       for (const ing of ingredients) {
-        const amountToDeduct = ing.quantity_required * item.quantity;
+        const amountToDeduct = (ing.quantity_required * item.quantity) / (ing.usage_conversion || 1.0);
         await run(
           "UPDATE inventory_items SET current_stock = current_stock - ? WHERE id = ?",
           [amountToDeduct, ing.inventory_item_id]
         );
 
         /* Log the deduction in the central audit log so the manager can see it. */
-        const invItem = await get("SELECT name FROM inventory_items WHERE id = ?", [ing.inventory_item_id]);
-
-        if (invItem) {
+        if (ing.name) {
           await run(
             `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
              VALUES (?, ?, ?, ?, ?, ?)`,
             [
               "INVENTORY", "DEDUCT", "System (Customer Order)",
-              ing.inventory_item_id.toString(), invItem.name,
+              ing.inventory_item_id.toString(), ing.name,
               JSON.stringify({
                 menu_item: menuItem.name,
                 amount_deducted: amountToDeduct,
@@ -294,6 +311,11 @@ const getOrders = async (filters) => {
       o.status,
       o.total_price,
       o.created_at,
+      o.order_type,
+      o.customer_name,
+      o.customer_phone,
+      o.collection_time,
+      o.delivery_address,
       COUNT(oi.id) AS item_count
     FROM orders o
     INNER JOIN tables t ON t.id = o.table_id
@@ -338,6 +360,14 @@ const getKitchenOrders = async (filters) => {
       o.status,
       o.total_price,
       o.created_at,
+      o.order_type,
+      o.customer_name,
+      o.customer_phone,
+      o.collection_time,
+      o.delivery_address,
+      o.vat_rate,
+      o.service_charge_rate,
+      (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat,
       oi.id AS order_item_id,
       oi.menu_item_id,
       oi.quantity,
@@ -375,6 +405,14 @@ const getKitchenOrders = async (filters) => {
         status: row.status,
         total_price: row.total_price,
         created_at: row.created_at,
+        order_type: row.order_type,
+        customer_name: row.customer_name,
+        customer_phone: row.customer_phone,
+        collection_time: row.collection_time,
+        delivery_address: row.delivery_address,
+        vat_rate: row.vat_rate,
+        service_charge_rate: row.service_charge_rate,
+        total_with_vat: row.total_with_vat,
         items: []
       };
 

@@ -13,14 +13,26 @@ const printerService = {
     const timestamp = new Date().toLocaleString('en-GB');
     let ticket = "\n";
     
-    ticket += `[CENTER]No. 1/1\n`;
-    ticket += `[CENTER][H1] ${isAddOn ? "ADD-ON" : "NEW ORDER"}\n`;
+    let orderTypeStr = isAddOn ? "ADD-ON" : "NEW ORDER";
+    if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON (PICKUP)" : "PICKUP";
+    else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON (DELIVERY)" : "DELIVERY";
+    else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON (TAKEAWAY)" : "TAKEAWAY";
+
+    ticket += `[CENTER][H1] ${orderTypeStr}\n`;
     
     const leftHeader = `${timestamp.substring(0, 16)}`;
     const rightHeader = `${order.id}`;
     ticket += `${leftHeader}${rightHeader.padStart(28 - leftHeader.length, ' ')}\n`;
     ticket += `Send by: Cashier\n`;
-    ticket += `Table: ${order.table_number}\n`;
+    
+    if (!order.order_type || order.order_type === 'DINE_IN') {
+      ticket += `Table: ${order.table_number}\n`;
+    } else {
+      if (order.customer_name) ticket += `Name: ${order.customer_name}\n`;
+      if (order.customer_phone) ticket += `Phone: ${order.customer_phone}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup At: ${order.collection_time}\n`;
+      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Address: ${order.delivery_address}\n`;
+    }
     ticket += "----------------------------\n";
     
     itemsToPrint.forEach(item => {
@@ -88,7 +100,18 @@ const printerService = {
     ticket += `Invoice no: ${order.id}\n`;
     ticket += `Date: ${timestamp.substring(0, 16)}\n`;
     ticket += `Cashier: ${cashierName}\n`;
-    ticket += `Table: ${order.table_number}\n`;
+    if (!order.order_type || order.order_type === 'DINE_IN') {
+      ticket += `Table: ${order.table_number}\n`;
+    } else {
+      ticket += `Order Type: ${order.order_type}\n`;
+      if (order.customer_name) ticket += `Customer: ${order.customer_name}\n`;
+      if (order.order_type === 'DELIVERY' && order.delivery_address) {
+        ticket += `Address: ${order.delivery_address}\n`;
+      }
+      if (order.order_type === 'PICKUP' && order.collection_time) {
+        ticket += `Pickup Time: ${order.collection_time}\n`;
+      }
+    }
     ticket += "\n";
     ticket += `[H1] ORDER ${order.id}\n`;
     ticket += "----------------------------\n";
@@ -113,8 +136,8 @@ const printerService = {
     ticket += `Qty ${totalQty}\n`;
     
     const subtotal = Number(order.total_price || 0);
-    const sst = subtotal * (order.vat_rate || 0.06);
     const serviceCharge = subtotal * (order.service_charge_rate || 0.10);
+    const sst = (subtotal + serviceCharge) * (order.vat_rate || 0.06);
     const rawTotal = subtotal + sst + serviceCharge;
     
     const roundedTotal = Math.round(rawTotal * 20) / 20;

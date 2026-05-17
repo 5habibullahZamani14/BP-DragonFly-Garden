@@ -45,6 +45,7 @@ import type { PaymentOrder } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
+import { PosOrderModal } from "./PosOrderModal";
 
 interface PaymentMethod {
   id: number;
@@ -88,6 +89,15 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [newItemId, setNewItemId] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [loading, setLoading] = useState(true);
+  const [posModalOpen, setPosModalOpen] = useState(false);
+  const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">("TAKEAWAY");
+  
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check login state on mount
   useEffect(() => {
@@ -111,7 +121,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     try {
       const employees = await fetchEmployees(false);
       const matched = employees.find(
-        (emp) => emp.employee_id === loginInputId && emp.name.toLowerCase() === loginInputName.toLowerCase()
+        (emp) => emp.employee_id.toUpperCase() === loginInputId.trim().toUpperCase() && emp.name.toLowerCase() === loginInputName.trim().toLowerCase()
       );
 
       if (matched) {
@@ -145,8 +155,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
           
           if (currentTimeStr < start || currentTimeStr > end) {
+            notify("error", `System locked. Current time is outside working hours (${start} - ${end}).`);
             handleLogout();
-            // Silent logout, or inline UI alert later. For now just clear session
           }
         }
       } catch (e) {
@@ -191,8 +201,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       if (cashMethod) {
         setSelectedPaymentMethod(cashMethod.id.toString());
       }
+      
+      return unpaid;
     } catch (error) {
       notify("error", "Failed to load payment data");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -319,18 +332,49 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 gap-4">
           <div className="flex items-center gap-4">
             <SettingsModal />
-            <h1 className="text-3xl font-bold text-gray-900">Payment Counter</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mr-2">Payment Counter</h1>
           </div>
-          <div className="flex items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
-            <span className="text-sm font-medium text-gray-700">
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm w-full xl:w-auto overflow-x-auto">
+            <div className="flex items-center gap-3 mr-2 shrink-0">
+              <span className="text-sm font-semibold text-gray-800">
+                {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+              </span>
+              <Badge variant="outline" className={
+                currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? "bg-green-100 text-green-700 border-green-200" :
+                currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? "bg-orange-100 text-orange-700 border-orange-200" :
+                "bg-gray-100 text-gray-600 border-gray-200"
+              }>
+                {currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? "Working time" :
+                 currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? "Over time" :
+                 "Outside working time"}
+              </Badge>
+            </div>
+            <span className="text-sm font-medium text-gray-700 border-l border-gray-300 pl-4 shrink-0">
               Shift: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
-            <HelpModal title="Payment Counter" sections={paymentHelpSections} />
-            <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
-              <LogOut className="h-4 w-4 mr-2" /> Logout
+            <div className="flex items-center gap-2 shrink-0">
+              <HelpModal title="Payment Counter" sections={paymentHelpSections} />
+              <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
+                <LogOut className="h-4 w-4 mr-2" /> Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 mb-8 bg-white/60 p-2 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto w-full">
+          <span className="text-sm font-medium text-gray-500 pl-3 pr-2 shrink-0 uppercase tracking-widest">New Order</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={() => { setPosModalInitialType("TAKEAWAY"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-green-700 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
+              + Takeaway
+            </Button>
+            <Button onClick={() => { setPosModalInitialType("PICKUP"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-orange-600 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
+              + Pickup
+            </Button>
+            <Button onClick={() => { setPosModalInitialType("DELIVERY"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-blue-600 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
+              + Delivery
             </Button>
           </div>
         </div>
@@ -347,8 +391,20 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 ) : unpaidOrders.map((order) => (
                   <Card key={order.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-white pb-4">
-                      <CardTitle className="flex items-center justify-between">
-                        <span className="text-xl">{order.table_number}</span>
+                      <CardTitle className="flex items-start justify-between">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xl">
+                             {!order.order_type || order.order_type === 'DINE_IN' ? order.table_number : `Order #${order.id}`}
+                          </span>
+                          {order.order_type && order.order_type !== 'DINE_IN' && (
+                            <div className="flex gap-2 items-center flex-wrap mt-1">
+                              {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">Pickup {order.collection_time && `@ ${order.collection_time}`}</Badge>}
+                              {order.order_type === 'DELIVERY' && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0">Delivery</Badge>}
+                              {order.order_type === 'TAKEAWAY' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0">Takeaway</Badge>}
+                              {order.customer_name && <span className="text-sm text-gray-500 font-medium ml-1">{order.customer_name}</span>}
+                            </div>
+                          )}
+                        </div>
                         <Badge variant={order.remaining > 0 ? "destructive" : "secondary"} className="text-sm px-3 py-1">
                           RM {order.remaining.toFixed(2)}
                         </Badge>
@@ -423,6 +479,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                   step="0.01" 
                                   value={paymentAmount} 
                                   onChange={e => setPaymentAmount(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' && !isProcessing) {
+                                      handleProcessPayment();
+                                    }
+                                  }}
                                   placeholder="e.g. 50.00"
                                   className="text-lg"
                                 />
@@ -521,6 +582,22 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               </div>
           </DialogContent>
       </Dialog>
+
+      <PosOrderModal 
+        isOpen={posModalOpen} 
+        onOpenChange={setPosModalOpen} 
+        initialOrderType={posModalInitialType}
+        menuItems={menuItems} 
+        qrCode={qrCode} 
+        notify={notify} 
+        onOrderCreated={async (order) => {
+           const unpaid = await loadData();
+           if (unpaid) {
+               const newlyCreated = unpaid.find(o => o.id === order.id);
+               if (newlyCreated) setSelectedOrder(newlyCreated);
+           }
+        }} 
+      />
     </div>
   );
 };

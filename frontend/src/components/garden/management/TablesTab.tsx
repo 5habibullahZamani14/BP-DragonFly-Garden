@@ -17,13 +17,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchTables, createTable, updateTable, deleteTable } from "@/lib/api";
 import type { TableRecord } from "@/lib/api";
-import { Grid3X3, Plus, QrCode, Edit2, Trash2 } from "lucide-react";
+import { Grid3X3, Plus, QrCode, Edit2, Trash2, Printer, HandPlatter } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const TablesTab = () => {
   const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });
+  const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
   
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
   const [editTable, setEditTable] = useState({ table_number: "", qr_code: "" });
@@ -141,9 +144,9 @@ export const TablesTab = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {tables.map((table) => (
-          <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group">
+          <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group cursor-pointer" onClick={() => setViewQRCodeTable(table)}>
             <CardContent className="pt-6 pb-4">
-              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                 <button 
                   onClick={() => {
                     setEditingTableId(table.id);
@@ -169,6 +172,72 @@ export const TablesTab = () => {
           </Card>
         ))}
       </div>
+
+      {/* QR Code Modal */}
+      <Dialog open={!!viewQRCodeTable} onOpenChange={(open) => !open && setViewQRCodeTable(null)}>
+        <DialogContent className="sm:max-w-[340px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
+          {viewQRCodeTable && (
+            <div className="bg-gradient-to-b from-gray-50 to-gray-100 p-6 flex flex-col items-center justify-center relative">
+            {/* Printable Area */}
+            <div id="qr-code-print-area" className="flex flex-col items-center justify-center w-full print:bg-white print:w-full print:h-full">
+              {/* Filter Definition for Fluid QR */}
+              <svg width="0" height="0" className="absolute hidden">
+                <filter id="fluid-qr">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+                  <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 15 -5" result="fluid" />
+                  <feComposite in="SourceGraphic" in2="fluid" operator="atop"/>
+                </filter>
+              </svg>
+
+              {/* The QR Code Container */}
+              <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-sm mt-4">
+                <div style={{ filter: "url(#fluid-qr)" }} className="opacity-90">
+                  <QRCodeSVG 
+                    value={`${window.location.origin}/customer?table=${viewQRCodeTable.qr_code}`} 
+                    size={180} 
+                    level="H"
+                    fgColor="#444444"
+                    bgColor="#ffffff"
+                  />
+                </div>
+                
+                {/* The SCAN ME Center Badge */}
+                <div className="absolute inset-0 flex items-center justify-center z-20">
+                  <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none">
+                    <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">Scan</span>
+                    <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">Me</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Tray */}
+              <div className="w-[240px] mx-auto z-10 relative mt-0">
+                <div className="w-full h-[18px] bg-[#555555] rounded-b-full rounded-t-[4px] shadow-sm relative"></div>
+              </div>
+              
+              {/* Hand */}
+              <svg viewBox="0 0 200 150" className="w-[180px] h-[135px] text-[#555555] mx-auto z-0" style={{ marginTop: '-15px' }}>
+                <path d="M 45 45 C 55 70, 70 95, 100 115" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+                <path d="M 65 45 C 75 70, 85 95, 110 115" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+                <path d="M 85 45 C 95 70, 100 95, 120 115" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+                <path d="M 130 55 C 135 70, 120 90, 110 100" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+                <path d="M 95 145 L 95 125 C 80 120, 60 90, 45 45" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 140 145 L 140 115 C 145 100, 135 75, 130 55" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 91 145 L 144 145" fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round" />
+              </svg>
+              
+              <p className="mt-4 text-xl font-bold text-gray-800 uppercase tracking-widest">{viewQRCodeTable.table_number}</p>
+            </div>
+
+            <div className="w-full mt-4">
+              <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" /> Print QR Code
+              </Button>
+            </div>
+          </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

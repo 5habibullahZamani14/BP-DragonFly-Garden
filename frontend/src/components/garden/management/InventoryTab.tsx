@@ -18,36 +18,63 @@
  *      from the raw stock.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { fetchInventory, createInventoryItem, updateInventoryStock, fetchRecipes, updateRecipe, fetchMenuItems } from "@/lib/api";
 import type { InventoryItem, Recipe, RecipeIngredient } from "@/lib/api";
 import type { MenuItem } from "@/lib/menu-data";
 import { useWebSocket } from "@/lib/useWebSocket";
-import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity } from "lucide-react";
+import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 
-export const InventoryTab = () => {
-  const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">("overview");
+export const InventoryTab = ({ 
+  initialSubTab = "overview", 
+  initialEditItemId 
+}: { 
+  initialSubTab?: "overview" | "stock" | "recipes", 
+  initialEditItemId?: number 
+}) => {
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">(initialSubTab);
   
   // Stock State
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingItem, setIsAddingItem] = useState(false);
-  const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
+  const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
+  const [addWarning, setAddWarning] = useState<{message: string, isExact: boolean} | null>(null);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
 
   // Recipe State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedMenuItem, setSelectedMenuItem] = useState<number | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<RecipeIngredient[]>([]);
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState("");
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (initialSubTab) setActiveSubTab(initialSubTab);
+  }, [initialSubTab]);
+
+  const lastAppliedEditId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (initialEditItemId && inventory.length > 0 && lastAppliedEditId.current !== initialEditItemId) {
+      const itemToEdit = inventory.find(i => i.id === initialEditItemId);
+      if (itemToEdit) {
+        setEditingItem(itemToEdit);
+        lastAppliedEditId.current = initialEditItemId;
+      }
+    }
+  }, [initialEditItemId, inventory]);
 
   const loadData = async () => {
     try {
@@ -72,16 +99,66 @@ export const InventoryTab = () => {
     loadData();
   });
 
-  const handleCreateItem = async () => {
+  const handleCreateItem = async (force = false) => {
+    setAddWarning(null);
+    if (!newItem.name.trim()) {
+      setAddWarning({ message: "Item name is required.", isExact: true });
+      return;
+    }
+
+    const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const newNameNorm = normalize(newItem.name);
+    
+    if (!force) {
+      const exactDuplicate = inventory.find(item => normalize(item.name) === newNameNorm);
+      if (exactDuplicate) {
+        setAddWarning({ message: `An exact match ("${exactDuplicate.name}") already exists. This cannot be added.`, isExact: true });
+        return;
+      }
+      
+      const similarDuplicate = inventory.find(item => {
+        const existingNameNorm = normalize(item.name);
+        return (existingNameNorm.includes(newNameNorm) && newNameNorm.length >= 4) ||
+               (newNameNorm.includes(existingNameNorm) && existingNameNorm.length >= 4);
+      });
+
+      if (similarDuplicate) {
+        setAddWarning({ message: `An item that sounds similar ("${similarDuplicate.name}") already exists. Are you sure you want to proceed?`, isExact: false });
+        return;
+      }
+    }
+
     try {
       await createInventoryItem({
         ...newItem,
         current_stock: parseFloat(newItem.current_stock) || 0,
         max_stock: parseFloat(newItem.max_stock) || 100,
-        low_stock_threshold_percent: parseFloat(newItem.low_stock_threshold_percent) || 15
+        low_stock_threshold_percent: parseFloat(newItem.low_stock_threshold_percent) || 15,
+        usage_unit: newItem.usage_unit,
+        usage_conversion: parseFloat(newItem.usage_conversion) || 1
       });
       setIsAddingItem(false);
-      setNewItem({ name: "", category: "Vegetables", unit: "kg", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
+      setNewItem({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
+      loadData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateFullItem = async () => {
+    if (!editingItem) return;
+    try {
+      await updateInventoryStock(editingItem.id, {
+        name: editingItem.name,
+        category: editingItem.category,
+        unit: editingItem.unit,
+        usage_unit: editingItem.usage_unit,
+        usage_conversion: parseFloat(editingItem.usage_conversion) || 1,
+        current_stock: parseFloat(editingItem.current_stock) || 0,
+        max_stock: parseFloat(editingItem.max_stock) || 100,
+        low_stock_threshold_percent: parseFloat(editingItem.low_stock_threshold_percent) || 15
+      });
+      setEditingItem(null);
       loadData();
     } catch (e) {
       console.error(e);
@@ -200,6 +277,21 @@ export const InventoryTab = () => {
 
       {activeSubTab === "overview" && (
         <div className="space-y-6">
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="help" className="border border-blue-200 bg-blue-50 rounded-xl overflow-hidden">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-blue-100/50 text-blue-800 border-b-0">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Info className="h-4 w-4" /> Need help?
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-1 text-blue-800 text-sm leading-relaxed border-t border-blue-100">
+                <p>This dashboard helps you visualize your supply chain at a glance. The <strong>Health Status</strong> chart on the left ranks your inventory from lowest percentage to highest, immediately highlighting what needs to be reordered. The <strong>Complexity</strong> chart on the right shows which menu items rely on the most ingredients, helping you identify supply bottlenecks.</p>
+                <p className="pt-3 mt-3 border-t border-blue-200/50">
+                  If you need more help about understanding how to use other features you can <button onClick={() => document.getElementById('global-help-btn')?.click()} className="underline font-bold hover:text-blue-900">click here</button>.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -251,6 +343,23 @@ export const InventoryTab = () => {
 
       {activeSubTab === "stock" && (
         <div className="space-y-6">
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="help" className="border border-blue-200 bg-blue-50 rounded-xl overflow-hidden">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-blue-100/50 text-blue-800 border-b-0">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Info className="h-4 w-4" /> Need help?
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-1 text-blue-800 text-sm leading-relaxed border-t border-blue-100 space-y-2">
+                <p>The system now handles unit math for you! Set your <strong>Purchase Unit</strong> (how you buy and store the item, e.g. "kg") and your <strong>Recipe Usage Unit</strong> (how you use it in dishes, e.g. "g"). Then, tell the system the conversion rate (e.g. 1 kg = 1000 g).</p>
+                <p>When you build your recipes, you can just think in grams, and the system will automatically deduct the precise fraction of a kilogram from your stock!</p>
+                <p className="pt-3 mt-3 border-t border-blue-200/50">
+                  If you need more help about understanding how to use other features you can <button onClick={() => document.getElementById('global-help-btn')?.click()} className="underline font-bold hover:text-blue-900">click here</button>.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
           <div className="flex justify-end">
             <Button onClick={() => setIsAddingItem(!isAddingItem)} className="bg-orange-600 hover:bg-orange-700 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Inventory Item
@@ -261,6 +370,20 @@ export const InventoryTab = () => {
             <Card className="border-orange-200 shadow-md">
               <CardHeader>
                 <CardTitle>New Inventory Item</CardTitle>
+                {addWarning && (
+                  <div className={`border p-3 rounded-lg text-sm mt-2 flex flex-col gap-2 ${addWarning.isExact ? 'bg-red-50 border-red-200 text-red-700' : 'bg-orange-50 border-orange-200 text-orange-800'}`}>
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{addWarning.message}</span>
+                    </div>
+                    {!addWarning.isExact && (
+                      <div className="flex gap-2 mt-1 ml-6">
+                        <Button size="sm" variant="outline" className="bg-white border-orange-200 text-orange-800 hover:bg-orange-100" onClick={() => setAddWarning(null)}>Cancel</Button>
+                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white" onClick={() => handleCreateItem(true)}>Proceed Anyway</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -279,7 +402,7 @@ export const InventoryTab = () => {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Unit of Measurement</Label>
+                    <Label>Purchase Unit (Stored As)</Label>
                     <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}>
                       <option value="kg">Kilograms (kg)</option>
                       <option value="g">Grams (g)</option>
@@ -287,6 +410,26 @@ export const InventoryTab = () => {
                       <option value="ml">Milliliters (ml)</option>
                       <option value="pcs">Pieces (pcs)</option>
                     </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Recipe Usage Unit</Label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.usage_unit} onChange={e => setNewItem({...newItem, usage_unit: e.target.value})}>
+                      <option value="g">Grams (g)</option>
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="ml">Milliliters (ml)</option>
+                      <option value="L">Liters (L)</option>
+                      <option value="pcs">Pieces (pcs)</option>
+                      <option value="slice">Slices</option>
+                      <option value="pinch">Pinches</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 col-span-1 md:col-span-2 bg-green-50 p-3 rounded-lg border border-green-100 flex items-center justify-between">
+                    <div className="text-sm font-medium text-green-800">Conversion Rate:</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-green-900">1 {newItem.unit} = </span>
+                      <Input type="number" className="w-24 h-8" value={newItem.usage_conversion} onChange={e => setNewItem({...newItem, usage_conversion: e.target.value})} />
+                      <span className="text-sm font-semibold text-green-900">{newItem.usage_unit}</span>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Current Stock</Label>
@@ -302,7 +445,7 @@ export const InventoryTab = () => {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-4">
-                  <Button onClick={handleCreateItem} className="bg-orange-600 hover:bg-orange-700 text-white flex-1">Save Item</Button>
+                  <Button onClick={() => handleCreateItem(false)} className="bg-orange-600 hover:bg-orange-700 text-white flex-1">Save Item</Button>
                   <Button onClick={() => setIsAddingItem(false)} variant="outline" className="flex-1">Cancel</Button>
                 </div>
               </CardContent>
@@ -321,7 +464,12 @@ export const InventoryTab = () => {
                         <CardTitle className="text-lg">{item.name}</CardTitle>
                         <CardDescription>{item.category}</CardDescription>
                       </div>
-                      {isLow && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                      <div className="flex items-center gap-1 -mt-1 -mr-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-100/80 rounded-full" onClick={() => setEditingItem(item)}>
+                          <Pencil className="h-4 w-4 text-gray-500 hover:text-blue-600" />
+                        </Button>
+                        {isLow && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -360,31 +508,144 @@ export const InventoryTab = () => {
               );
             })}
           </div>
+
+          <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Inventory Item</DialogTitle>
+              </DialogHeader>
+              {editingItem && (
+                <div className="space-y-4 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Item Name</Label>
+                      <Input value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                        <option value="Vegetables">Vegetables</option>
+                        <option value="Meat">Meat</option>
+                        <option value="Dairy">Dairy</option>
+                        <option value="Dry Goods">Dry Goods</option>
+                        <option value="Packaging">Packaging</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Purchase Unit</Label>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.unit} onChange={e => setEditingItem({...editingItem, unit: e.target.value})}>
+                        <option value="kg">Kilograms (kg)</option>
+                        <option value="g">Grams (g)</option>
+                        <option value="L">Liters (L)</option>
+                        <option value="ml">Milliliters (ml)</option>
+                        <option value="pcs">Pieces (pcs)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Recipe Usage Unit</Label>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.usage_unit} onChange={e => setEditingItem({...editingItem, usage_unit: e.target.value})}>
+                        <option value="g">Grams (g)</option>
+                        <option value="kg">Kilograms (kg)</option>
+                        <option value="ml">Milliliters (ml)</option>
+                        <option value="L">Liters (L)</option>
+                        <option value="pcs">Pieces (pcs)</option>
+                        <option value="slice">Slices</option>
+                        <option value="pinch">Pinches</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2 col-span-1 md:col-span-2 bg-green-50 p-3 rounded-lg border border-green-100 flex items-center justify-between">
+                      <div className="text-sm font-medium text-green-800">Conversion Rate:</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-green-900">1 {editingItem.unit} = </span>
+                        <Input type="number" className="w-24 h-8" value={editingItem.usage_conversion} onChange={e => setEditingItem({...editingItem, usage_conversion: e.target.value})} />
+                        <span className="text-sm font-semibold text-green-900">{editingItem.usage_unit}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Current Stock</Label>
+                      <Input type="number" value={editingItem.current_stock} onChange={e => setEditingItem({...editingItem, current_stock: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Capacity (100%)</Label>
+                      <Input type="number" value={editingItem.max_stock} onChange={e => setEditingItem({...editingItem, max_stock: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Low Stock Warning Threshold (%)</Label>
+                      <Input type="number" value={editingItem.low_stock_threshold_percent} onChange={e => setEditingItem({...editingItem, low_stock_threshold_percent: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    <Button variant="outline" onClick={() => setEditingItem(null)}>Cancel</Button>
+                    <Button onClick={handleUpdateFullItem} className="bg-orange-600 hover:bg-orange-700 text-white">Save Changes</Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
         </div>
       )}
 
       {activeSubTab === "recipes" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1 space-y-2">
-            <h3 className="font-bold text-gray-700 mb-4">Menu Items</h3>
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-              {menuItems.map(item => (
-                <div 
-                  key={item.id} 
-                  onClick={() => selectRecipe(item.id)}
-                  className={`p-3 rounded-lg cursor-pointer border transition-colors ${selectedMenuItem === item.id ? 'bg-orange-100 border-orange-300 shadow-sm' : 'bg-white hover:bg-gray-50 border-gray-200'}`}
-                >
-                  <div className="font-medium">{item.name}</div>
-                  <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                    <UtensilsCrossed className="h-3 w-3" />
-                    {recipes.find(r => r.id === item.id)?.ingredients?.length || 0} ingredients
-                  </div>
+        <div className="space-y-6">
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="help" className="border border-blue-200 bg-blue-50 rounded-xl overflow-hidden">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-blue-100/50 text-blue-800 border-b-0">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Info className="h-4 w-4" /> Need help?
                 </div>
-              ))}
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-1 text-blue-800 text-sm leading-relaxed border-t border-blue-100">
+                <p>This is where you teach the system how to automatically deduct stock. Select a menu item from the left, then add the ingredients required to make it. <strong>Example:</strong> If you select "Mummy Farm Salad", you might add "Tomatoes" and set the quantity to "150". When a customer orders the salad, 150g of Tomatoes will vanish from your Raw Stock completely automatically.</p>
+                <p className="pt-3 mt-3 border-t border-blue-200/50">
+                  If you need more help about understanding how to use other features you can <button onClick={() => document.getElementById('global-help-btn')?.click()} className="underline font-bold hover:text-blue-900">click here</button>.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex flex-col space-y-3">
+              <div className="flex items-center justify-between gap-4 mb-1">
+                <h3 className="font-bold text-gray-700 whitespace-nowrap">Menu Items</h3>
+                <div className="relative w-full max-w-[200px] xl:max-w-[300px]">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input 
+                    placeholder="Search dishes..." 
+                    className="pl-9 h-9 bg-white"
+                    value={recipeSearchQuery}
+                    onChange={(e) => setRecipeSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+                {menuItems.filter(item => item.name.toLowerCase().includes(recipeSearchQuery.toLowerCase())).map(item => (
+                  <div 
+                    key={item.id} 
+                    onClick={() => selectRecipe(item.id)}
+                    className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3 ${selectedMenuItem === item.id ? 'bg-orange-100 border-orange-300 shadow-sm' : 'bg-white hover:bg-gray-50 border-gray-200'}`}
+                  >
+                    {item.image_url ? (
+                      <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 bg-gray-100 shadow-sm">
+                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 bg-orange-50 flex items-center justify-center shadow-sm border border-orange-100">
+                        <UtensilsCrossed className="h-5 w-5 text-orange-300" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-800">{item.name}</div>
+                      <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <UtensilsCrossed className="h-3 w-3" />
+                        {recipes.find(r => r.id === item.id)?.ingredients?.length || 0} ingredients
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="md:col-span-2">
+            <div className="">
             {selectedMenuItem ? (
               <Card>
                 <CardHeader>
@@ -406,15 +667,21 @@ export const InventoryTab = () => {
                             onChange={(e) => updateIngredientInRecipe(idx, 'inventory_item_id', e.target.value)}
                           >
                             {inventory.map(inv => (
-                              <option key={inv.id} value={inv.id}>{inv.name} ({inv.unit})</option>
+                              <option key={inv.id} value={inv.id}>{inv.name} ({inv.usage_unit || inv.unit})</option>
                             ))}
                           </select>
-                          <Input 
-                            type="number" 
-                            className="w-24" 
-                            value={ing.quantity_required}
-                            onChange={(e) => updateIngredientInRecipe(idx, 'quantity_required', e.target.value)}
-                          />
+                          <div className="flex items-center gap-2">
+                            <Input 
+                              type="number" 
+                              className="w-24" 
+                              value={ing.quantity_required}
+                              onChange={(e) => updateIngredientInRecipe(idx, 'quantity_required', e.target.value)}
+                            />
+                            <span className="text-sm font-medium text-gray-500 w-8">
+                              {inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.usage_unit || 
+                               inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.unit}
+                            </span>
+                          </div>
                           <Button variant="destructive" size="icon" onClick={() => removeIngredientFromRecipe(idx)}>
                             &times;
                           </Button>
@@ -440,6 +707,7 @@ export const InventoryTab = () => {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>

@@ -78,6 +78,11 @@ const fetchOrderWithPayments = async (orderId) => {
         o.created_at,
         o.customer_archived_at,
         o.kitchen_archived_at,
+        o.order_type,
+        o.customer_name,
+        o.customer_phone,
+        o.collection_time,
+        o.delivery_address,
         (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id
@@ -395,6 +400,49 @@ const executeArchive = async () => {
   return ordersToArchive.length;
 };
 
+/* 
+ * forceArchiveLeftovers finds any orders created before today and forcibly moves 
+ * them to the Grand Archive (archived_orders table). This ensures the system 
+ * always starts the new working day with a clean slate.
+ */
+const forceArchiveLeftovers = async () => {
+  const rows = await all(`SELECT id FROM orders WHERE date(created_at, 'localtime') < date('now', 'localtime')`);
+  if (rows.length === 0) return 0;
+  
+  const leftoverOrders = await Promise.all(rows.map(r => fetchOrderWithPayments(r.id)));
+  
+  await run("BEGIN TRANSACTION");
+  try {
+    for (const order of leftoverOrders) {
+      if (!order) continue;
+      await run(
+        `
+          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, order_data)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          order.id,
+          order.table_id,
+          order.status,
+          order.total_price,
+          order.vat_rate,
+          order.service_charge_rate,
+          order.payment_status,
+          order.created_at,
+          JSON.stringify(order)
+        ]
+      );
+      await run(`DELETE FROM orders WHERE id = ?`, [order.id]);
+    }
+    await run("COMMIT");
+  } catch (error) {
+    await run("ROLLBACK");
+    throw error;
+  }
+  
+  return leftoverOrders.length;
+};
+
 /* archivePaidOrders is the HTTP handler that calls executeArchive and returns the count. */
 const archivePaidOrders = async (req, res) => {
   const archived_count = await executeArchive();
@@ -424,5 +472,6 @@ module.exports = {
   archivePaidOrders,
   getArchivedOrders,
   executeArchive,
+  forceArchiveLeftovers,
   fetchOrderWithPayments
 };

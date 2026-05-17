@@ -173,6 +173,11 @@ const validateOrderCreation = (req, res, next) => {
     /* Replace the raw request body with the cleaned, validated version. */
     req.body = {
       table_id: tableId,
+      order_type: req.body?.order_type || 'DINE_IN',
+      customer_name: req.body?.customer_name || null,
+      customer_phone: req.body?.customer_phone || null,
+      collection_time: req.body?.collection_time || null,
+      delivery_address: req.body?.delivery_address || null,
       items: [...aggregatedItems.values()]
     };
 

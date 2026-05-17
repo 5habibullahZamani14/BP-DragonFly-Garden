@@ -182,6 +182,18 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "total_price", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
   await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
+  
+  /* External POS Order metadata fields */
+  await ensureColumn("orders", "order_type", "TEXT NOT NULL DEFAULT 'DINE_IN'");
+  await ensureColumn("orders", "customer_name", "TEXT");
+  await ensureColumn("orders", "customer_phone", "TEXT");
+  await ensureColumn("orders", "collection_time", "TEXT");
+  await ensureColumn("orders", "delivery_address", "TEXT");
+
+  /* Inventory unit conversion metadata fields */
+  await ensureColumn("inventory_items", "usage_unit", "TEXT");
+  await ensureColumn("inventory_items", "usage_conversion", "REAL DEFAULT 1.0");
+
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");
   /* item_status tracks individual dish readiness within an order. */
@@ -221,6 +233,12 @@ const initializeDatabase = async () => {
     UPDATE tables
     SET qr_code = 'table-' || id
     WHERE qr_code IS NULL OR TRIM(qr_code) = ''
+  `);
+
+  /* Ensure the virtual 'Counter Orders' table exists for POS takeaway/pickup/delivery. */
+  await run(`
+    INSERT OR IGNORE INTO tables (id, table_number, qr_code)
+    VALUES (999, 'Counter Order', 'counter-orders')
   `);
 
   /* Indexes to speed up the most common queries across the application. */
@@ -295,6 +313,7 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
   await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
   await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
+  await ensureColumn("archived_orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
 
   await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
   await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");

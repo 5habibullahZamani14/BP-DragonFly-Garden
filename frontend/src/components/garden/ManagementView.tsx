@@ -42,7 +42,11 @@ import { LogsTab } from "./management/LogsTab";
 import { TablesTab } from "./management/TablesTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { managerAuth, sendPasswordResetEmail } from "@/lib/api";
+import { managerAuth, sendPasswordResetEmail, fetchInventory } from "@/lib/api";
+import type { InventoryItem } from "@/lib/api";
+import { useWebSocket } from "@/lib/useWebSocket";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Bell, AlertTriangle } from "lucide-react";
 
 interface ManagementViewProps {
   qrCode: string;
@@ -69,6 +73,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     } catch { return "overview"; }
   });
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     const savedLogin = localStorage.getItem("managerLogin");
     if (savedLogin) {
@@ -84,6 +95,40 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       }
     }
   }, []);
+
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [inventoryAction, setInventoryAction] = useState<{subTab?: "overview" | "stock" | "recipes", editItemId?: number} | null>(null);
+
+  const loadNotifications = async () => {
+    try {
+      const invData = await fetchInventory();
+      if (!invData) return;
+      const lowStock = invData.filter((item: InventoryItem) => {
+        const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
+        return percent <= item.low_stock_threshold_percent;
+      });
+      setNotifications(lowStock.map((item: InventoryItem) => ({
+        id: `inv-${item.id}`,
+        type: "low_stock",
+        title: "Low Stock Alert",
+        message: `${item.name} is running low (${Number(item.current_stock).toFixed(1)} ${item.unit} remaining).`,
+        action: () => {
+          setInventoryAction({ subTab: "stock", editItemId: item.id });
+          goToTab("inventory");
+        }
+      })));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) loadNotifications();
+  }, [isLoggedIn]);
+
+  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
+    if (isLoggedIn) loadNotifications();
+  });
 
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {
@@ -248,10 +293,51 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             </div>
           </div>
           
-          <div className="flex items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
-            <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
+            <span className="text-sm font-semibold text-gray-800">
+              {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+            </span>
+            <span className="text-sm font-medium text-gray-700 hidden sm:inline border-l border-gray-300 pl-4">
               User: <span className="text-green-700 font-bold">Admin</span>
             </span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title="Notifications">
+                  <Bell className="h-5 w-5 text-gray-600" />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm" />
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0 overflow-hidden rounded-xl shadow-lg border-green-100">
+                <div className="bg-gray-50/80 px-4 py-3 border-b">
+                  <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-green-600" /> Notifications
+                  </h3>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-gray-500">You're all caught up!</div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {notifications.map((notif, idx) => (
+                        <button
+                          key={notif.id || idx}
+                          onClick={notif.action}
+                          className="text-left px-4 py-3 border-b last:border-0 hover:bg-green-50 transition-colors flex gap-3 items-start"
+                        >
+                          <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{notif.title}</p>
+                            <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             <HelpModal title="Manager" sections={managerHelpSections} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> Logout
@@ -305,7 +391,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
         {activeTab === "settings" && <SettingsTab />}
         {activeTab === "employees" && <EmployeesTab />}
-        {activeTab === "inventory" && <InventoryTab />}
+        {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} />}
         {activeTab === "tables" && <TablesTab />}
         {activeTab === "logs" && <LogsTab />}
         

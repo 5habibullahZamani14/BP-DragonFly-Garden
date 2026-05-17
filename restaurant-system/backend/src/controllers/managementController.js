@@ -235,13 +235,18 @@ const getInventory = async (req, res, next) => {
 /* createInventoryItem adds a new ingredient or supply to the stock list. */
 const createInventoryItem = async (req, res, next) => {
   try {
-    const { name, category, unit, current_stock, max_stock, low_stock_threshold_percent } = req.body;
+    const { name, category, unit, current_stock, max_stock, low_stock_threshold_percent, usage_unit, usage_conversion } = req.body;
     if (!name || !unit) return next(createHttpError(400, "Name and unit are required"));
 
     const result = await run(
-      `INSERT INTO inventory_items (name, category, unit, current_stock, max_stock, low_stock_threshold_percent)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, category, unit, current_stock || 0, max_stock || 100, low_stock_threshold_percent || 15]
+      `INSERT INTO inventory_items (
+        name, category, unit, current_stock, max_stock, low_stock_threshold_percent,
+        usage_unit, usage_conversion
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name, category, unit, current_stock || 0, max_stock || 100, low_stock_threshold_percent || 15,
+        usage_unit || unit, usage_conversion || 1.0
+      ]
     );
     const item = await get("SELECT * FROM inventory_items WHERE id = ?", [result.lastID]);
     await createLog("INVENTORY", "CREATE", req.user?.id, req.user?.name, item.id.toString(), item.name, item);
@@ -256,15 +261,23 @@ const createInventoryItem = async (req, res, next) => {
 const updateInventoryStock = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { current_stock, max_stock, low_stock_threshold_percent, is_archived } = req.body;
+    const { 
+      name, category, unit, usage_unit, usage_conversion,
+      current_stock, max_stock, low_stock_threshold_percent, is_archived 
+    } = req.body;
     await run(
       `UPDATE inventory_items SET
+        name = COALESCE(?, name),
+        category = COALESCE(?, category),
+        unit = COALESCE(?, unit),
+        usage_unit = COALESCE(?, usage_unit),
+        usage_conversion = COALESCE(?, usage_conversion),
         current_stock = COALESCE(?, current_stock),
         max_stock = COALESCE(?, max_stock),
         low_stock_threshold_percent = COALESCE(?, low_stock_threshold_percent),
         is_archived = COALESCE(?, is_archived)
        WHERE id = ?`,
-      [current_stock, max_stock, low_stock_threshold_percent, is_archived, id]
+      [name, category, unit, usage_unit, usage_conversion, current_stock, max_stock, low_stock_threshold_percent, is_archived, id]
     );
     const item = await get("SELECT * FROM inventory_items WHERE id = ?", [id]);
     await createLog("INVENTORY", "UPDATE_STOCK", req.user?.id, req.user?.name, item.id.toString(), item.name, { current_stock });
