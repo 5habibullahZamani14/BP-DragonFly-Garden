@@ -130,7 +130,7 @@ const fetchOrderById = async (orderId) => {
  * If any step throws, the transaction is rolled back.
  */
 const createOrder = async (orderData) => {
-  const { 
+  let { 
     table_id: tableId, 
     items, 
     order_type = 'DINE_IN', 
@@ -143,6 +143,13 @@ const createOrder = async (orderData) => {
 
   if (!table) {
     throw new Error("Table not found");
+  }
+
+  // Smart Detection: if the table name implies takeaway, automatically set order_type
+  if (table.table_number && /(takeaway|counter|to[- ]?go)/i.test(table.table_number)) {
+    if (!orderData.order_type || orderData.order_type === 'DINE_IN') {
+      order_type = 'TAKEAWAY';
+    }
   }
 
   /* Fetch all referenced menu items in a single query using an IN clause. */

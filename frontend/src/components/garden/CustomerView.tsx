@@ -513,7 +513,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         <div className="flex flex-col items-center text-center mt-2">
           <p className="text-[0.65rem] font-bold uppercase tracking-[0.36em] text-foreground/55">Welcome</p>
           <p className="mt-1.5 font-display text-xl font-semibold" style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}>
-            {tableInfo ? <>at <span className="text-primary italic">Table {tableInfo.table_number.replace(/^table-?/i, "")}</span></> : "to the garden"}
+            {tableInfo ? (
+              /(takeaway|counter|to[- ]?go)/i.test(tableInfo.table_number) ? (
+                <>placing a <span className="text-primary italic">Takeaway order</span></>
+              ) : (
+                <>at <span className="text-primary italic">Table {tableInfo.table_number.replace(/^table-?/i, "").trim()}</span></>
+              )
+            ) : "to the garden"}
           </p>
           <img
             src={butterflyHero}
@@ -1006,12 +1012,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                             <p className="text-[0.7rem] opacity-50 mt-0.5">{o.table_number}{timeStr && ` · ${timeStr}`}</p>
                           </div>
                           <div>
-                            <button
-                              onClick={() => archiveOrder(o.id)}
-                              className="text-[0.6rem] font-bold px-3 py-1 rounded-full bg-black/5 text-foreground/50 hover:bg-black/10 transition flex items-center gap-1"
-                            >
-                              <X className="h-3 w-3" /> Dismiss
-                            </button>
+                            {/* Dismiss button removed as per requirement - system handles archiving */}
                           </div>
                         </div>
 
@@ -1043,11 +1044,32 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           })}
                         </div>
 
-                        <div className="border-t border-dashed mb-4" style={{ borderColor:"hsl(40,20%,68%)" }}/>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-50">Total</span>
-                          <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
-                        </div>
+                        <div className="border-t border-dashed mb-3 mt-3" style={{ borderColor:"hsl(40,20%,68%)" }}/>
+                        
+                        {(() => {
+                          const subtotal = Number(o.total_price);
+                          const sc = subtotal * 0.10;
+                          const sst = (subtotal + sc) * 0.06;
+                          const rawTotal = subtotal + sc + sst;
+                          const finalTotal = Math.round(rawTotal * 20) / 20;
+                          const rounding = finalTotal - rawTotal;
+                          
+                          return (
+                            <div className="flex flex-col gap-1 mb-2 text-sm" style={{ color:"hsl(140,20%,35%)" }}>
+                              <div className="flex justify-between"><span className="opacity-75">Subtotal</span><span className="font-semibold">{formatRM(subtotal)}</span></div>
+                              <div className="flex justify-between"><span className="opacity-75">SST (6%)</span><span className="font-semibold">{formatRM(sst)}</span></div>
+                              <div className="flex justify-between"><span className="opacity-75">Service Charge (10%)</span><span className="font-semibold">{formatRM(sc)}</span></div>
+                              {Math.abs(rounding) > 0.001 && (
+                                <div className="flex justify-between"><span className="opacity-75">Rounding</span><span className="font-semibold">{formatRM(rounding)}</span></div>
+                              )}
+                              <div className="border-t border-dashed my-2" style={{ borderColor:"hsl(40,20%,68%)" }}/>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-60">Total</span>
+                                <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(finalTotal)}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                     </div>
@@ -1075,7 +1097,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <p className="font-semibold text-foreground/70">Order #{o.id}</p>
                         <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
                       </div>
-                      <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
+                      <span className="shrink-0 font-display text-foreground/55">
+                        {(() => {
+                          const st = Number(o.total_price);
+                          const rT = st + (st * 0.10) + (st * 1.10 * 0.06);
+                          return formatRM(Math.round(rT * 20) / 20);
+                        })()}
+                      </span>
                     </li>
                   ))}
                 </ul>

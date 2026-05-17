@@ -25,7 +25,7 @@ const MAX_ITEM_QUANTITY = 99;
 const MAX_NOTES_LENGTH = 250;
 
 /* Pattern used by validateQrCodeParam to verify table QR codes in URL params. */
-const QR_CODE_PATTERN = /^table-\d+$/;
+const QR_CODE_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /*
  * createHttpError builds an Error object with a statusCode property.

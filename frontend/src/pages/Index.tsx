@@ -41,7 +41,7 @@ import { ManagementView } from "@/components/garden/ManagementView";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 /* QR code patterns — must match the patterns used in the backend middleware. */
-const TABLE_QR_PATTERN = /^table-\d+$/;
+const TABLE_QR_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const PAYMENT_QR_PATTERN = /^payment-counter-[a-z0-9_-]+$/i;
 const MANAGER_QR_PATTERN = /^manager-[a-z0-9_-]+$/i;
 
