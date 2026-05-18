@@ -108,6 +108,49 @@ const createLog = async (category, action, actorId, actorName, targetId, targetN
   );
 };
 
+/* getFinanceData returns comprehensive financial data for the dashboard (P&L, Revenue, Cost of Goods Sold) */
+const getFinanceData = async (req, res, next) => {
+  try {
+    const orders = await all("SELECT id, total_price, created_at FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
+    
+    const items = await all(`
+      SELECT 
+        mi.id,
+        mi.name,
+        mi.price,
+        IFNULL(SUM(oi.quantity), 0) as total_sold
+      FROM menu_items mi
+      LEFT JOIN order_items oi ON mi.id = oi.menu_item_id
+      LEFT JOIN orders o ON oi.order_id = o.id AND (o.payment_status = 'paid' OR o.status = 'archived')
+      GROUP BY mi.id
+    `);
+
+    const ingredientCosts = await all(`
+      SELECT 
+        m.menu_item_id, 
+        SUM(m.quantity_required * i.unit_cost) as item_cost
+      FROM menu_item_ingredients m
+      JOIN inventory_items i ON m.inventory_item_id = i.id
+      GROUP BY m.menu_item_id
+    `);
+
+    const itemsWithCosts = items.map(item => {
+      const costRow = ingredientCosts.find(c => c.menu_item_id === item.id);
+      const unitCost = costRow ? costRow.item_cost : 0;
+      return {
+        ...item,
+        unit_cost: unitCost,
+        profit_margin: item.price > 0 ? ((item.price - unitCost) / item.price) * 100 : 0
+      };
+    });
+
+    res.json({
+      orders,
+      items: itemsWithCosts
+    });
+  } catch (error) { next(error); }
+};
+
 /* getLogs returns audit log entries, optionally filtered by category. */
 const getLogs = async (req, res, next) => {
   try {
@@ -475,6 +518,7 @@ const sendResetEmail = async (req, res, next) => {
 module.exports = {
   createLog,
   getLogs,
+  getFinanceData,
   getSettings,
   updateSetting,
   getEmployees,

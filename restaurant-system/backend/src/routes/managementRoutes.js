@@ -86,6 +86,12 @@ router.get("/kitchen-passcode", managementController.getKitchenPasscode);
  */
 router.get("/logs", managementController.getLogs);
 
+/*
+ * GET /management/finance
+ * Returns financial data (revenue, costs, items sold) for the Finance Tab.
+ */
+router.get("/finance", managementController.getFinanceData);
+
 // ── System settings ───────────────────────────────────────────────────────────
 
 /*

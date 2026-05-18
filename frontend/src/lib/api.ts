@@ -219,6 +219,18 @@ export type ManagerProfile = {
   phone: string;
 };
 
+export type FinanceData = {
+  orders: { id: number; total_price: number; created_at: string }[];
+  items: {
+    id: number;
+    name: string;
+    price: number;
+    total_sold: number;
+    unit_cost: number;
+    profit_margin: number;
+  }[];
+};
+
 // ── Menu ─────────────────────────────────────────────────────────────────────
 
 /* fetchMenu returns all available menu items. No role required. */
@@ -442,6 +454,10 @@ export const updateRecipe = async (menuItemId: number, ingredients: RecipeIngred
 export const fetchLogs = async (category?: string) => {
   const query = category ? `?category=${category}` : "";
   return safeFetch<LogEntry[]>(`/management/logs${query}`);
+};
+
+export const fetchFinanceData = async (): Promise<FinanceData> => {
+  return safeFetch<FinanceData>("/management/finance");
 };
 
 export const fetchTables = async () => safeFetch<TableRecord[]>("/tables");

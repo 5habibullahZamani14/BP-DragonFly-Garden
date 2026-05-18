@@ -21,18 +21,22 @@
  *      and compliance.
  */
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchLogs } from "@/lib/api";
 import type { LogEntry } from "@/lib/api";
-import { FileText, Download, Activity } from "lucide-react";
+import { FileText, Download, Activity, Search, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 export const LogsTab = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [timeFrame, setTimeFrame] = useState<string>("all");
 
   const loadLogs = useCallback(async () => {
     try {
@@ -50,32 +54,128 @@ export const LogsTab = () => {
     loadLogs();
   }, [loadLogs]);
 
-  const downloadCSV = () => {
-    if (logs.length === 0) return;
+  const filteredLogs = useMemo(() => {
+    let result = [...logs];
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(log => 
+        log.action.toLowerCase().includes(q) ||
+        (log.actor_name || "").toLowerCase().includes(q) ||
+        (log.target_name || log.target_id || "").toLowerCase().includes(q) ||
+        (log.details || "").toLowerCase().includes(q)
+      );
+    }
     
-    const headers = ["ID", "Timestamp", "Category", "Action", "Actor", "Target", "Details"];
-    const csvRows = [headers.join(",")];
+    if (timeFrame !== "all") {
+      const now = new Date();
+      const cutoff = new Date();
+      if (timeFrame === "24h") cutoff.setHours(now.getHours() - 24);
+      else if (timeFrame === "7d") cutoff.setDate(now.getDate() - 7);
+      else if (timeFrame === "30d") cutoff.setDate(now.getDate() - 30);
+      
+      result = result.filter(log => new Date(log.timestamp) >= cutoff);
+    }
     
-    logs.forEach(log => {
-      const row = [
-        log.id,
-        new Date(log.timestamp).toLocaleString(),
-        log.category,
-        log.action,
-        log.actor_name || "System",
-        log.target_name || "-",
-        `"${log.details ? log.details.replace(/"/g, '""') : ''}"`
-      ];
-      csvRows.push(row.join(","));
+    return result;
+  }, [logs, searchQuery, timeFrame]);
+
+  const downloadExcel = async () => {
+    if (filteredLogs.length === 0) return;
+    
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Grand Archive Logs');
+
+    // Calculate dynamic column widths based on maximum content length
+    let maxTs = 10, maxCat = 8, maxAct = 6, maxActor = 5, maxTarget = 6, maxDetails = 7;
+    filteredLogs.forEach(log => {
+      const tsLen = new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }).length;
+      if (tsLen > maxTs) maxTs = tsLen;
+      if (log.category.length > maxCat) maxCat = log.category.length;
+      if (log.action.length > maxAct) maxAct = log.action.length;
+      if ((log.actor_name || "System").length > maxActor) maxActor = (log.actor_name || "System").length;
+      if ((log.target_name || log.target_id || "—").toString().length > maxTarget) maxTarget = (log.target_name || log.target_id || "—").toString().length;
+      if ((log.details || "—").length > maxDetails) maxDetails = (log.details || "—").length;
     });
-    
-    const blob = new Blob([csvRows.join("\\n")], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `dragonfly-garden-logs-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+
+    // Define columns with dynamic widths
+    worksheet.columns = [
+      { header: 'TIMESTAMP', key: 'timestamp', width: maxTs + 4 },
+      { header: 'CATEGORY', key: 'category', width: maxCat + 4 },
+      { header: 'ACTION', key: 'action', width: maxAct + 4 },
+      { header: 'ACTOR', key: 'actor', width: maxActor + 4 },
+      { header: 'TARGET', key: 'target', width: maxTarget + 4 },
+      { header: 'DETAILS', key: 'details', width: maxDetails + 4 }
+    ];
+
+    // Style the header row (Vibrant, high-contrast, double size)
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Arial' };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B3224' } }; // Deep DragonFly Green
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 48;
+    headerRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = {
+        top: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+        left: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+        right: { style: 'medium', color: { argb: 'FFD1D5DB' } }
+      };
+    });
+
+    // Add data and style rows
+    filteredLogs.forEach((log) => {
+      const row = worksheet.addRow({
+        timestamp: new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
+        category: log.category,
+        action: log.action,
+        actor: log.actor_name || "System",
+        target: log.target_name || log.target_id || "—",
+        details: log.details || "—"
+      });
+
+      row.height = 36;
+      row.alignment = { vertical: 'middle', horizontal: 'left' };
+
+      // Typography matching
+      row.getCell('timestamp').font = { color: { argb: 'FF9CA3AF' }, bold: true };
+      row.getCell('action').font = { bold: true, color: { argb: 'FF2F4F4F' } };
+      row.getCell('actor').font = { color: { argb: 'FF4B5563' }, bold: true };
+      row.getCell('target').font = { color: { argb: 'FF111827' }, bold: true };
+      row.getCell('details').font = { color: { argb: 'FF6B7280' }, italic: true };
+
+      // Clean category styling (crisp colored text with soft pill-like background fill)
+      const catCell = row.getCell('category');
+      catCell.font = { bold: true, size: 9 };
+      catCell.alignment = { vertical: 'middle', horizontal: 'center' };
+      if (log.category === 'INVENTORY') {
+        catCell.font.color = { argb: 'FFC2410C' };
+        catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEDD5' } };
+      } else if (log.category === 'EMPLOYEE') {
+        catCell.font.color = { argb: 'FF1D4ED8' };
+        catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+      } else if (log.category === 'ORDER') {
+        catCell.font.color = { argb: 'FF047857' };
+        catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      } else {
+        catCell.font.color = { argb: 'FF374151' };
+        catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+      }
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          top: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+          left: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+          bottom: { style: 'medium', color: { argb: 'FFD1D5DB' } },
+          right: { style: 'medium', color: { argb: 'FFD1D5DB' } }
+        };
+      });
+    });
+
+    // Write to buffer and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `DragonFly_Archive_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Prepare chart data
@@ -93,51 +193,115 @@ export const LogsTab = () => {
   const actions = Array.from(new Set(logs.map(log => log.action)));
   const colors = ["#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#a4de6c", "#d0ed57"];
 
-  if (loading && logs.length === 0) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading logs...</div>;
+  if (loading && logs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 animate-pulse text-foreground/40">
+        <Activity className="h-8 w-8 mb-4 opacity-50" />
+        <p className="font-display text-lg">Unearthing the archives...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <FileText className="h-6 w-6 text-purple-600" />
-          Grand Archive Logs
-        </h2>
-        <Button onClick={downloadCSV} className="bg-purple-600 hover:bg-purple-700 text-white">
-          <Download className="h-4 w-4 mr-2" /> Export to CSV
+    <div className="space-y-8 animate-fade-in pb-12">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
+        <div>
+          <h2 className="text-3xl font-display font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
+            Grand Archive
+          </h2>
+          <p className="text-foreground/60 mt-1 font-medium">The immutable history of DragonFly Garden.</p>
+        </div>
+        <Button 
+          onClick={downloadExcel} 
+          className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg transition-transform hover:scale-105 px-6"
+        >
+          <Download className="h-4 w-4 mr-2" /> Export to Excel
         </Button>
       </div>
 
+      {/* Activity Chart Section */}
       {logs.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" /> System Activity Overview</CardTitle>
-            <CardDescription>Number of actions performed per category</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip cursor={{fill: 'transparent'}} />
-                  <Legend />
-                  {actions.map((action, index) => (
-                    <Bar key={action} dataKey={action} stackId="a" fill={colors[index % colors.length]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
+          <div className="mb-6 flex items-center gap-2 px-2">
+            <Activity className="h-5 w-5 text-accent" />
+            <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>System Activity Pulse</h3>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12, fontWeight: 600 }} 
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} 
+                />
+                <Tooltip 
+                  cursor={{fill: 'rgba(0,0,0,0.02)'}}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
+                {actions.map((action, index) => (
+                  <Bar 
+                    key={action} 
+                    dataKey={action} 
+                    stackId="a" 
+                    fill={colors[index % colors.length]} 
+                    radius={[index === actions.length - 1 ? 4 : 0, index === actions.length - 1 ? 4 : 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex justify-between items-center">
-            <CardTitle>Detailed Audit Log</CardTitle>
+      {/* Detailed Audit Log Table */}
+      <div className="bg-white/80 backdrop-blur-md border border-white/50 shadow-xl rounded-3xl overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-foreground/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40">
+          <h3 className="font-display text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
+            <FileText className="h-5 w-5 text-accent" />
+            Audit Trail
+          </h3>
+          
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {/* Search Bar */}
+            <div className="relative group flex-1 sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 group-focus-within:text-primary transition-colors" />
+              <input
+                type="text"
+                placeholder="Search archives..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-10 pr-4 rounded-full border-none bg-white shadow-sm text-sm outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all text-foreground/80 placeholder:text-foreground/40"
+              />
+            </div>
+
+            {/* Time Frame Filter */}
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 pointer-events-none" />
+              <select 
+                className="h-10 w-full sm:w-auto pl-10 pr-8 rounded-full border-none bg-white shadow-sm text-sm font-semibold outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all text-foreground/70 appearance-none"
+                value={timeFrame}
+                onChange={(e) => setTimeFrame(e.target.value)}
+              >
+                <option value="all">All Time</option>
+                <option value="24h">Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+              </select>
+            </div>
+
+            {/* Category Filter */}
             <select 
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              className="h-10 w-full sm:w-auto rounded-full border-none bg-white shadow-sm px-4 py-1 text-sm font-semibold outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all text-foreground/70"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -148,52 +312,54 @@ export const LogsTab = () => {
               <option value="SYSTEM">System</option>
             </select>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left border-collapse">
+            <thead className="text-[0.65rem] font-bold tracking-widest uppercase text-foreground/40 bg-foreground/[0.02]">
+              <tr>
+                <th className="px-6 py-4 rounded-tl-2xl">Timestamp</th>
+                <th className="px-6 py-4">Category</th>
+                <th className="px-6 py-4">Action</th>
+                <th className="px-6 py-4">Actor</th>
+                <th className="px-6 py-4">Target</th>
+                <th className="px-6 py-4 rounded-tr-2xl">Details</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-foreground/5">
+              {filteredLogs.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3">Timestamp</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Actor</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">Details</th>
+                  <td colSpan={6} className="px-6 py-16 text-center text-foreground/40 font-medium">No records found matching your filters.</td>
                 </tr>
-              </thead>
-              <tbody>
-                {logs.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No logs found.</td>
+              ) : (
+                filteredLogs.map((log, i) => (
+                  <tr key={log.id} className="hover:bg-primary/[0.02] transition-colors duration-200" style={{ animation: `fade-in 0.3s ease-out ${i * 0.03}s both` }}>
+                    <td className="px-6 py-4 whitespace-nowrap text-foreground/50 font-medium">
+                      {new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-[0.65rem] font-bold tracking-wider uppercase shadow-sm ${
+                        log.category === 'INVENTORY' ? 'bg-orange-100 text-orange-700' :
+                        log.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-700' :
+                        log.category === 'ORDER' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {log.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold" style={{ color: "hsl(140, 20%, 30%)" }}>{log.action}</td>
+                    <td className="px-6 py-4 font-medium text-foreground/70">{log.actor_name || "System"}</td>
+                    <td className="px-6 py-4 font-medium text-foreground/90">{log.target_name || log.target_id || "—"}</td>
+                    <td className="px-6 py-4 text-foreground/60 max-w-xs truncate italic" title={log.details}>
+                      {log.details || "—"}
+                    </td>
                   </tr>
-                ) : (
-                  logs.map(log => (
-                    <tr key={log.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-gray-500">{new Date(log.timestamp).toLocaleString()}</td>
-                      <td className="px-4 py-3 font-medium">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          log.category === 'INVENTORY' ? 'bg-orange-100 text-orange-800' :
-                          log.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {log.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-bold text-gray-700">{log.action}</td>
-                      <td className="px-4 py-3 text-gray-600">{log.actor_name || "System"}</td>
-                      <td className="px-4 py-3 text-gray-900">{log.target_name || log.target_id || "-"}</td>
-                      <td className="px-4 py-3 text-gray-500 max-w-xs truncate" title={log.details}>
-                        {log.details || "-"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

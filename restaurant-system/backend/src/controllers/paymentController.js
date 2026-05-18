@@ -192,12 +192,24 @@ const processPayment = async (orderId, paymentData) => {
         `UPDATE orders SET payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [newStatus, orderId]
       );
+      await run(
+        `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        ["ORDER", "COMPLETED", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ total_paid: newTotalPaid })]
+      );
     } else {
       await run(
         `UPDATE orders SET payment_status = ? WHERE id = ?`,
         [newStatus, orderId]
       );
     }
+
+    /* Log the payment event to the Grand Archive */
+    await run(
+      `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ["ORDER", "PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ amount_paid: amount, method_id: payment_method_id, new_status: newStatus })]
+    );
 
     await run("COMMIT");
 

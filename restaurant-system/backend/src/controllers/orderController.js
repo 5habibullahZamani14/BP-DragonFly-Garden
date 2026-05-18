@@ -215,6 +215,20 @@ const createOrder = async (orderData) => {
       orderId = orderInsert.lastID;
     }
 
+    /* Automatically log this crucial order event in the Grand Archive */
+    await run(
+      `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        "ORDER",
+        isAddOn ? "ADD_ITEMS" : "CREATE",
+        "System (Customer Order)",
+        orderId.toString(),
+        `Order #${orderId} (Table: ${table.table_number || 'N/A'})`,
+        JSON.stringify({ order_type, additional_price: additionalPrice, new_total: isAddOn ? undefined : additionalPrice })
+      ]
+    );
+
     const insertedOrderItems = [];
 
     /* Insert each item and deduct its ingredients from inventory. */

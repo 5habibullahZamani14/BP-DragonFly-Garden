@@ -364,6 +364,7 @@ const initializeDatabase = async () => {
       is_archived INTEGER NOT NULL DEFAULT 0
     )
   `);
+  await ensureColumn("inventory_items", "unit_cost", "REAL DEFAULT 0");
 
   /*
    * menu_item_ingredients links menu items to the inventory items they consume.
