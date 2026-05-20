@@ -400,7 +400,7 @@ export const LogsTab = () => {
       </div>
 
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <DialogContent className="max-w-4xl w-[90vw] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
+        <DialogContent className="max-w-[96vw] w-[96vw] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-foreground/5 bg-foreground/[0.02]">
             <DialogTitle className="flex items-center gap-3 text-2xl font-display" style={{ color: "hsl(140, 30%, 20%)" }}>
               <FileText className="h-6 w-6 text-primary" />
