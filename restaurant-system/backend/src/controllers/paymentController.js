@@ -195,7 +195,7 @@ const processPayment = async (orderId, paymentData) => {
       await run(
         `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        ["ORDER", "COMPLETED", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ total_paid: newTotalPaid })]
+        ["ORDER", "COMPLETED", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, `Total bill of RM ${newTotalPaid.toFixed(2)} was successfully paid in full.`]
       );
     } else {
       await run(
@@ -205,10 +205,13 @@ const processPayment = async (orderId, paymentData) => {
     }
 
     /* Log the payment event to the Grand Archive */
+    const methodRow = await get(`SELECT name FROM payment_methods WHERE id = ?`, [payment_method_id]);
+    const methodName = methodRow ? methodRow.name : `Method #${payment_method_id}`;
+    
     await run(
       `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      ["ORDER", "PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ amount_paid: amount, method_id: payment_method_id, new_status: newStatus })]
+      ["ORDER", "PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, `Received a payment of RM ${amount.toFixed(2)} via ${methodName}. Status is now: ${newStatus.replace('_', ' ')}.`]
     );
 
     await run("COMMIT");

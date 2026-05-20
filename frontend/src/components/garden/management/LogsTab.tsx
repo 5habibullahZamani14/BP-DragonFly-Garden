@@ -125,13 +125,22 @@ export const LogsTab = () => {
 
     // Add data and style rows
     filteredLogs.forEach((log) => {
+      const formattedAction = log.action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+      let formattedDetails = log.details || "—";
+      try {
+        if (log.details && log.details.startsWith('{')) {
+          const parsed = JSON.parse(log.details);
+          formattedDetails = Object.entries(parsed).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ');
+        }
+      } catch (e) { /* ignore */ }
+
       const row = worksheet.addRow({
         timestamp: new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
         category: log.category,
-        action: log.action,
+        action: formattedAction,
         actor: log.actor_name || "System",
         target: log.target_name || log.target_id || "—",
-        details: log.details || "—"
+        details: formattedDetails
       });
 
       row.height = 36;
@@ -178,20 +187,42 @@ export const LogsTab = () => {
     saveAs(blob, `DragonFly_Archive_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Prepare chart data
-  const chartData = logs.reduce<Record<string, string | number>[]>((acc, log) => {
-    const existing = acc.find(item => item.name === log.category);
-    if (existing) {
-      existing[log.action] = (existing[log.action] || 0) + 1;
-    } else {
-      acc.push({ name: log.category, [log.action]: 1 });
-    }
-    return acc;
-  }, []);
+  const formatAction = (action: string) => {
+    return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  };
 
-  // Get unique actions for bar colors
-  const actions = Array.from(new Set(logs.map(log => log.action)));
-  const colors = ["#8884d8", "#82ca9d", "#ffc658", "#ff8042", "#a4de6c", "#d0ed57"];
+  const formatDetails = (details: string | undefined | null) => {
+    if (!details) return "—";
+    try {
+      if (details.startsWith('{')) {
+        const parsed = JSON.parse(details);
+        return Object.entries(parsed).map(([k, v]) => {
+          const cleanKey = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          return `${cleanKey}: ${v}`;
+        }).join(' | ');
+      }
+    } catch {
+      // ignore JSON parse errors and just return the string
+    }
+    return details;
+  };
+
+  const getActionCounts = (logArray: LogEntry[]) => {
+    const counts = logArray.reduce((acc, log) => {
+      const act = formatAction(log.action);
+      acc[act] = (acc[act] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // top 5 actions for clarity
+  };
+
+  const orderLogs = logs.filter(l => l.category === 'ORDER');
+  const systemLogs = logs.filter(l => l.category !== 'ORDER');
+  const orderChartData = getActionCounts(orderLogs);
+  const systemChartData = getActionCounts(systemLogs);
 
   if (loading && logs.length === 0) {
     return (
@@ -222,43 +253,43 @@ export const LogsTab = () => {
 
       {/* Activity Chart Section */}
       {logs.length > 0 && (
-        <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
-          <div className="mb-6 flex items-center gap-2 px-2">
-            <Activity className="h-5 w-5 text-accent" />
-            <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>System Activity Pulse</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Order Events Chart */}
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
+            <div className="mb-6 flex items-center gap-2 px-2">
+              <Activity className="h-5 w-5 text-emerald-500" />
+              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>Order & Revenue Events</h3>
+            </div>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={orderChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
+                  <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                  <Bar dataKey="count" name="Total Events" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12, fontWeight: 600 }} 
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} 
-                />
-                <Tooltip 
-                  cursor={{fill: 'rgba(0,0,0,0.02)'}}
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }}
-                />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
-                {actions.map((action, index) => (
-                  <Bar 
-                    key={action} 
-                    dataKey={action} 
-                    stackId="a" 
-                    fill={colors[index % colors.length]} 
-                    radius={[index === actions.length - 1 ? 4 : 0, index === actions.length - 1 ? 4 : 0, 0, 0]}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
+
+          {/* System & Inventory Chart */}
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
+            <div className="mb-6 flex items-center gap-2 px-2">
+              <Activity className="h-5 w-5 text-blue-500" />
+              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>System & Inventory Events</h3>
+            </div>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={systemChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
+                  <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                  <Bar dataKey="count" name="Total Events" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
@@ -347,11 +378,11 @@ export const LogsTab = () => {
                         {log.category}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-bold" style={{ color: "hsl(140, 20%, 30%)" }}>{log.action}</td>
+                    <td className="px-6 py-4 font-bold" style={{ color: "hsl(140, 20%, 30%)" }}>{formatAction(log.action)}</td>
                     <td className="px-6 py-4 font-medium text-foreground/70">{log.actor_name || "System"}</td>
                     <td className="px-6 py-4 font-medium text-foreground/90">{log.target_name || log.target_id || "—"}</td>
-                    <td className="px-6 py-4 text-foreground/60 max-w-xs truncate italic" title={log.details}>
-                      {log.details || "—"}
+                    <td className="px-6 py-4 text-foreground/60 max-w-xs truncate italic" title={formatDetails(log.details)}>
+                      {formatDetails(log.details)}
                     </td>
                   </tr>
                 ))

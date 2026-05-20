@@ -130,14 +130,14 @@ const fetchOrderById = async (orderId) => {
  * If any step throws, the transaction is rolled back.
  */
 const createOrder = async (orderData) => {
-  let { 
-    table_id: tableId, 
-    items, 
-    order_type = 'DINE_IN', 
-    customer_name = null, 
-    customer_phone = null, 
-    collection_time = null, 
-    delivery_address = null 
+  let {
+    table_id: tableId,
+    items,
+    order_type = 'DINE_IN',
+    customer_name = null,
+    customer_phone = null,
+    collection_time = null,
+    delivery_address = null
   } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
 
@@ -216,6 +216,16 @@ const createOrder = async (orderData) => {
     }
 
     /* Automatically log this crucial order event in the Grand Archive */
+    const dayOfWeek = new Date().toLocaleDateString('en-MY', { weekday: 'long' });
+    const timeOfDay = new Date().toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
+    const itemNames = items.map(item => {
+      const mi = menuItemMap.get(item.menu_item_id);
+      const isDrink = mi.category?.toLowerCase() === 'drinks' || mi.category?.toLowerCase() === 'drink';
+      return `${item.quantity}x ${mi.name} (${isDrink ? 'Drink' : 'Food'})`;
+    }).join(", ");
+
+    const logDetails = `[${dayOfWeek}, ${timeOfDay}] Table: ${table.table_number || 'N/A'}. Order Type: ${order_type}. Items: ${itemNames}. Bill Amount: RM ${additionalPrice.toFixed(2)}.`;
+
     await run(
       `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -225,7 +235,7 @@ const createOrder = async (orderData) => {
         "System (Customer Order)",
         orderId.toString(),
         `Order #${orderId} (Table: ${table.table_number || 'N/A'})`,
-        JSON.stringify({ order_type, additional_price: additionalPrice, new_total: isAddOn ? undefined : additionalPrice })
+        logDetails
       ]
     );
 
@@ -242,7 +252,7 @@ const createOrder = async (orderData) => {
         `,
         [orderId, item.menu_item_id, item.quantity, menuItem.price, item.notes]
       );
-      
+
       insertedOrderItems.push({
         id: itemInsert.lastID,
         menu_item_id: item.menu_item_id,
@@ -279,11 +289,7 @@ const createOrder = async (orderData) => {
             [
               "INVENTORY", "DEDUCT", "System (Customer Order)",
               ing.inventory_item_id.toString(), ing.name,
-              JSON.stringify({
-                menu_item: menuItem.name,
-                amount_deducted: amountToDeduct,
-                order_id: orderId
-              })
+              `Deducted ${amountToDeduct} from ${ing.name} to prepare ${menuItem.name} for Order #${orderId}.`
             ]
           );
         }
