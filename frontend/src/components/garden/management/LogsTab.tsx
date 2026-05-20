@@ -24,6 +24,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { fetchLogs } from "@/lib/api";
 import type { LogEntry } from "@/lib/api";
 import { FileText, Download, Activity, Search, Clock } from "lucide-react";
@@ -37,6 +38,7 @@ export const LogsTab = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [timeFrame, setTimeFrame] = useState<string>("all");
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
   const loadLogs = useCallback(async () => {
     try {
@@ -364,7 +366,12 @@ export const LogsTab = () => {
                 </tr>
               ) : (
                 filteredLogs.map((log, i) => (
-                  <tr key={log.id} className="hover:bg-primary/[0.02] transition-colors duration-200" style={{ animation: `fade-in 0.3s ease-out ${i * 0.03}s both` }}>
+                  <tr 
+                    key={log.id} 
+                    className="hover:bg-primary/[0.05] cursor-pointer transition-colors duration-200" 
+                    style={{ animation: `fade-in 0.3s ease-out ${i * 0.03}s both` }}
+                    onClick={() => setSelectedLog(log)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-foreground/50 font-medium">
                       {new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
                     </td>
@@ -391,6 +398,85 @@ export const LogsTab = () => {
           </table>
         </div>
       </div>
+
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-w-4xl w-[90vw] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-foreground/5 bg-foreground/[0.02]">
+            <DialogTitle className="flex items-center gap-3 text-2xl font-display" style={{ color: "hsl(140, 30%, 20%)" }}>
+              <FileText className="h-6 w-6 text-primary" />
+              Archive Record
+            </DialogTitle>
+            <DialogDescription className="font-medium text-foreground/50">
+              {selectedLog && new Date(selectedLog.timestamp).toLocaleString('en-MY', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedLog && (
+            <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Category</p>
+                  <p className={`inline-flex px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase shadow-sm ${
+                        selectedLog.category === 'INVENTORY' ? 'bg-orange-100 text-orange-700' :
+                        selectedLog.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-700' :
+                        selectedLog.category === 'ORDER' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                    {selectedLog.category}
+                  </p>
+                </div>
+                <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Action</p>
+                  <p className="font-bold text-foreground/80">{formatAction(selectedLog.action)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Actor</p>
+                  <p className="font-bold text-foreground/70">{selectedLog.actor_name || "System Automated"}</p>
+                </div>
+                <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Target Resource</p>
+                  <p className="font-bold text-foreground/90">{selectedLog.target_name || selectedLog.target_id || "System Global"}</p>
+                </div>
+              </div>
+
+              <div className="bg-foreground/[0.02] p-5 rounded-2xl border border-foreground/5">
+                <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-2">Detailed Payload</p>
+                <div className="bg-white/60 p-4 rounded-xl border border-foreground/5">
+                  {selectedLog.details ? (
+                    (() => {
+                      try {
+                        if (selectedLog.details.startsWith('{')) {
+                          const parsed = JSON.parse(selectedLog.details);
+                          return (
+                            <div className="flex flex-col gap-2">
+                              {Object.entries(parsed).map(([k, v]) => (
+                                <div key={k} className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 border-b border-foreground/5 last:border-0 pb-2 last:pb-0">
+                                  <span className="font-bold text-foreground/50 text-xs sm:w-1/3 break-words uppercase tracking-wide">
+                                    {k.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className="font-medium text-foreground/80 text-sm sm:w-2/3 break-words">
+                                    {String(v)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }
+                      } catch { /* ignore */ }
+                      return <p className="font-mono text-sm text-foreground/70 break-words">{selectedLog.details}</p>;
+                    })()
+                  ) : (
+                    <p className="text-sm italic text-foreground/40">No additional details recorded.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

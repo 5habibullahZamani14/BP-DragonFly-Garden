@@ -512,3 +512,40 @@ export const fetchKitchenPasscode = async (): Promise<string> => {
   const data = await safeFetch<{ passcode: string }>("/management/kitchen-passcode");
   return data.passcode;
 };
+
+// ── Database Backups ──────────────────────────────────────────────────────────
+
+export interface BackupFile {
+  filename: string;
+  size: number;
+  created_at: string;
+}
+
+export const fetchBackups = async (): Promise<BackupFile[]> =>
+  safeFetch("/management/backups");
+
+export const createBackup = async (filename: string, overwrite: boolean = false): Promise<{ success: boolean; message: string; filename: string }> => {
+  const res = await fetch(`${API_BASE}/management/backups`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, overwrite }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "Unknown error" }));
+    throw err;
+  }
+  return res.json();
+};
+
+export const restoreBackup = async (filename: string): Promise<{ success: boolean; message: string }> => {
+  const res = await fetch(`${API_BASE}/management/backups/restore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "Unknown error" }));
+    throw err;
+  }
+  return res.json();
+};

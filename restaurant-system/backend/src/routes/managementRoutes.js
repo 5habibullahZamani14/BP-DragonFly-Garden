@@ -170,4 +170,22 @@ router.get("/recipes", managementController.getRecipes);
  */
 router.put("/recipes/:menu_item_id", managementController.updateRecipe);
 
+/*
+ * GET /management/backups
+ * Returns a list of all available database backups.
+ */
+router.get("/backups", managementController.getBackups);
+
+/*
+ * POST /management/backups
+ * Creates a new backup of the database. Body can contain { filename, overwrite }.
+ */
+router.post("/backups", managementController.createBackup);
+
+/*
+ * POST /management/backups/restore
+ * Restores the system from a specified backup file. Body must contain { filename }.
+ */
+router.post("/backups/restore", managementController.restoreBackup);
+
 module.exports = router;

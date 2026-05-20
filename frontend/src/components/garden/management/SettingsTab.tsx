@@ -17,8 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail } from "lucide-react";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, BackupFile } from "@/lib/api";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle } from "lucide-react";
 
 export const SettingsTab = () => {
   const [hours, setHours] = useState({ start: "09:00", end: "22:00" });
@@ -41,6 +41,13 @@ export const SettingsTab = () => {
   const [resetSending, setResetSending] = useState(false);
   const [resetMsg, setResetMsg] = useState("");
 
+  const [backups, setBackups] = useState<BackupFile[]>([]);
+  const [backupName, setBackupName] = useState("");
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<{text: string, isError: boolean} | null>(null);
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -57,6 +64,21 @@ export const SettingsTab = () => {
       const p = await fetchManagerProfile();
       setProfile({ name: p.name || "", id: p.id || "", email: p.email || "", phone: p.phone || "" });
     } catch (e) { console.error("Profile load failed", e); }
+
+    loadBackups();
+  };
+
+  const loadBackups = async () => {
+    try {
+      const data = await fetchBackups();
+      setBackups(data || []);
+      
+      // Auto-generate a default name for new backups
+      const dateStr = new Date().toISOString().split('T')[0];
+      setBackupName(`backup_${dateStr}`);
+    } catch (e) {
+      console.error("Failed to load backups", e);
+    }
   };
 
   const saveHours = async () => {
@@ -117,6 +139,44 @@ export const SettingsTab = () => {
       setResetMsg("⚠️ Could not connect to email service. Check backend .env configuration.");
     } finally {
       setResetSending(false);
+    }
+  };
+
+  const handleCreateBackup = async (overwrite: boolean = false) => {
+    if (!backupName.trim()) return;
+    setBackupLoading(true);
+    setBackupMsg(null);
+    setShowOverwriteConfirm(false);
+    
+    try {
+      await createBackup(backupName.trim(), overwrite);
+      setBackupMsg({ text: "✅ Backup created successfully", isError: false });
+      loadBackups();
+      setTimeout(() => setBackupMsg(null), 3000);
+    } catch (err: any) {
+      if (err.message && err.message.includes("already exists")) {
+        setShowOverwriteConfirm(true);
+      } else {
+        setBackupMsg({ text: `⚠️ ${err.message || "Failed to create backup"}`, isError: true });
+      }
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = async (filename: string) => {
+    if (!window.confirm(`Are you sure you want to restore the system to "${filename}"?\n\nWARNING: All current data will be overwritten and lost immediately. This cannot be undone.`)) {
+      return;
+    }
+    
+    setRestoreLoading(filename);
+    try {
+      await restoreBackup(filename);
+      window.alert("System restored successfully. The page will now reload.");
+      window.location.reload();
+    } catch (err: any) {
+      window.alert(`Restore failed: ${err.message || "Unknown error"}`);
+      setRestoreLoading(null);
     }
   };
 
@@ -294,6 +354,109 @@ export const SettingsTab = () => {
               </Button>
             </div>
             {resetMsg && <p className="text-sm text-foreground/70">{resetMsg}</p>}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* ── System Backups ──────────────────────────────────── */}
+      <AccordionItem value="backups" className="border rounded-xl bg-card text-card-foreground shadow-sm border-blue-200">
+        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-blue-50/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg text-blue-900 flex items-center gap-2">
+              <Database className="h-5 w-5 text-blue-600" /> System Backup & Restore
+            </h3>
+            <p className="text-sm text-blue-700/70 font-normal">
+              Create complete offline snapshots of the database, or restore the entire system instantly from an older backup file.
+            </p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pt-4 pb-6 border-t border-blue-100 bg-blue-50/20">
+          <div className="space-y-8">
+            {/* Create Backup */}
+            <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
+              <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                <DownloadCloud className="h-4 w-4 text-blue-500" /> Create New Backup
+              </h4>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs text-gray-500">Backup File Name</Label>
+                  <div className="flex items-center">
+                    <Input 
+                      value={backupName} 
+                      onChange={(e) => { setBackupName(e.target.value); setShowOverwriteConfirm(false); setBackupMsg(null); }}
+                      placeholder="e.g. end_of_month_backup"
+                      className="rounded-r-none border-r-0 focus-visible:ring-0 focus-visible:border-blue-500"
+                    />
+                    <div className="h-10 px-3 flex items-center bg-gray-50 border border-l-0 border-input rounded-r-md text-sm text-gray-500 font-mono">
+                      .sqlite
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  {!showOverwriteConfirm ? (
+                    <Button 
+                      onClick={() => handleCreateBackup(false)} 
+                      disabled={backupLoading || !backupName.trim()} 
+                      className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+                    >
+                      {backupLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Save Backup
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 w-full sm:w-auto animate-in slide-in-from-right-4">
+                      <div className="text-sm font-bold text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" /> Already exists. Overwrite?
+                      </div>
+                      <Button onClick={() => handleCreateBackup(true)} variant="destructive" size="sm">Yes</Button>
+                      <Button onClick={() => setShowOverwriteConfirm(false)} variant="outline" size="sm">No</Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {backupMsg && (
+                <p className={`text-sm font-medium ${backupMsg.isError ? 'text-red-600' : 'text-green-600'}`}>
+                  {backupMsg.text}
+                </p>
+              )}
+            </div>
+
+            {/* List Backups */}
+            <div className="space-y-3">
+              <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                <UploadCloud className="h-4 w-4 text-emerald-500" /> Available Backups
+              </h4>
+              {backups.length === 0 ? (
+                <div className="text-center p-6 bg-white rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
+                  No backups found on the server.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                  {backups.map((file) => (
+                    <div key={file.filename} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between gap-4 hover:border-blue-300 transition-colors">
+                      <div>
+                        <p className="font-bold text-gray-800 break-all">{file.filename}</p>
+                        <div className="flex gap-4 mt-2 text-xs font-medium text-gray-500">
+                          <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={() => handleRestoreBackup(file.filename)} 
+                        disabled={restoreLoading !== null}
+                        variant="outline" 
+                        className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 transition-colors"
+                      >
+                        {restoreLoading === file.filename ? (
+                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Restoring...</>
+                        ) : (
+                          "Restore This Version"
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>

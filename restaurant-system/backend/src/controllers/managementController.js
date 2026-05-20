@@ -26,6 +26,16 @@
 
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
+const fs = require("fs");
+const path = require("path");
+
+const backupsDir = path.join(__dirname, "../../backups");
+if (!fs.existsSync(backupsDir)) {
+  fs.mkdirSync(backupsDir, { recursive: true });
+}
+const dbPath = path.join(__dirname, "../database/database.sqlite");
+const dbWalPath = dbPath + "-wal";
+const dbShmPath = dbPath + "-shm";
 
 /*
  * Resend is loaded lazily so that a missing RESEND_API_KEY in .env does not
@@ -515,6 +525,81 @@ const sendResetEmail = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// ── Backups ───────────────────────────────────────────────────────────────────
+
+const getBackups = async (req, res, next) => {
+  try {
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    const files = fs.readdirSync(backupsDir)
+      .filter(f => f.endsWith(".sqlite"))
+      .map(f => {
+        const stats = fs.statSync(path.join(backupsDir, f));
+        return {
+          filename: f,
+          size: stats.size,
+          created_at: stats.mtime
+        };
+      })
+      .sort((a, b) => b.created_at - a.created_at);
+    res.json(files);
+  } catch (error) { next(error); }
+};
+
+const createBackup = async (req, res, next) => {
+  try {
+    const { filename, overwrite } = req.body;
+    if (!filename) return next(createHttpError(400, "Filename is required"));
+    
+    let finalName = filename;
+    if (!finalName.endsWith(".sqlite")) finalName += ".sqlite";
+    
+    // Sanitize filename to prevent path traversal
+    finalName = finalName.replace(/[^a-zA-Z0-9_.-]/g, '');
+    if (!finalName) return next(createHttpError(400, "Invalid filename"));
+    
+    const targetPath = path.join(backupsDir, finalName);
+    
+    if (fs.existsSync(targetPath) && !overwrite) {
+      return res.status(409).json({ success: false, message: "A backup with this name already exists." });
+    }
+    
+    // Force a WAL checkpoint before backing up so the .sqlite file contains all data
+    await run("PRAGMA wal_checkpoint(TRUNCATE)");
+    
+    fs.copyFileSync(dbPath, targetPath);
+    await createLog("SYSTEM", "CREATE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
+    res.json({ success: true, message: "Backup created successfully", filename: finalName });
+  } catch (error) { next(error); }
+};
+
+const restoreBackup = async (req, res, next) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) return next(createHttpError(400, "Filename is required"));
+    
+    // Sanitize filename
+    const finalName = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+    const sourcePath = path.join(backupsDir, finalName);
+    
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ success: false, message: "Backup file not found" });
+    }
+    
+    // Force a WAL checkpoint to flush current state before overwriting
+    await run("PRAGMA wal_checkpoint(TRUNCATE)");
+    
+    // Overwrite the main DB file
+    fs.copyFileSync(sourcePath, dbPath);
+    
+    // Wipe out WAL and SHM files to prevent the SQLite engine from recovering old temporary data
+    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
+    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
+    
+    await createLog("SYSTEM", "RESTORE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
+    res.json({ success: true, message: "System restored successfully from backup" });
+  } catch (error) { next(error); }
+};
+
 module.exports = {
   createLog,
   getLogs,
@@ -534,4 +619,7 @@ module.exports = {
   updateManagerProfile,
   getKitchenPasscode,
   sendResetEmail,
+  getBackups,
+  createBackup,
+  restoreBackup,
 };
