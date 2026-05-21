@@ -315,7 +315,7 @@ export const deleteMenuItem = async (id: number) =>
 
 export const uploadMenuItemImage = async (id: number, file: Blob) => {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", file, "image.jpg");
   return safeFetch<{ success: boolean; image_url: string }>(`/management/menu/${id}/image`, {
     method: "POST",
     body: formData,

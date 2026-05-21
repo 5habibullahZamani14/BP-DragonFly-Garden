@@ -12,7 +12,6 @@ import { toast } from "sonner";
 import Cropper, { ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { useRef } from "react";
-import { toast } from "sonner";
 
 export function MenuTab() {
   const [items, setItems] = useState<MenuItem[]>([]);
