@@ -32,7 +32,7 @@ export const LandingView = () => (
       className="mb-6 h-56 w-72 animate-wing-flap object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.18)]"
     />
 
-    <span className="eyebrow">Welcome to the farm</span>
+    <span className="eyebrow">{t("landing.welcome")}</span>
     <h1 className="mt-3 font-display text-[3rem] font-bold leading-[0.92] tracking-tight text-balance">
       BP <span className="italic text-accent">Dragonfly</span>
       <br />Garden
@@ -61,7 +61,7 @@ export const LandingView = () => (
           >
             <QrCode className="h-7 w-7" />
           </div>
-          <h2 className="font-display text-2xl font-bold">Scan your table</h2>
+          <h2 className="font-display text-2xl font-bold">{t("landing.scan")}</h2>
           <p className="mt-2 text-sm text-foreground/60 leading-relaxed">
             Point your camera at the QR code on your table to view our menu and start ordering.
           </p>

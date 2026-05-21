@@ -30,6 +30,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -201,14 +202,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                   <Settings className="h-8 w-8 text-green-700" />
                 </div>
               </div>
-              <CardTitle className="text-2xl text-center text-gray-900">Manager Access</CardTitle>
-              <CardDescription className="text-center">Authorized personnel only.</CardDescription>
+              <CardTitle className="text-2xl text-center text-gray-900">{t("manager.loginTitle")}</CardTitle>
+              <CardDescription className="text-center">{t("manager.authOnly")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!showForgot ? (
                 <>
                   <div>
-                    <Label htmlFor="login-id">Manager ID</Label>
+                    <Label htmlFor="login-id">{t("manager.id")}</Label>
                     <Input
                       id="login-id"
                       value={loginId}
@@ -218,7 +219,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="login-password">Password</Label>
+                    <Label htmlFor="login-password">{t("manager.password")}</Label>
                     <Input
                       id="login-password"
                       type="password"
@@ -239,13 +240,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-gray-600">Enter your registered email and we will send your credentials.</p>
+                  <p className="text-sm text-gray-600">{t("manager.enterEmail")}</p>
                   <div className="flex gap-2">
                     <Input
                       type="email"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="Your registered email..."
+                      placeholder={t("manager.enterEmail")}
                       className="flex-1"
                     />
                     <Button onClick={handleForgot} disabled={forgotSending} variant="outline" className="shrink-0">
@@ -266,7 +267,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             {!showForgot && (
               <CardFooter>
                 <Button onClick={handleLogin} disabled={loginLoading} className="w-full text-lg h-12 bg-green-700 hover:bg-green-800">
-                  {loginLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</> : "Access Dashboard"}
+                  {loginLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</> : t("manager.accessDash")}
                 </Button>
               </CardFooter>
             )}
@@ -292,7 +293,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 <Settings className="h-8 w-8 text-green-700" />
                 Management Dashboard
               </h1>
-              <p className="text-gray-500 mt-1">Dragonfly Garden Restaurant Administration</p>
+              <p className="text-gray-500 mt-1">{t("manager.subtitle")}</p>
             </div>
           </div>
           
@@ -320,7 +321,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-gray-500">You're all caught up!</div>
+                    <div className="p-6 text-center text-sm text-gray-500">{t("manager.caughtUp")}</div>
                   ) : (
                     <div className="flex flex-col">
                       {notifications.map((notif, idx) => (
@@ -343,7 +344,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             </Popover>
             <HelpModal title="Manager" sections={managerHelpSections} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
-              <LogOut className="h-4 w-4 mr-2" /> Logout
+              <LogOut className="h-4 w-4 mr-2" /> {t("manager.logout")}
             </Button>
           </div>
         </div>
@@ -353,56 +354,56 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer" onClick={() => goToTab("settings")}>
               <CardContent className="pt-6">
                 <Settings className="h-10 w-10 text-green-500 mb-4" />
-                <CardTitle className="mb-2">Settings</CardTitle>
-                <CardDescription>Working hours and system configuration</CardDescription>
+                <CardTitle className="mb-2">{t("manager.settings")}</CardTitle>
+                <CardDescription>{t("manager.settingsDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer" onClick={() => goToTab("employees")}>
               <CardContent className="pt-6">
                 <Users className="h-10 w-10 text-blue-500 mb-4" />
-                <CardTitle className="mb-2">Employees</CardTitle>
-                <CardDescription>Staff directory, shifts, and salaries</CardDescription>
+                <CardTitle className="mb-2">{t("manager.employees")}</CardTitle>
+                <CardDescription>{t("manager.employeesDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer" onClick={() => goToTab("inventory")}>
               <CardContent className="pt-6">
                 <PackageOpen className="h-10 w-10 text-orange-500 mb-4" />
-                <CardTitle className="mb-2">Inventory</CardTitle>
-                <CardDescription>Raw materials, stock levels, and recipes</CardDescription>
+                <CardTitle className="mb-2">{t("manager.inventory")}</CardTitle>
+                <CardDescription>{t("manager.inventoryDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer" onClick={() => goToTab("tables")}>
               <CardContent className="pt-6">
                 <Grid3X3 className="h-10 w-10 text-emerald-500 mb-4" />
-                <CardTitle className="mb-2">Tables</CardTitle>
-                <CardDescription>Manage table numbers and QR codes</CardDescription>
+                <CardTitle className="mb-2">{t("manager.tables")}</CardTitle>
+                <CardDescription>{t("manager.tablesDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer" onClick={() => goToTab("logs")}>
               <CardContent className="pt-6">
                 <FileText className="h-10 w-10 text-purple-500 mb-4" />
-                <CardTitle className="mb-2">Grand Archive</CardTitle>
-                <CardDescription>Audit logs, activity history, and reports</CardDescription>
+                <CardTitle className="mb-2">{t("manager.logs")}</CardTitle>
+                <CardDescription>{t("manager.logsDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer" onClick={() => goToTab("menu")}>
               <CardContent className="pt-6">
                 <Utensils className="h-10 w-10 text-yellow-500 mb-4" />
-                <CardTitle className="mb-2">Menu</CardTitle>
-                <CardDescription>Dishes, prices, and manual promotions</CardDescription>
+                <CardTitle className="mb-2">{t("manager.menu")}</CardTitle>
+                <CardDescription>{t("manager.menuDesc")}</CardDescription>
               </CardContent>
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer" onClick={() => goToTab("finance")}>
               <CardContent className="pt-6">
                 <DollarSign className="h-10 w-10 text-rose-500 mb-4" />
-                <CardTitle className="mb-2">Finance</CardTitle>
-                <CardDescription>Profit & Loss analysis and performance metrics</CardDescription>
+                <CardTitle className="mb-2">{t("manager.finance")}</CardTitle>
+                <CardDescription>{t("manager.financeDesc")}</CardDescription>
               </CardContent>
             </Card>
           </div>
@@ -455,7 +456,7 @@ const managerHelpSections: HelpSection[] = [
       <div className="space-y-2">
         <p>To manage the physical tables in your restaurant:</p>
         <ol className="list-decimal pl-5 space-y-1">
-          <li>Click on the <strong>Tables</strong> card from the main overview.</li>
+          <li>Click on the <strong>{t("manager.tables")}</strong> card from the main overview.</li>
           <li>To <strong>Add a Table</strong>: Click the green "+ Add Table" button. Enter a human-readable name (e.g., "Table 1") and a unique QR Code Identifier (e.g., "table-1"). Click Save. The system will automatically generate a scannable QR code.</li>
           <li>To <strong>Rename/Edit</strong>: Hover over an existing table card and click the blue pencil icon. Update the details and click Update.</li>
           <li>To <strong>Remove</strong>: Hover over the table card and click the red trash icon. Confirm the deletion. <em>Note: This will break any existing printed QR codes for this table.</em></li>
@@ -470,7 +471,7 @@ const managerHelpSections: HelpSection[] = [
       <div className="space-y-2">
         <p>The Employees section allows you to manage your workforce and view payroll analytics:</p>
         <ol className="list-decimal pl-5 space-y-1">
-          <li>Click the <strong>Employees</strong> card. At the top, you will see charts breaking down staff distribution and payroll load.</li>
+          <li>Click the <strong>{t("manager.employees")}</strong> card. At the top, you will see charts breaking down staff distribution and payroll load.</li>
           <li>To <strong>Add Staff</strong>: Click "+ Add Employee". Fill out their Name, Department, Salary, and Shift Times. The system will automatically generate a unique Employee ID.</li>
           <li>To <strong>Edit</strong>: Find the employee and click "Edit". Adjust their salary, shift times, or contact info.</li>
           <li>To <strong>Remove/Archive</strong>: Click "Archive". The employee will be removed from active use but their historical data is preserved in the Grand Archive.</li>
@@ -485,7 +486,7 @@ const managerHelpSections: HelpSection[] = [
       <div className="space-y-2">
         <p>The restaurant's operating hours dictate when employees can actively process orders.</p>
         <ol className="list-decimal pl-5 space-y-1">
-          <li>Navigate to the <strong>Settings</strong> tab.</li>
+          <li>Navigate to the <strong>{t("manager.settings")}</strong> tab.</li>
           <li>Under "Restaurant Operating Hours", define the Start Time and End Time.</li>
           <li><strong>Important:</strong> When the End Time is reached, any cashier currently logged into the Payment Counter will be automatically logged out by the system.</li>
         </ol>

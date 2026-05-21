@@ -134,15 +134,15 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
               {/* Customer Details Form */}
               {orderType !== "TAKEAWAY" && (
                 <section className="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
-                  <h3 className="font-semibold text-gray-800 mb-2">Customer Details</h3>
+                  <h3 className="font-semibold text-gray-800 mb-2">{t("pos.customerDetails")}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Name *</Label>
-                      <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. John Doe" />
+                      <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t("pos.name")} />
                     </div>
                     <div className="space-y-2">
                       <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone *</Label>
-                      <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="e.g. 012-3456789" />
+                      <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder={t("pos.phone")} />
                     </div>
                     {orderType === "PICKUP" && (
                       <div className="space-y-2 col-span-2">
@@ -153,7 +153,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                     {orderType === "DELIVERY" && (
                       <div className="space-y-2 col-span-2">
                         <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Delivery Address *</Label>
-                        <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder="Full address..." />
+                        <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder={t("pos.deliveryAddress")} />
                       </div>
                     )}
                   </div>
@@ -163,7 +163,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
               {/* Menu Grid */}
               <section>
                 <div className="flex justify-between items-end mb-4">
-                  <h3 className="font-semibold text-gray-800 text-lg">Menu</h3>
+                  <h3 className="font-semibold text-gray-800 text-lg">{t("pos.menu")}</h3>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {menuItems.map(item => (
@@ -205,7 +205,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
               {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4 py-20">
                   <ShoppingBag className="w-16 h-16 opacity-20" />
-                  <p>Your cart is empty</p>
+                  <p>{t("pos.emptyCart")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -235,12 +235,12 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
             <div className="p-6 bg-white border-t shadow-[0_-4px_15px_-5px_rgba(0,0,0,0.05)]">
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-gray-500">
-                  <span>Subtotal</span>
+                  <span>{t("customer.subtotal")}</span>
                   <span>RM {totalAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-xl text-gray-900 pt-3 border-t">
-                  <span>Payable Total</span>
-                  <span>RM {(totalAmount * 1.166).toFixed(2)} <span className="text-xs text-gray-400 font-normal">(est. w/ tax)</span></span>
+                  <span>{t("pos.payableTotal")}</span>
+                  <span>RM {(totalAmount * 1.166).toFixed(2)} <span className="text-xs text-gray-400 font-normal">{t("pos.estTax")}</span></span>
                 </div>
               </div>
               <Button 

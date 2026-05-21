@@ -360,7 +360,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 gap-4">
           <div className="flex items-center gap-4">
             <SettingsModal />
-            <h1 className="text-3xl font-bold text-gray-900 mr-2">Payment Counter</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mr-2">{t("payment.title")}</h1>
           </div>
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm w-full xl:w-auto overflow-x-auto">
             <div className="flex items-center gap-3 mr-2 shrink-0">
@@ -372,34 +372,34 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? "bg-orange-100 text-orange-700 border-orange-200" :
                 "bg-gray-100 text-gray-600 border-gray-200"
               }>
-                {currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? "Working time" :
-                 currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? "Over time" :
-                 "Outside working time"}
+                {currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? t("payment.workingTime") :
+                 currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? t("payment.overTime") :
+                 t("payment.outsideWorking")}
               </Badge>
             </div>
             <span className="text-sm font-medium text-gray-700 border-l border-gray-300 pl-4 shrink-0">
-              Shift: <span className="text-green-700">{loggedInEmployee.name}</span>
+              {t("payment.shift")}: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
             <div className="flex items-center gap-2 shrink-0">
-              <HelpModal title="Payment Counter" sections={paymentHelpSections} />
+              <HelpModal title={t("payment.title")} sections={paymentHelpSections} />
               <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
-                <LogOut className="h-4 w-4 mr-2" /> Logout
+                <LogOut className="h-4 w-4 mr-2" /> {t("payment.logout")}
               </Button>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 mb-8 bg-white/60 p-2 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto w-full">
-          <span className="text-sm font-medium text-gray-500 pl-3 pr-2 shrink-0 uppercase tracking-widest">New Order</span>
+          <span className="text-sm font-medium text-gray-500 pl-3 pr-2 shrink-0 uppercase tracking-widest">{t("payment.newOrder")}</span>
           <div className="flex items-center gap-2 shrink-0">
             <Button onClick={() => { setPosModalInitialType("TAKEAWAY"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-green-700 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
-              + Takeaway
+              + {t("payment.takeawayBadge")}
             </Button>
             <Button onClick={() => { setPosModalInitialType("PICKUP"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-orange-600 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
-              + Pickup
+              + {t("payment.pickup").replace(' +', '')}
             </Button>
             <Button onClick={() => { setPosModalInitialType("DELIVERY"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-blue-600 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
-              + Delivery
+              + {t("payment.delivery")}
             </Button>
           </div>
         </div>
@@ -585,23 +585,23 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
           <section className="space-y-4">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-semibold text-gray-800">Paid Orders</h2>
+                <h2 className="text-2xl font-semibold text-gray-800">{t("payment.paidOrders")}</h2>
                 <Button onClick={() => setShowPaidOrders(!showPaidOrders)} variant="outline" className="shadow-sm bg-white hover:bg-gray-50">
                     {showPaidOrders ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-                    {showPaidOrders ? "Hide" : "Show"}
+                    {showPaidOrders ? t("payment.hide") : t("payment.show")}
                 </Button>
             </div>
             {showPaidOrders && (
-              loading ? <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">Loading orders...</p></div> : (
+              loading ? <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">{t("common.loading")}</p></div> : (
                 <div className="space-y-4 opacity-80">
                   {paidOrders.length === 0 ? (
-                    <p className="text-gray-500 italic">No paid orders today.</p>
+                    <p className="text-gray-500 italic">{t("payment.noPaid")}</p>
                   ) : paidOrders.map((order) => (
                     <Card key={order.id} className="bg-gray-50">
                       <CardHeader className="py-4">
                         <CardTitle className="flex items-center justify-between text-lg">
-                          <span className="text-gray-700">Table {order.table_number}</span>
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Paid</Badge>
+                          <span className="text-gray-700">{t("customer.atTable").replace('at ', '')} {order.table_number}</span>
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{t("payment.paid")}</Badge>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="py-0 pb-4">
