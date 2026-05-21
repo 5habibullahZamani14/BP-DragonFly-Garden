@@ -55,7 +55,23 @@ const apiUrl = (path: string, qrCode?: string) => {
  */
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
   const url = apiUrl(path, qr);
-  const res = await fetch(url, init);
+  
+  const headers = new Headers(init?.headers);
+  if (path.startsWith("/management")) {
+    const savedLogin = localStorage.getItem("managerLogin");
+    if (savedLogin) {
+      try {
+        const parsed = JSON.parse(savedLogin);
+        if (parsed.token) {
+          headers.set("Authorization", `Bearer ${parsed.token}`);
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  const finalInit = { ...init, headers };
+
+  const res = await fetch(url, finalInit);
   if (!res.ok) {
     throw new Error(`API Error: ${res.status} ${res.statusText}`);
   }
@@ -236,6 +252,20 @@ export type FinanceData = {
 /* fetchMenu returns all available menu items. No role required. */
 export const fetchMenu = async (): Promise<MenuItem[]> => {
   return await safeFetch<MenuItem[]>("/menu");
+};
+
+export interface Recommendation {
+  id: number;
+  name: string;
+  price: number;
+  image_url: string;
+  co_occurrences: number;
+  is_fallback?: boolean;
+}
+
+export const fetchRecommendations = async (cartItemIds: number[]): Promise<Recommendation[]> => {
+  if (cartItemIds.length === 0) return [];
+  return await safeFetch(`/menu/recommendations?cart_items=${cartItemIds.join(',')}`);
 };
 
 /*
@@ -478,7 +508,7 @@ export const deleteTable = async (id: number) =>
 
 // ── Manager auth & profile ────────────────────────────────────────────────────
 
-export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; name?: string; message?: string }> => {
+export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; name?: string; token?: string; message?: string }> => {
   const res = await fetch(`${API_BASE}/management/auth`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

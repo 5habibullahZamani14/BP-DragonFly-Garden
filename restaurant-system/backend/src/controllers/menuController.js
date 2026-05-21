@@ -146,4 +146,92 @@ const recomputePopular = async (req, res) => {
   }
 };
 
-module.exports = { getMenu, getCategories, recomputePopular };
+/*
+ * getRecommendations powers the new Upselling engine.
+ * It uses a Market Basket Analysis (Association Rules) approach:
+ * 1. It takes the items currently in the user's cart.
+ * 2. It finds all historical orders that included these specific items.
+ * 3. It counts the frequencies of OTHER items bought in those exact same orders.
+ * 4. It returns the top 3 most frequently co-occurring items.
+ * 
+ * Data requirement: It needs at least 5 historical co-occurrences to be confident.
+ * Fallback: If there isn't enough historical data, it automatically falls back
+ * to suggesting the top all-time best sellers.
+ */
+const getRecommendations = async (req, res) => {
+  try {
+    const { cart_items } = req.query;
+    if (!cart_items) return res.json([]);
+
+    const cartItemIds = cart_items.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    if (cartItemIds.length === 0) return res.json([]);
+
+    // 1. Find all order IDs that contained any of the items in the cart
+    const placeholders = cartItemIds.map(() => '?').join(',');
+    const ordersWithCartItems = await all(`
+      SELECT DISTINCT order_id 
+      FROM order_items 
+      WHERE menu_item_id IN (${placeholders})
+    `, cartItemIds);
+
+    const orderIds = ordersWithCartItems.map(row => row.order_id);
+    let recommendations = [];
+
+    // 2. If we found historical orders, find what else was bought in them
+    if (orderIds.length > 0) {
+      const orderPlaceholders = orderIds.map(() => '?').join(',');
+      const assocQuery = `
+        SELECT mi.id, mi.name, mi.price, mi.image_url, COUNT(*) as co_occurrences
+        FROM order_items oi
+        INNER JOIN menu_items mi ON oi.menu_item_id = mi.id
+        WHERE oi.order_id IN (${orderPlaceholders})
+          AND oi.menu_item_id NOT IN (${placeholders})
+          AND mi.is_available = 1
+        GROUP BY oi.menu_item_id
+        HAVING co_occurrences >= 3
+        ORDER BY co_occurrences DESC
+        LIMIT 3
+      `;
+      
+      const queryParams = [...orderIds, ...cartItemIds];
+      recommendations = await all(assocQuery, queryParams);
+    }
+
+    // 3. Fallback: If we didn't find enough statistically significant pairs, pad with global best-sellers
+    if (recommendations.length < 3) {
+      const needed = 3 - recommendations.length;
+      const excludeIds = [...cartItemIds, ...recommendations.map(r => r.id)];
+      const excludePlaceholders = excludeIds.map(() => '?').join(',');
+      
+      const fallbackQuery = `
+        SELECT mi.id, mi.name, mi.price, mi.image_url, SUM(oi.quantity) as total_sold
+        FROM order_items oi
+        INNER JOIN menu_items mi ON oi.menu_item_id = mi.id
+        WHERE mi.id NOT IN (${excludePlaceholders})
+          AND mi.is_available = 1
+        GROUP BY mi.id
+        ORDER BY total_sold DESC
+        LIMIT ?
+      `;
+      
+      const fallbackItems = await all(fallbackQuery, [...excludeIds, needed]);
+      // Normalize output to match structure
+      const formattedFallback = fallbackItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        image_url: item.image_url,
+        co_occurrences: item.total_sold,
+        is_fallback: true
+      }));
+      
+      recommendations = [...recommendations, ...formattedFallback];
+    }
+
+    res.json(recommendations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { getMenu, getCategories, recomputePopular, getRecommendations };

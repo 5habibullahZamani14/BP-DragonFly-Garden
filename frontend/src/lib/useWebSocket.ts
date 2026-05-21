@@ -93,6 +93,7 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
 
       ws.onopen = () => {
         setIsConnected(true);
+        reconnectAttempts = 0; // Reset attempts on successful connection
       };
 
       ws.onmessage = (event) => {
@@ -106,10 +107,14 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
         }
       };
 
+      let reconnectAttempts = 0;
+
       ws.onclose = () => {
         setIsConnected(false);
-        /* Schedule a reconnect attempt 3 seconds after the connection drops. */
-        reconnectTimeout = setTimeout(connect, 3000);
+        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
+        reconnectAttempts++;
+        /* Schedule a reconnect attempt with exponential backoff. */
+        reconnectTimeout = setTimeout(connect, delay);
       };
 
       ws.onerror = (error) => {

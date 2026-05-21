@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Eye, EyeOff, LogOut } from "lucide-react";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square } from "lucide-react";
 import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings, printFinalBill } from "@/lib/api";
 import type { PaymentOrder } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -92,6 +92,25 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">("TAKEAWAY");
   
+  const [splitItems, setSplitItems] = useState<number[]>([]);
+  const [isSplitMode, setIsSplitMode] = useState(false);
+
+  useEffect(() => {
+    if (isSplitMode && selectedOrder) {
+      const splitSubtotal = splitItems.reduce((sum, index) => {
+        const item = selectedOrder.items[index];
+        return sum + (item.price_at_order_time * item.quantity);
+      }, 0);
+      const service = splitSubtotal * (selectedOrder.service_charge_rate || 0.1);
+      const tax = (splitSubtotal + service) * (selectedOrder.vat_rate || 0.06);
+      setPaymentAmount((splitSubtotal + service + tax).toFixed(2));
+    }
+  }, [splitItems, isSplitMode, selectedOrder]);
+
+  const toggleSplitItem = (index: number) => {
+    setSplitItems(prev => prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]);
+  };
+
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -471,7 +490,52 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 </Select>
                               </div>
 
-                              <div className="space-y-2">
+                              <div className="space-y-4 border-t border-gray-200 pt-4">
+                                <div className="flex justify-between items-center">
+                                  <Label className="text-md font-semibold flex items-center gap-2">
+                                    <SplitSquareHorizontal className="h-4 w-4" />
+                                    Split Bill Calculator
+                                  </Label>
+                                  <Button 
+                                    variant={isSplitMode ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => {
+                                      setIsSplitMode(!isSplitMode);
+                                      if (isSplitMode) {
+                                        setPaymentAmount(""); // Reset when turning off
+                                      } else {
+                                        setSplitItems([]); // Reset selection when turning on
+                                      }
+                                    }}
+                                  >
+                                    {isSplitMode ? "Disable Split" : "Enable Split"}
+                                  </Button>
+                                </div>
+                                
+                                {isSplitMode && (
+                                  <div className="bg-white border rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                                    <p className="text-xs text-gray-500 mb-2">Select items to pay for separately:</p>
+                                    {order.items.map((item, index) => (
+                                      <div 
+                                        key={index} 
+                                        onClick={() => toggleSplitItem(index)}
+                                        className={`flex items-center justify-between p-2 rounded cursor-pointer border ${splitItems.includes(index) ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-gray-50'}`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          {splitItems.includes(index) ? (
+                                            <CheckSquare className="h-4 w-4 text-primary" />
+                                          ) : (
+                                            <Square className="h-4 w-4 text-gray-300" />
+                                          )}
+                                          <span className="text-sm font-medium">{item.quantity}x {item.item_name}</span>
+                                        </div>
+                                        <span className="text-sm">RM {(item.price_at_order_time * item.quantity).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-2 pt-2 border-t border-gray-200">
                                 <Label htmlFor="amount">Tendered Amount (RM)</Label>
                                 <Input 
                                   id="amount" 

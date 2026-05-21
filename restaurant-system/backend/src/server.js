@@ -26,6 +26,7 @@ const managementRoutes = require("./routes/managementRoutes");
 const { executeArchive, forceArchiveLeftovers } = require("./controllers/paymentController");
 const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
+const { executeNightlyCloudBackup, ensureCloudBackupUpToDate } = require("./services/cloudBackupService");
 
 /*
  * I create the Express app and then wrap it in a plain Node.js HTTP server
@@ -131,6 +132,17 @@ app.get(/^(?!\/(?:menu|orders|tables|payments|management)\b).*/, (req, res) => {
   }
 });
 
+/* Captive Portal Routes for Apple and Android */
+app.get("/hotspot-detect.html", (req, res) => {
+  res.redirect("http://dragonfly.local/"); 
+});
+app.get("/generate_204", (req, res) => {
+  res.status(302).redirect("http://dragonfly.local/");
+});
+app.get("/gen_204", (req, res) => {
+  res.status(302).redirect("http://dragonfly.local/");
+});
+
 /* Global error handlers — these must be registered last. */
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -193,7 +205,37 @@ const startServer = async () => {
         }, delay);
       };
 
+      const scheduleCloudBackup = () => {
+        const now = new Date();
+        const nextRun = new Date(now);
+        nextRun.setHours(3, 0, 0, 0); // 3:00 AM
+        if (nextRun <= now) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+        const delay = nextRun.getTime() - now.getTime();
+
+        const runCloudBackup = async () => {
+          try {
+            await executeNightlyCloudBackup();
+          } catch (err) {
+            console.error("Scheduled cloud backup failed:", err);
+          }
+        };
+
+        console.log(`Cloud backup scheduled for ${nextRun.toLocaleString()}`);
+        setTimeout(() => {
+          runCloudBackup();
+          setInterval(runCloudBackup, 24 * 60 * 60 * 1000);
+        }, delay);
+      };
+
       scheduleDailyArchive();
+      scheduleCloudBackup();
+      
+      // Execute a catch-up backup check immediately on startup
+      ensureCloudBackupUpToDate().catch(err => {
+        console.error("Startup catch-up cloud backup failed:", err);
+      });
     });
   } catch (error) {
     console.error("Server startup failed:", error);

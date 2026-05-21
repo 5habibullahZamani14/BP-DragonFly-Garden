@@ -19,8 +19,38 @@
 
 const express = require("express");
 const managementController = require("../controllers/managementController");
+const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 
 const router = express.Router();
+
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: "Too many login attempts from this IP, please try again after 5 minutes"
+});
+
+const verifyToken = (req, res, next) => {
+  // Allow open routes
+  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/kitchen-passcode') {
+    return next();
+  }
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: "Unauthorized: Missing Token" });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+    if (decoded.role !== 'manager') throw new Error("Invalid role");
+    req.managerId = decoded.id;
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: "Unauthorized: Invalid Token" });
+  }
+};
+
+router.use(verifyToken);
 
 /*
  * Attach a minimal user object to every management request so that log entries
@@ -40,7 +70,7 @@ router.use((req, res, next) => {
  * on success. The frontend stores the result in localStorage to maintain the
  * manager session across page reloads.
  */
-router.post("/auth", managementController.managerAuth);
+router.post("/auth", authLimiter, managementController.managerAuth);
 
 /*
  * POST /management/send-reset-email

@@ -26,6 +26,7 @@
 
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
+const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
 
@@ -424,7 +425,8 @@ const managerAuth = async (req, res, next) => {
     if (!id || !password) return next(createHttpError(400, "ID and password are required"));
     const profile = await getManagerProfile();
     if (id === profile.id && password === profile.password) {
-      res.json({ success: true, name: profile.name });
+      const token = jwt.sign({ role: "manager", id: profile.id }, process.env.JWT_SECRET || "fallback_secret", { expiresIn: "7d" });
+      res.json({ success: true, name: profile.name, token });
     } else {
       res.status(401).json({ success: false, message: "Invalid credentials" });
     }

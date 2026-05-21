@@ -7,7 +7,7 @@
  */
 
 const express = require("express");
-const { getMenu, getCategories, recomputePopular } = require("../controllers/menuController");
+const { getMenu, getCategories, recomputePopular, getRecommendations } = require("../controllers/menuController");
 const { asyncHandler } = require("../middleware/validation");
 
 const router = express.Router();
@@ -37,5 +37,12 @@ router.get("/categories", asyncHandler(getCategories));
  * a cron job on the Raspberry Pi running once per week.
  */
 router.post("/popular/recompute", asyncHandler(recomputePopular));
+
+/*
+ * GET /menu/recommendations
+ * Returns personalized upselling recommendations based on items currently in
+ * the customer's cart by analysing historical co-occurrences.
+ */
+router.get("/recommendations", asyncHandler(getRecommendations));
 
 module.exports = router;

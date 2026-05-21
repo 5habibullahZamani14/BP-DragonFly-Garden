@@ -40,10 +40,10 @@ import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
-import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders } from "@/lib/api";
+import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders, fetchRecommendations } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
-import type { MenuItem, Order } from "@/lib/menu-data";
+import type { MenuItem, Order, Recommendation } from "@/lib/menu-data";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
@@ -113,6 +113,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [confirmCountdown, setConfirmCountdown] = useState(8);
   const [submitCooldown, setSubmitCooldown] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  
+  // ── Upselling ───────────────────────────────────────────────────────────
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recsLoading, setRecsLoading] = useState(false);
   // ── Archive countdown (20 s after ready order is seen) ──────────────────
   const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
   const [keptOrderIds, setKeptOrderIds] = useState<Set<number>>(new Set());
@@ -152,6 +156,28 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       window.removeEventListener("scroll", dismiss, { capture: true });
     };
   }, [query]);
+
+  // Load recommendations when cart opens or changes
+  useEffect(() => {
+    if (!cartOpen || cart.length === 0) return;
+    
+    let alive = true;
+    const fetchRecs = async () => {
+      setRecsLoading(true);
+      try {
+        const cartIds = cart.map(c => c.id);
+        const recs = await fetchRecommendations(qrCode, cartIds);
+        if (alive) setRecommendations(recs);
+      } catch (err) {
+        // gracefully ignore failure
+      } finally {
+        if (alive) setRecsLoading(false);
+      }
+    };
+    
+    fetchRecs();
+    return () => { alive = false; };
+  }, [cartOpen, cart.length, qrCode]);
 
   // Load menu + table, then restore any active orders from the DB
   useEffect(() => {
@@ -1171,7 +1197,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         {([
           { id: "home", label: "Home", icon: Home },
           { id: "menu", label: "Menu", icon: UtensilsCrossed },
-          { id: "orders", label: "Orders Status", icon: Receipt },
+          { id: "orders", label: "Orders", icon: Receipt },
         ] as const).map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           const badge = id === "orders" ? orders.filter(o => o.status === "ready" && !celebratedIds.has(o.id)).length : 0;
@@ -1197,11 +1223,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 )}
                 <Icon className={`relative h-[1.35rem] w-[1.35rem] transition-transform duration-300 ${active ? "scale-110" : ""}`}
                   strokeWidth={active ? 2.4 : 2} />
-                {badge > 0 && (
-                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-berry px-1 text-[0.55rem] font-bold text-berry-foreground shadow-[0_2px_6px_-1px_hsl(348_70%_40%/0.5)]">
-                    {badge}
-                  </span>
-                )}
               </span>
               <span className="leading-none tracking-wide">{label}</span>
               {active && (
@@ -1259,6 +1280,47 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 </li>
               ))}
             </ul>
+
+            {/* Upselling Section */}
+            {recommendations.length > 0 && !recsLoading && (
+              <div className="mt-6 mb-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  <h3 className="font-display text-sm font-semibold">Perfect Pairings</h3>
+                  {recommendations[0]?.is_fallback && <span className="text-xs text-foreground/40 ml-auto italic">Popular choices</span>}
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2 snap-x-mandatory no-scrollbar -mx-2 px-2">
+                  {recommendations.map(rec => (
+                    <div key={`rec-${rec.id}`} className="snap-start shrink-0 w-36 rounded-xl border border-border bg-card overflow-hidden shadow-sm flex flex-col">
+                      <div className="h-20 w-full bg-muted overflow-hidden relative">
+                        {rec.image_url ? (
+                          <img src={rec.image_url} alt={rec.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-primary/5 text-primary/30"><Leaf className="h-6 w-6"/></div>
+                        )}
+                        {!rec.is_fallback && (
+                          <div className="absolute top-1 left-1 bg-white/90 backdrop-blur rounded text-[0.55rem] font-bold px-1 py-0.5 text-accent-foreground shadow-sm">
+                            Often bought together
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-2 flex flex-col flex-1">
+                        <p className="font-display text-xs font-semibold leading-tight line-clamp-2">{rec.name}</p>
+                        <div className="mt-auto pt-2 flex items-center justify-between">
+                          <span className="text-xs font-bold text-primary">{formatRM(rec.price)}</span>
+                          <button 
+                            onClick={() => addToCart({ ...rec, category_name: 'Add-on', description: '', is_available: true, is_popular: false, is_promo: false })}
+                            className="bg-primary text-white grid place-items-center h-6 w-6 rounded-full active:scale-90"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="sticky bottom-0 mt-5 -mx-5 -mb-5 rounded-b-[32px] bg-background/95 px-5 pb-6 pt-4 backdrop-blur">
               <div className="mb-3 flex items-center justify-between">
