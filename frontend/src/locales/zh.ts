@@ -34,6 +34,26 @@ export default {
     "customer.placing": "正在下",
     "customer.takeawayOrder": "外带订单",
     "customer.atTable": "在桌号",
-    "customer.toTheGarden": "来到花园"
+    "customer.toTheGarden": "来到花园",
+    "customer.subtotal": "小计",
+    "customer.serviceCharge": "服务费",
+    "customer.sst": "销售税",
+    
+    "payment.logout": "登出",
+    "payment.shift": "班次",
+    "payment.working": "工作中",
+    "payment.title": "收银台",
+    "payment.pickup": "自取 +",
+    "payment.takeaway": "外带 +",
+    "payment.newOrder": "新订单",
+    "payment.unpaidOrders": "未付款订单",
+    "payment.noUnpaid": "没有未付款的订单。",
+    "payment.ticket": "票号",
+    "payment.delivery": "外卖",
+    "payment.takeawayBadge": "外带",
+    "payment.paid": "已付",
+    "payment.processPayment": "处理付款",
+    "payment.totalAmount": "总金额",
+    "payment.remaining": "剩余"
   }
 };

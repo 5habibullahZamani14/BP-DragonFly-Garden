@@ -34,6 +34,26 @@ export default {
     "customer.placing": "membuat",
     "customer.takeawayOrder": "Pesanan Bawa Pulang",
     "customer.atTable": "di Meja",
-    "customer.toTheGarden": "ke taman"
+    "customer.toTheGarden": "ke taman",
+    "customer.subtotal": "Jumlah Kecil",
+    "customer.serviceCharge": "Caj Perkhidmatan",
+    "customer.sst": "SST",
+    
+    "payment.logout": "Log Keluar",
+    "payment.shift": "Syif",
+    "payment.working": "Bekerja",
+    "payment.title": "Kaunter Pembayaran",
+    "payment.pickup": "Ambil +",
+    "payment.takeaway": "Bawa Pulang +",
+    "payment.newOrder": "PESANAN BARU",
+    "payment.unpaidOrders": "Pesanan Belum Bayar",
+    "payment.noUnpaid": "Tiada pesanan belum bayar.",
+    "payment.ticket": "Tiket",
+    "payment.delivery": "Penghantaran",
+    "payment.takeawayBadge": "Bawa Pulang",
+    "payment.paid": "Telah Dibayar",
+    "payment.processPayment": "Proses Pembayaran",
+    "payment.totalAmount": "Jumlah Keseluruhan",
+    "payment.remaining": "Baki"
   }
 };

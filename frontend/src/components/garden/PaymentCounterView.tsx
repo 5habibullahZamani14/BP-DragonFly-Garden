@@ -46,6 +46,7 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
 import { PosOrderModal } from "./PosOrderModal";
+import { useTranslation } from "react-i18next";
 
 interface PaymentMethod {
   id: number;
@@ -72,6 +73,7 @@ const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
 export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) => {
+  const { t } = useTranslation();
   const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | null>(null);
   const [loginInputId, setLoginInputId] = useState("");
   const [loginInputName, setLoginInputName] = useState("");
@@ -404,26 +406,26 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <section className="space-y-4">
-            <h2 className="text-2xl font-semibold text-gray-800">Unpaid Orders</h2>
+            <h2 className="text-2xl font-semibold text-gray-800">{t("payment.unpaidOrders")}</h2>
             {loading ? (
-              <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">Loading orders...</p></div>
+              <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">{t("common.loading")}</p></div>
             ) : (
               <div className="space-y-4">
                 {unpaidOrders.length === 0 ? (
-                  <p className="text-gray-500 italic">No unpaid orders found.</p>
+                  <p className="text-gray-500 italic">{t("payment.noUnpaid")}</p>
                 ) : unpaidOrders.map((order) => (
                   <Card key={order.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-white pb-4">
                       <CardTitle className="flex items-start justify-between">
                         <div className="flex flex-col gap-1">
                           <span className="text-xl">
-                             {!order.order_type || order.order_type === 'DINE_IN' ? `${order.table_number} (Ticket #${order.daily_ticket_number || order.id})` : `Ticket #${order.daily_ticket_number || order.id}`}
+                             {!order.order_type || order.order_type === 'DINE_IN' ? `${order.table_number} (${t("payment.ticket")} #${order.daily_ticket_number || order.id})` : `${t("payment.ticket")} #${order.daily_ticket_number || order.id}`}
                           </span>
                           {order.order_type && order.order_type !== 'DINE_IN' && (
                             <div className="flex gap-2 items-center flex-wrap mt-1">
-                              {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">Pickup {order.collection_time && `@ ${order.collection_time}`}</Badge>}
-                              {order.order_type === 'DELIVERY' && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0">Delivery</Badge>}
-                              {order.order_type === 'TAKEAWAY' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0">Takeaway</Badge>}
+                              {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">{t("payment.pickup")} {order.collection_time && `@ ${order.collection_time}`}</Badge>}
+                              {order.order_type === 'DELIVERY' && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0">{t("payment.delivery")}</Badge>}
+                              {order.order_type === 'TAKEAWAY' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0">{t("payment.takeawayBadge")}</Badge>}
                               {order.customer_name && <span className="text-sm text-gray-500 font-medium ml-1">{order.customer_name}</span>}
                             </div>
                           )}
@@ -442,37 +444,37 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         ))}
                       </ul>
                       <div className="border-t border-gray-200 pt-4 space-y-1 text-sm text-gray-600">
-                        <div className="flex justify-between"><p>Subtotal:</p><p>RM {order.total_price.toFixed(2)}</p></div>
-                        <div className="flex justify-between"><p>Service Charge ({(order.service_charge_rate || 0.10) * 100}%):</p><p>RM {(order.total_price * (order.service_charge_rate || 0.10)).toFixed(2)}</p></div>
-                        <div className="flex justify-between"><p>SST ({order.vat_rate * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0.10)) * order.vat_rate).toFixed(2)}</p></div>
+                        <div className="flex justify-between"><p>{t("customer.subtotal")}:</p><p>RM {order.total_price.toFixed(2)}</p></div>
+                        <div className="flex justify-between"><p>{t("customer.serviceCharge")} ({(order.service_charge_rate || 0.10) * 100}%):</p><p>RM {(order.total_price * (order.service_charge_rate || 0.10)).toFixed(2)}</p></div>
+                        <div className="flex justify-between"><p>{t("customer.sst")} ({order.vat_rate * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0.10)) * order.vat_rate).toFixed(2)}</p></div>
                         <div className="flex justify-between font-bold text-gray-900 text-lg mt-2 pt-2 border-t border-gray-200">
-                          <p>Total:</p><p>RM {order.total_with_vat.toFixed(2)}</p>
+                          <p>{t("customer.total")}:</p><p>RM {order.total_with_vat.toFixed(2)}</p>
                         </div>
                         <div className="flex justify-between text-green-700 font-medium">
-                          <p>Paid:</p><p>RM {order.total_paid.toFixed(2)}</p>
+                          <p>{t("payment.paid")}:</p><p>RM {order.total_paid.toFixed(2)}</p>
                         </div>
                       </div>
                       
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button className="w-full mt-6 shadow-sm" size="lg" onClick={() => setSelectedOrder(order)}>
-                            Process Payment
+                            {t("payment.processPayment")}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[425px]">
                           <DialogHeader>
-                            <DialogTitle>Process Payment</DialogTitle>
+                            <DialogTitle>{t("payment.processPayment")}</DialogTitle>
                             <DialogDescription>{order.table_number}</DialogDescription>
                           </DialogHeader>
                           
                           <div className="space-y-6 mt-4">
                             <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
                               <div className="space-y-1">
-                                <p className="text-sm text-gray-500">Total Amount</p>
+                                <p className="text-sm text-gray-500">{t("payment.totalAmount")}</p>
                                 <p className="font-semibold">RM {order.total_with_vat.toFixed(2)}</p>
                               </div>
                               <div className="text-right space-y-1">
-                                <p className="text-sm text-gray-500">Remaining</p>
+                                <p className="text-sm text-gray-500">{t("payment.remaining")}</p>
                                 <p className="font-bold text-red-600 text-lg">RM {order.remaining.toFixed(2)}</p>
                               </div>
                             </div>

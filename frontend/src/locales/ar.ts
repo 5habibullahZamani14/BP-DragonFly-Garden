@@ -34,6 +34,26 @@ export default {
     "customer.placing": "تقوم بعمل",
     "customer.takeawayOrder": "طلب خارجي",
     "customer.atTable": "في طاولة",
-    "customer.toTheGarden": "في الحديقة"
+    "customer.toTheGarden": "في الحديقة",
+    "customer.subtotal": "المجموع الفرعي",
+    "customer.serviceCharge": "رسوم الخدمة",
+    "customer.sst": "الضريبة",
+    
+    "payment.logout": "تسجيل خروج",
+    "payment.shift": "وردية",
+    "payment.working": "يعمل",
+    "payment.title": "كاونتر الدفع",
+    "payment.pickup": "استلام +",
+    "payment.takeaway": "سفري +",
+    "payment.newOrder": "طلب جديد",
+    "payment.unpaidOrders": "طلبات غير مدفوعة",
+    "payment.noUnpaid": "لا توجد طلبات غير مدفوعة.",
+    "payment.ticket": "تذكرة",
+    "payment.delivery": "توصيل",
+    "payment.takeawayBadge": "سفري",
+    "payment.paid": "مدفوع",
+    "payment.processPayment": "معالجة الدفع",
+    "payment.totalAmount": "المبلغ الإجمالي",
+    "payment.remaining": "المتبقي"
   }
 };

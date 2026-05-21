@@ -34,6 +34,26 @@ export default {
     "customer.placing": "placing a",
     "customer.takeawayOrder": "Takeaway order",
     "customer.atTable": "at Table",
-    "customer.toTheGarden": "to the garden"
+    "customer.toTheGarden": "to the garden",
+    "customer.subtotal": "Subtotal",
+    "customer.serviceCharge": "Service Charge",
+    "customer.sst": "SST",
+    
+    "payment.logout": "Logout",
+    "payment.shift": "Shift",
+    "payment.working": "Working",
+    "payment.title": "Payment Counter",
+    "payment.pickup": "Pickup +",
+    "payment.takeaway": "Takeaway +",
+    "payment.newOrder": "NEW ORDER",
+    "payment.unpaidOrders": "Unpaid Orders",
+    "payment.noUnpaid": "No unpaid orders found.",
+    "payment.ticket": "Ticket",
+    "payment.delivery": "Delivery",
+    "payment.takeawayBadge": "Takeaway",
+    "payment.paid": "Paid",
+    "payment.processPayment": "Process Payment",
+    "payment.totalAmount": "Total Amount",
+    "payment.remaining": "Remaining"
   }
 };

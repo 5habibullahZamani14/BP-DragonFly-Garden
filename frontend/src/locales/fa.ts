@@ -34,6 +34,26 @@ export default {
     "customer.placing": "ثبت",
     "customer.takeawayOrder": "سفارش بیرون‌بر",
     "customer.atTable": "در میز",
-    "customer.toTheGarden": "به باغ"
+    "customer.toTheGarden": "به باغ",
+    "customer.subtotal": "جمع کل",
+    "customer.serviceCharge": "حق سرویس",
+    "customer.sst": "مالیات",
+    
+    "payment.logout": "خروج",
+    "payment.shift": "شیفت",
+    "payment.working": "در حال کار",
+    "payment.title": "صندوق پرداخت",
+    "payment.pickup": "تحویل +",
+    "payment.takeaway": "بیرون‌بر +",
+    "payment.newOrder": "سفارش جدید",
+    "payment.unpaidOrders": "سفارشات پرداخت نشده",
+    "payment.noUnpaid": "هیچ سفارش پرداخت نشده‌ای یافت نشد.",
+    "payment.ticket": "شماره",
+    "payment.delivery": "پیک",
+    "payment.takeawayBadge": "بیرون‌بر",
+    "payment.paid": "پرداخت شده",
+    "payment.processPayment": "پرداخت",
+    "payment.totalAmount": "مبلغ کل",
+    "payment.remaining": "باقی‌مانده"
   }
 };

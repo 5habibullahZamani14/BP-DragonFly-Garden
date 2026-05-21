@@ -34,6 +34,26 @@ export default {
     "customer.placing": "दे रहे हैं",
     "customer.takeawayOrder": "टेकअवे ऑर्डर",
     "customer.atTable": "टेबल पर",
-    "customer.toTheGarden": "बगीचे में"
+    "customer.toTheGarden": "बगीचे में",
+    "customer.subtotal": "उप-योग",
+    "customer.serviceCharge": "सेवा शुल्क",
+    "customer.sst": "कर (SST)",
+    
+    "payment.logout": "लॉग आउट",
+    "payment.shift": "शिफ्ट",
+    "payment.working": "काम कर रहे हैं",
+    "payment.title": "भुगतान काउंटर",
+    "payment.pickup": "पिकअप +",
+    "payment.takeaway": "टेकअवे +",
+    "payment.newOrder": "नया ऑर्डर",
+    "payment.unpaidOrders": "अवैतनिक आदेश",
+    "payment.noUnpaid": "कोई अवैतनिक आदेश नहीं मिला।",
+    "payment.ticket": "टिकट",
+    "payment.delivery": "डिलीवरी",
+    "payment.takeawayBadge": "टेकअवे",
+    "payment.paid": "भुगतान किया गया",
+    "payment.processPayment": "भुगतान प्रक्रिया",
+    "payment.totalAmount": "कुल राशि",
+    "payment.remaining": "शेष"
   }
 };
