@@ -24,24 +24,24 @@ const uploadToCloud = async (filePath) => {
   }
 
   console.log(`[Cloud Backup] Authenticating with secure cloud provider...`);
-  
+
   // ==============================================================================
   // USER: Backblaze B2 Implementation
   // Backblaze uses an S3-compatible API, so we still use the aws-sdk!
   // To activate this, install the SDK by running: npm install aws-sdk
   //
-  // const AWS = require('aws-sdk');
-  // const ep = new AWS.Endpoint(process.env.B2_ENDPOINT); // e.g., 's3.us-west-004.backblazeb2.com'
-  // const s3 = new AWS.S3({ 
-  //   endpoint: ep, 
-  //   accessKeyId: process.env.B2_KEY_ID, 
-  //   secretAccessKey: process.env.B2_APPLICATION_KEY 
-  // });
-  // await s3.upload({ 
-  //   Bucket: process.env.B2_BUCKET_NAME, 
-  //   Key: path.basename(filePath), 
-  //   Body: fs.createReadStream(filePath) 
-  // }).promise();
+  const AWS = require('aws-sdk');
+  const ep = new AWS.Endpoint(process.env.B2_ENDPOINT); // e.g., 's3.us-west-004.backblazeb2.com'
+  const s3 = new AWS.S3({
+    endpoint: ep,
+    accessKeyId: process.env.B2_KEY_ID,
+    secretAccessKey: process.env.B2_APPLICATION_KEY
+  });
+  await s3.upload({
+    Bucket: process.env.B2_BUCKET_NAME,
+    Key: path.basename(filePath),
+    Body: fs.createReadStream(filePath)
+  }).promise();
   // ==============================================================================
 
   // For now, it simulates a successful upload.
@@ -56,7 +56,7 @@ const uploadToCloud = async (filePath) => {
 const executeNightlyCloudBackup = async () => {
   const dbPath = path.join(__dirname, "../../database/database.sqlite");
   const backupDir = path.join(__dirname, "../../../backups");
-  
+
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true });
   }
@@ -68,7 +68,7 @@ const executeNightlyCloudBackup = async () => {
     console.log("[Cloud Backup] Creating snapshot for cloud upload...");
     fs.copyFileSync(dbPath, backupFile);
     await uploadToCloud(backupFile);
-    
+
     // Clean up old local backups to enforce the 7-day rolling window
     cleanupOldBackups(backupDir);
   } catch (error) {
@@ -81,7 +81,7 @@ const cleanupOldBackups = (backupDir) => {
     const files = fs.readdirSync(backupDir).filter(f => f.startsWith("db_backup_"));
     const now = Date.now();
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    
+
     let deletedCount = 0;
     for (const file of files) {
       const filePath = path.join(backupDir, file);
@@ -91,7 +91,7 @@ const cleanupOldBackups = (backupDir) => {
         deletedCount++;
       }
     }
-    
+
     if (deletedCount > 0) {
       console.log(`[Cloud Backup] Cleaned up ${deletedCount} old backup(s) to maintain the 7-day rolling window.`);
     }
@@ -118,7 +118,7 @@ const ensureCloudBackupUpToDate = async () => {
     .sort((a, b) => b.time - a.time);
 
   const now = new Date();
-  
+
   // Define the threshold as 3:00 AM today
   const threeAM = new Date(now);
   threeAM.setHours(3, 0, 0, 0);
