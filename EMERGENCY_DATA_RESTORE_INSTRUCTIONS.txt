@@ -1,0 +1,43 @@
+================================================================================
+🚨 EMERGENCY DATABASE RECOVERY GUIDE 🚨
+================================================================================
+
+Hello! If the restaurant system is completely down and all data seems lost, DO NOT PANIC. 
+The system automatically backs up all of your data securely to the cloud (Backblaze) every single night.
+
+Follow these simple steps to retrieve your data and get the restaurant running again.
+
+STEP 1: STOP THE SERVER
+---------------------------------------------------------
+If the black terminal window (that runs the system) is currently open, close it completely by clicking the "X" in the corner, or pressing Ctrl+C. 
+
+STEP 2: RUN THE RECOVERY TOOL
+---------------------------------------------------------
+1. Open your terminal or command prompt.
+2. Navigate to the backend folder by typing this command and hitting Enter:
+   cd "restaurant-system/backend"
+   
+3. Run the automated recovery tool by typing this command and hitting Enter:
+   node src/restoreBackup.js
+
+STEP 3: WAIT FOR SUCCESS MESSAGE
+---------------------------------------------------------
+The tool will automatically:
+- Connect to your Backblaze cloud storage.
+- Find the absolute most recent backup down to the exact second.
+- Save a copy of your broken database (just in case).
+- Download the pristine backup and put it exactly where it belongs.
+
+When it finishes, you will see this message:
+"🎉 Restore complete! You can now restart your Node.js server."
+
+STEP 4: START THE RESTAURANT SYSTEM
+---------------------------------------------------------
+You can now start the server exactly how you normally do every day.
+All of your menus, employees, and historical financial data are back!
+
+================================================================================
+TROUBLESHOOTING:
+If the tool says "Missing Backblaze credentials", ensure your .env file inside 
+the 'backend' folder contains your B2_KEY_ID and B2_APPLICATION_KEY.
+================================================================================
