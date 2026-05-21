@@ -184,15 +184,12 @@ const createOrder = async (orderData) => {
   await run("BEGIN TRANSACTION");
 
   try {
-    /* Calculate the additional price by summing quantity × price for each line item. */
-    const additionalPrice = Number(
-      items
-        .reduce((total, item) => {
-          const menuItem = menuItemMap.get(item.menu_item_id);
-          return total + menuItem.price * item.quantity;
-        }, 0)
-        .toFixed(2)
-    );
+    /* Pro Way: Convert to integer cents to prevent IEEE-754 floating point precision errors */
+    const additionalPriceCents = items.reduce((total, item) => {
+      const menuItem = menuItemMap.get(item.menu_item_id);
+      return total + Math.round(menuItem.price * 100) * item.quantity;
+    }, 0);
+    const additionalPrice = additionalPriceCents / 100;
 
     let orderId;
     let isAddOn = false;
@@ -202,7 +199,7 @@ const createOrder = async (orderData) => {
     if (activeOrder) {
       isAddOn = true;
       orderId = activeOrder.id;
-      const newTotal = Number((activeOrder.total_price + additionalPrice).toFixed(2));
+      const newTotal = (Math.round(activeOrder.total_price * 100) + additionalPriceCents) / 100;
       await run(`UPDATE orders SET total_price = ?, status = 'queue' WHERE id = ?`, [newTotal, orderId]);
     } else {
       /* Generate the daily ticket number (resets to 1 each day) */
@@ -229,7 +226,14 @@ const createOrder = async (orderData) => {
       return `${item.quantity}x ${mi.name} (${isDrink ? 'Drink' : 'Food'})`;
     }).join(", ");
 
-    const logDetails = `[${dayOfWeek}, ${timeOfDay}] Table: ${table.table_number || 'N/A'}. Order Type: ${order_type}. Items: ${itemNames}. Bill Amount: RM ${additionalPrice.toFixed(2)}.`;
+    const logDetails = JSON.stringify({
+      Day: dayOfWeek,
+      Time: timeOfDay,
+      Table: table.table_number || 'N/A',
+      Order_Type: order_type,
+      Items: itemNames,
+      Bill_Amount: `RM ${additionalPrice.toFixed(2)}`
+    });
 
     await run(
       `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
@@ -294,7 +298,7 @@ const createOrder = async (orderData) => {
             [
               "INVENTORY", "DEDUCT", "System (Customer Order)",
               ing.inventory_item_id.toString(), ing.name,
-              `Deducted ${amountToDeduct} from ${ing.name} to prepare ${menuItem.name} for Order #${orderId}.`
+              JSON.stringify({ Deducted: amountToDeduct, Ingredient: ing.name, Recipe: menuItem.name, Order: `#${orderId}` })
             ]
           );
         }

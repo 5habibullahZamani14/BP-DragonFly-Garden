@@ -42,20 +42,25 @@ const printerService = {
     
     itemsToPrint.forEach(item => {
       
-      const words = item.item_name.split(' ');
+      // Pro Way: Clean and robust word wrapping
       const nameLines = [];
+      const words = item.item_name.split(/\s+/);
       let curLine = "";
-      for (let w of words) {
-         if ((curLine + w).length > 22) {
-            if (curLine) nameLines.push(curLine.trim());
-            while (w.length > 22) {
-               nameLines.push(w.substring(0, 22));
-               w = w.substring(22);
-            }
-            curLine = w + " ";
-         } else {
-            curLine += w + " ";
-         }
+      
+      for (const word of words) {
+        if ((curLine + word).length > 22) {
+          if (curLine) nameLines.push(curLine.trim());
+          if (word.length > 22) {
+            // Handle edge case where a single word is longer than max width
+            const chunks = word.match(/.{1,22}/g) || [];
+            nameLines.push(...chunks.slice(0, -1));
+            curLine = chunks[chunks.length - 1] + " ";
+          } else {
+            curLine = word + " ";
+          }
+        } else {
+          curLine += word + " ";
+        }
       }
       if (curLine.trim()) nameLines.push(curLine.trim());
 

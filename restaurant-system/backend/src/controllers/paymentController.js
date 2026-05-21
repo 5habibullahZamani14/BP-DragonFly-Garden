@@ -131,15 +131,19 @@ const fetchOrderWithPayments = async (orderId) => {
     [orderId]
   );
 
-  const totalPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
-  const remaining = Math.max(0, order.total_with_vat - totalPaid);
+  const toCents = (val) => Math.round(Number(val) * 100);
+
+  const totalPaidCents = payments.reduce((sum, payment) => sum + toCents(payment.amount_paid), 0);
+  const totalWithVatCents = toCents(order.total_with_vat);
+  
+  const remainingCents = Math.max(0, totalWithVatCents - totalPaidCents);
 
   return {
     ...order,
     items,
     payments,
-    total_paid: totalPaid,
-    remaining: Number(remaining.toFixed(2))
+    total_paid: totalPaidCents / 100,
+    remaining: remainingCents / 100
   };
 };
 
@@ -184,9 +188,12 @@ const processPayment = async (orderId, paymentData) => {
       [orderId, payment_method_id, amount, employee_id, employee_name]
     );
 
-    const newTotalPaid = order.total_paid + amount;
-    const newRemaining = order.total_with_vat - newTotalPaid;
-    const newStatus = newRemaining <= 0.01 ? "paid" : "partially_paid";
+    const toCents = (val) => Math.round(Number(val) * 100);
+    const newTotalPaidCents = toCents(order.total_paid) + toCents(amount);
+    const newRemainingCents = toCents(order.total_with_vat) - newTotalPaidCents;
+
+    // Pro Way: Integer math means exact 0 balance, no more <= 0.01 floating point epsilon hacks!
+    const newStatus = newRemainingCents <= 0 ? "paid" : "partially_paid";
 
     if (newStatus === "paid") {
       await run(
@@ -196,7 +203,7 @@ const processPayment = async (orderId, paymentData) => {
       await run(
         `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        ["ORDER", "COMPLETED", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, `Total bill of RM ${newTotalPaid.toFixed(2)} was successfully paid in full.`]
+        ["ORDER", "COMPLETED", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ Total_Bill: `RM ${(newTotalPaidCents / 100).toFixed(2)}`, Status: "Successfully paid in full" })]
       );
     } else {
       await run(
@@ -212,7 +219,7 @@ const processPayment = async (orderId, paymentData) => {
     await run(
       `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      ["ORDER", "PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, `Received a payment of RM ${amount.toFixed(2)} via ${methodName}. Status is now: ${newStatus.replace('_', ' ')}.`]
+      ["ORDER", "PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId}`, JSON.stringify({ Payment_Amount: `RM ${amount.toFixed(2)}`, Method: methodName, New_Status: newStatus.replace('_', ' ') })]
     );
 
     await run("COMMIT");
@@ -335,8 +342,9 @@ const addOrderItem = async (req, res) => {
     throw createHttpError(400, `${menuItem.name} is currently unavailable`);
   }
 
-  const lineTotal = Number((menuItem.price * quantity).toFixed(2));
-  const nextTotal = Number((order.total_price + lineTotal).toFixed(2));
+  const toCents = (val) => Math.round(Number(val) * 100);
+  const lineTotalCents = toCents(menuItem.price) * quantity;
+  const nextTotal = (toCents(order.total_price) + lineTotalCents) / 100;
 
   await run("BEGIN TRANSACTION");
 
@@ -405,7 +413,13 @@ const executeArchive = async () => {
           JSON.stringify(order)
         ]
       );
-      await run(`DELETE FROM orders WHERE id = ?`, [order.id]);
+    }
+
+    // Pro Way: Resolve N+1 query by doing a single bulk delete instead of deleting one by one in the loop
+    if (ordersToArchive.length > 0) {
+      const placeholders = ordersToArchive.map(() => "?").join(",");
+      const ids = ordersToArchive.map(o => o.id);
+      await run(`DELETE FROM orders WHERE id IN (${placeholders})`, ids);
     }
 
     await run("COMMIT");
@@ -450,7 +464,15 @@ const forceArchiveLeftovers = async () => {
           JSON.stringify(order)
         ]
       );
-      await run(`DELETE FROM orders WHERE id = ?`, [order.id]);
+    }
+
+    if (leftoverOrders.length > 0) {
+      const validOrders = leftoverOrders.filter(Boolean);
+      if (validOrders.length > 0) {
+        const placeholders = validOrders.map(() => "?").join(",");
+        const ids = validOrders.map(o => o.id);
+        await run(`DELETE FROM orders WHERE id IN (${placeholders})`, ids);
+      }
     }
     await run("COMMIT");
   } catch (error) {
