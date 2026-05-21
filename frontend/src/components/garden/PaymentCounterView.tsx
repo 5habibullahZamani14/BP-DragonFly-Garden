@@ -413,7 +413,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <CardTitle className="flex items-start justify-between">
                         <div className="flex flex-col gap-1">
                           <span className="text-xl">
-                             {!order.order_type || order.order_type === 'DINE_IN' ? order.table_number : `Order #${order.id}`}
+                             {!order.order_type || order.order_type === 'DINE_IN' ? `${order.table_number} (Ticket #${order.daily_ticket_number || order.id})` : `Ticket #${order.daily_ticket_number || order.id}`}
                           </span>
                           {order.order_type && order.order_type !== 'DINE_IN' && (
                             <div className="flex gap-2 items-center flex-wrap mt-1">

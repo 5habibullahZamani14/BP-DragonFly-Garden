@@ -72,6 +72,7 @@ const fetchOrderById = async (orderId) => {
         o.status,
         o.total_price,
         o.created_at,
+        o.daily_ticket_number,
         o.order_type,
         o.customer_name,
         o.customer_phone,
@@ -204,13 +205,17 @@ const createOrder = async (orderData) => {
       const newTotal = Number((activeOrder.total_price + additionalPrice).toFixed(2));
       await run(`UPDATE orders SET total_price = ?, status = 'queue' WHERE id = ?`, [newTotal, orderId]);
     } else {
+      /* Generate the daily ticket number (resets to 1 each day) */
+      const todayMaxRow = await get(`SELECT MAX(daily_ticket_number) as maxTicket FROM orders WHERE date(created_at, 'localtime') = date('now', 'localtime')`);
+      const nextTicketNumber = (todayMaxRow && todayMaxRow.maxTicket) ? todayMaxRow.maxTicket + 1 : 1;
+
       /* Insert the parent order row with status "queue". */
       const orderInsert = await run(
         `
-          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address)
-          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?)
+          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address, daily_ticket_number)
+          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?)
         `,
-        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address]
+        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address, nextTicketNumber]
       );
       orderId = orderInsert.lastID;
     }

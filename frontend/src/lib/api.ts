@@ -25,6 +25,7 @@ export type Order = BaseOrder & {
   customer_phone?: string;
   collection_time?: string;
   delivery_address?: string;
+  daily_ticket_number?: number;
 };
 
 /*

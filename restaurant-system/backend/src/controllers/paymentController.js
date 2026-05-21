@@ -83,6 +83,7 @@ const fetchOrderWithPayments = async (orderId) => {
         o.customer_phone,
         o.collection_time,
         o.delivery_address,
+        o.daily_ticket_number,
         (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id
@@ -388,8 +389,8 @@ const executeArchive = async () => {
     for (const order of ordersToArchive) {
       await run(
         `
-          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, order_data)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, daily_ticket_number, order_data)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           order.id,
@@ -400,6 +401,7 @@ const executeArchive = async () => {
           order.service_charge_rate,
           order.payment_status,
           order.created_at,
+          order.daily_ticket_number,
           JSON.stringify(order)
         ]
       );
@@ -432,8 +434,8 @@ const forceArchiveLeftovers = async () => {
       if (!order) continue;
       await run(
         `
-          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, order_data)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, daily_ticket_number, order_data)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           order.id,
@@ -444,6 +446,7 @@ const forceArchiveLeftovers = async () => {
           order.service_charge_rate,
           order.payment_status,
           order.created_at,
+          order.daily_ticket_number,
           JSON.stringify(order)
         ]
       );
@@ -468,7 +471,7 @@ const archivePaidOrders = async (req, res) => {
 const getArchivedOrders = async (req, res) => {
   const orders = await all(
     `
-      SELECT id, original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, archived_at, order_data
+      SELECT id, original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, archived_at, daily_ticket_number, order_data
       FROM archived_orders
       ORDER BY archived_at DESC, id DESC
     `

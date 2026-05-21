@@ -182,6 +182,7 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "total_price", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
   await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
+  await ensureColumn("orders", "daily_ticket_number", "INTEGER");
   
   /* External POS Order metadata fields */
   await ensureColumn("orders", "order_type", "TEXT NOT NULL DEFAULT 'DINE_IN'");
@@ -314,6 +315,7 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
   await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
   await ensureColumn("archived_orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
+  await ensureColumn("archived_orders", "daily_ticket_number", "INTEGER");
 
   await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
   await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");

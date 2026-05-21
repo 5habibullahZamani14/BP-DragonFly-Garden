@@ -166,7 +166,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       setRecsLoading(true);
       try {
         const cartIds = cart.map(c => c.id);
-        const recs = await fetchRecommendations(qrCode, cartIds);
+        const recs = await fetchRecommendations(cartIds);
         if (alive) setRecommendations(recs);
       } catch (err) {
         // gracefully ignore failure
@@ -1033,8 +1033,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         {/* Header: order # + status pill + archive countdown */}
                         <div className="flex items-start justify-between mb-4">
                           <div>
-                            <p className="text-[0.58rem] font-bold uppercase tracking-[0.22em] opacity-40">Order</p>
-                            <h2 className="font-display text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.id}</h2>
+                            <p className="text-[0.58rem] font-bold uppercase tracking-[0.22em] opacity-40">Ticket</p>
+                            <h2 className="font-display text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.daily_ticket_number || o.id}</h2>
                             <p className="text-[0.7rem] opacity-50 mt-0.5">{o.table_number}{timeStr && ` · ${timeStr}`}</p>
                           </div>
                           <div>
@@ -1120,7 +1120,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   {archivedOrders.map(o => (
                     <li key={`arch-${o.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
                       <div className="min-w-0">
-                        <p className="font-semibold text-foreground/70">Order #{o.id}</p>
+                        <p className="font-semibold text-foreground/70">Ticket #{o.daily_ticket_number || o.id}</p>
                         <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
                       </div>
                       <span className="shrink-0 font-display text-foreground/55">
@@ -1150,7 +1150,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <li key={`hist-${o.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <Check className="h-3.5 w-3.5 shrink-0 text-leaf" />
-                      <span className="truncate font-medium text-foreground/70">Order #{o.id}</span>
+                      <span className="truncate font-medium text-foreground/70">Ticket #{o.daily_ticket_number || o.id}</span>
                       <span className="truncate text-foreground/40">· {(o.items?.length || 0)} item{(o.items?.length || 0) === 1 ? "" : "s"}</span>
                     </div>
                     <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
