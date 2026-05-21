@@ -44,10 +44,11 @@ import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTa
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
 import type { MenuItem, Order, Recommendation } from "@/lib/menu-data";
+import { useTranslation } from "react-i18next";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
-const STAGE_LABEL: Record<string, string> = { queue: "Received", preparing: "Cooking", ready: "Ready to serve" };
+const STAGE_LABEL: Record<string, string> = { queue: "customer.received", preparing: "customer.cooking", ready: "customer.ready" };
 const orderStageIndex = (status: string) => ORDER_STAGES.findIndex((stage) => stage === status);
 const TABS = ["home", "menu", "orders"] as const;
 type CustomerTab = typeof TABS[number];
@@ -68,6 +69,7 @@ const CAT_ICON: Record<string, typeof Soup> = {
 };
 
 export const CustomerView = ({ qrCode, notify }: Props) => {
+  const { t } = useTranslation();
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
@@ -409,8 +411,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             </svg>
             <span className="absolute inset-0 flex items-center justify-center font-display text-3xl font-bold">{confirmCountdown}</span>
           </div>
-          <h2 className="font-display text-2xl font-semibold mb-1">Confirm your order?</h2>
-          <p className="text-sm text-foreground/55 mb-6 text-center">Sending automatically when timer runs out.<br/>Tap <strong>Cancel</strong> to go back and edit.</p>
+          <h2 className="font-display text-2xl font-semibold mb-1">{t("customer.confirmOrder")}</h2>
+          <p className="text-sm text-foreground/55 mb-6 text-center">{t("customer.confirmDesc1")}<br/>{t("customer.confirmDesc2")}</p>
           {/* Mini receipt preview */}
           <div className="w-full max-w-xs rounded-2xl border border-border bg-card/80 px-4 py-3 mb-6 space-y-1.5 max-h-52 overflow-y-auto">
             {pendingCart.map(item => (
@@ -420,7 +422,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               </div>
             ))}
             <div className="border-t border-border/60 pt-1.5 flex justify-between font-bold">
-              <span>Total</span>
+              <span>{t("customer.total")}</span>
               <span>{formatRM(pendingCart.reduce((s, i) => s + i.price * i.quantity, 0))}</span>
             </div>
           </div>
@@ -428,7 +430,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             onClick={cancelConfirmation}
             className="w-full max-w-xs rounded-2xl border-2 border-destructive/60 py-3 text-sm font-bold text-destructive transition hover:bg-destructive/5 active:scale-95"
           >
-            Cancel — go back to cart
+            {t("customer.cancelGoBack")}
           </button>
         </div>
       )}
@@ -441,8 +443,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
                 <span className="text-2xl">⚠️</span>
               </div>
-              <h2 className="font-display text-xl font-bold text-primary-foreground leading-snug">Order already in progress</h2>
-              <p className="mt-1 text-sm text-primary-foreground/75">Your kitchen is still working on a previous order. Are you sure you want to send another one right now?</p>
+              <h2 className="font-display text-xl font-bold text-primary-foreground leading-snug">{t("customer.dupTitle")}</h2>
+              <p className="mt-1 text-sm text-primary-foreground/75">{t("customer.dupDesc")}</p>
             </div>
             <div className="px-5 py-4 flex flex-col gap-2.5">
               <button
@@ -450,13 +452,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition active:scale-95"
                 style={{ background: "var(--gradient-hero)" }}
               >
-                Yes, send another order
+                {t("customer.dupYes")}
               </button>
               <button
                 onClick={() => setShowDuplicateWarning(false)}
                 className="w-full rounded-2xl border-2 border-border py-3 text-sm font-semibold text-foreground/70 transition hover:bg-black/5 active:scale-95"
               >
-                Cancel — keep waiting
+                {t("customer.dupCancel")}
               </button>
             </div>
           </div>
@@ -471,15 +473,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
         {/* Hero ??" blueprint layout: WELCOME text on top, big butterfly centered, search below */}
         <div className="flex flex-col items-center text-center mt-2">
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.36em] text-foreground/55">Welcome</p>
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.36em] text-foreground/55">{t("customer.welcome")}</p>
           <p className="mt-1.5 font-display text-xl font-semibold" style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}>
             {tableInfo ? (
               /(takeaway|counter|to[- ]?go)/i.test(tableInfo.table_number) ? (
-                <>placing a <span className="text-primary italic">Takeaway order</span></>
+                <>{t("customer.placing")} <span className="text-primary italic">{t("customer.takeawayOrder")}</span></>
               ) : (
-                <>at <span className="text-primary italic">Table {tableInfo.table_number.replace(/^table-?/i, "").trim()}</span></>
+                <>{t("customer.atTable")} <span className="text-primary italic">{tableInfo.table_number.replace(/^table-?/i, "").trim()}</span></>
               )
-            ) : "to the garden"}
+            ) : t("customer.toTheGarden")}
           </p>
           <img
             src={butterflyHero}

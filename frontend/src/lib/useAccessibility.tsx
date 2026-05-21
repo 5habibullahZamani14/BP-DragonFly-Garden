@@ -31,6 +31,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export type FontTheme = "font-1" | "font-2" | "font-3";
 
@@ -57,6 +58,8 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     return parseFloat(localStorage.getItem("a11y-font-scale") || "1");
   });
 
+  const { i18n } = useTranslation();
+
   /* Apply font theme changes to CSS variables and persist to localStorage. */
   useEffect(() => {
     localStorage.setItem("a11y-font-theme", fontTheme);
@@ -65,15 +68,29 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     let sansFont = "'Lexend', sans-serif";
     let bodyWeight = "400";
 
-    if (fontTheme === "font-1") {
-      /* Clarity mode: single sans-serif font for everything. */
-      displayFont = "'Inter', sans-serif";
-      sansFont = "'Inter', sans-serif";
-      bodyWeight = "400";
-    } else if (fontTheme === "font-2") {
-      /* Classic mode: Fraunces + Lexend at regular weight. */
+    const lng = i18n.language || "en";
+
+    if (lng === "zh") {
+      displayFont = "'Noto Serif SC', serif";
+      sansFont = "'Noto Sans SC', sans-serif";
+    } else if (lng === "ar" || lng === "fa") {
+      displayFont = "'Amiri', serif";
+      sansFont = "'Noto Sans Arabic', sans-serif";
+    } else if (lng === "hi") {
+      displayFont = "'Noto Serif Devanagari', serif";
+      sansFont = "'Noto Sans Devanagari', sans-serif";
+    } else if (lng === "ms") {
       displayFont = "'Fraunces', serif";
       sansFont = "'Lexend', sans-serif";
+    }
+
+    if (fontTheme === "font-1") {
+      /* Clarity mode: single sans-serif font for everything. */
+      displayFont = lng === "en" || lng === "ms" ? "'Inter', sans-serif" : sansFont;
+      sansFont = lng === "en" || lng === "ms" ? "'Inter', sans-serif" : sansFont;
+      bodyWeight = "400";
+    } else if (fontTheme === "font-2") {
+      /* Classic mode: display + sans at regular weight. */
       bodyWeight = "400";
     }
     /* Elegance (font-3): same fonts as Classic but at weight 300 for a lighter feel. */
@@ -84,7 +101,7 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     document.documentElement.style.setProperty("--font-display", displayFont);
     document.documentElement.style.setProperty("--font-sans", sansFont);
     document.documentElement.style.setProperty("--body-weight", bodyWeight);
-  }, [fontTheme]);
+  }, [fontTheme, i18n.language]);
 
   /* Apply UI scale and persist. */
   useEffect(() => {

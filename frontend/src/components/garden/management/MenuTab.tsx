@@ -206,12 +206,17 @@ export function MenuTab() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Menu Image</Label>
+              <div className="flex flex-col gap-1">
+                <Label>Menu Image</Label>
+                <p className="text-[0.7rem] text-gray-500 leading-tight">
+                  Upload any standard image format (JPG, PNG, WebP, HEIC). HD images are fully supported and will be automatically scaled. For best results, crop your photo to a <strong>4:3 aspect ratio</strong>. Maximum file size: <strong>10MB</strong>.
+                </p>
+              </div>
               {!imageSrc ? (
-                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2">
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 mt-1">
                   {editingItem?.image_url && <img src={editingItem.image_url} alt="Current" className="h-24 object-contain mb-2 rounded shadow-sm" />}
                   <Input type="file" accept="image/*" onChange={onFileChange} className="max-w-[250px]" />
-                  <p className="text-xs text-gray-500">Select a local image (HD supported) to replace the current one.</p>
+                  <p className="text-xs text-gray-500">Select an image from your device.</p>
                 </div>
               ) : (
                 <div className="space-y-3">

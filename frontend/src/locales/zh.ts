@@ -1,0 +1,21 @@
+export default {
+  translation: {
+    "settings.language": "语言 (Language)",
+    "settings.displayTitle": "显示与语言",
+    "settings.displayDesc": "个性化设置应用程序的外观和体验。",
+    "settings.fontStyle": "字体样式",
+    "settings.interfaceSize": "界面大小",
+    "settings.textSize": "文本大小",
+    "settings.smaller": "更小",
+    "settings.default": "默认",
+    "settings.larger": "更大",
+    "settings.sampleMenu": "示例菜单项 — RM 18.00",
+    "settings.reset": "恢复默认设置",
+    "settings.font1Label": "清晰",
+    "settings.font1Desc": "最大可读性 — 干净、开放，适合所有年龄段",
+    "settings.font2Label": "经典",
+    "settings.font2Desc": "温暖与熟悉 — 花园标志性风格",
+    "settings.font3Label": "优雅",
+    "settings.font3Desc": "轻盈与精致 — 同样的花园声音，如耳语般轻柔",
+  }
+};

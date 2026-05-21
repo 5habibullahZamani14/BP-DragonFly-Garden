@@ -79,6 +79,9 @@ app.use(cors());
 /* Parse incoming JSON request bodies, capped at 100 KB to prevent abuse. */
 app.use(express.json({ limit: "100kb" }));
 
+/* Serve dynamic menu images directly from the backend to bypass Vite caching issues. */
+app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
+
 /*
  * The role-detection middleware runs on every request before any route handler.
  * It inspects the qr_code query parameter, figures out what role the caller

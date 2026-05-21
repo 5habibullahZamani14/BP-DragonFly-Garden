@@ -26,7 +26,8 @@ export default defineConfig(({ mode }) => ({
       '/orders': 'http://localhost:5000',
       '/tables': 'http://localhost:5000',
       '/payments': 'http://localhost:5000',
-      '/management': 'http://localhost:5000'
+      '/management': 'http://localhost:5000',
+      '/menu-images': 'http://localhost:5000'
     }
   },
   plugins: [
@@ -56,6 +57,9 @@ export default defineConfig(({ mode }) => ({
             purpose: 'any maskable'
           }
         ]
+      },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 5000000 // 5 MB limit
       }
     })
   ].filter(Boolean),

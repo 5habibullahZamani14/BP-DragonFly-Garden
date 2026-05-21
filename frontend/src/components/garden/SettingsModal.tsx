@@ -1,6 +1,7 @@
-import { Settings2, Plus, Minus } from "lucide-react";
+import { Settings2, Plus, Minus, Globe } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { useAccessibility, FontTheme } from "@/lib/useAccessibility";
+import { useTranslation } from "react-i18next";
 
 // Font definitions with their actual CSS font stacks and display metadata
 const FONT_OPTIONS: {
@@ -37,6 +38,16 @@ const FONT_OPTIONS: {
 
 export const SettingsModal = () => {
   const { fontTheme, setFontTheme, uiScale, setUiScale, fontScale, setFontScale } = useAccessibility();
+  const { t, i18n } = useTranslation();
+
+  const LANGUAGES = [
+    { code: "en", label: "English" },
+    { code: "zh", label: "中文" },
+    { code: "ms", label: "Bahasa Melayu" },
+    { code: "ar", label: "العربية" },
+    { code: "fa", label: "فارسی" },
+    { code: "hi", label: "हिन्दी" }
+  ];
 
   const selectedFont = FONT_OPTIONS.find((f) => f.id === fontTheme) ?? FONT_OPTIONS[1];
 
@@ -64,9 +75,9 @@ export const SettingsModal = () => {
         {/* Header — stays fixed */}
         <div className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0" style={{ background: "var(--gradient-soft)" }}>
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Display Settings</DialogTitle>
+            <DialogTitle className="font-display text-2xl">{t("settings.displayTitle")}</DialogTitle>
             <DialogDescription className="text-sm text-foreground/60 mt-1">
-              Personalise how the app looks and feels for you.
+              {t("settings.displayDesc")}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -74,14 +85,41 @@ export const SettingsModal = () => {
         {/* Scrollable body */}
         <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1">
 
+          {/* ── Language ────────────────────────────── */}
+          <section aria-labelledby="language-heading">
+            <h3 id="language-heading" className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-foreground/50">
+              <Globe className="h-3.5 w-3.5" />
+              {t("settings.language")}
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {LANGUAGES.map((lang) => {
+                const active = i18n.language === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    onClick={() => i18n.changeLanguage(lang.code)}
+                    aria-pressed={active}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 py-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      active
+                        ? "border-primary bg-primary/5 text-primary shadow-sm"
+                        : "border-border/50 text-foreground/70 hover:border-border hover:bg-muted/40"
+                    }`}
+                  >
+                    {lang.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           {/* ── Typography Mode ────────────────────────────── */}
           <section aria-labelledby="typography-heading">
             <h3 id="typography-heading" className="mb-3 text-xs font-bold uppercase tracking-widest text-foreground/50">
-              Font Style
+              {t("settings.fontStyle")}
             </h3>
 
             <div className="grid grid-cols-3 gap-2">
-              {FONT_OPTIONS.map((opt) => {
+              {FONT_OPTIONS.map((opt, index) => {
                 const active = fontTheme === opt.id;
                 return (
                   <button
@@ -103,7 +141,7 @@ export const SettingsModal = () => {
                       Aa
                     </span>
                     <span className="text-[0.62rem] font-bold uppercase tracking-wider text-foreground/70 leading-none">
-                      {opt.label}
+                      {t(`settings.font${index + 1}Label`)}
                     </span>
                     {active && (
                       <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
@@ -132,7 +170,7 @@ export const SettingsModal = () => {
                 The quick brown fox jumps over the lazy dog. Fresh from the farm, served with love.
               </p>
               <p className="mt-2 text-[0.65rem] text-foreground/40 font-sans">
-                {selectedFont.tagline}
+                {t(`settings.font${FONT_OPTIONS.findIndex(f => f.id === selectedFont.id) + 1}Desc`)}
               </p>
             </div>
           </section>
@@ -141,7 +179,7 @@ export const SettingsModal = () => {
           <section aria-labelledby="ui-size-heading">
             <div className="mb-3 flex items-center justify-between">
               <h3 id="ui-size-heading" className="text-xs font-bold uppercase tracking-widest text-foreground/50">
-                Interface Size
+                {t("settings.interfaceSize")}
               </h3>
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground/60 tabular-nums">
                 {Math.round(uiScale * 100)}%
@@ -174,9 +212,9 @@ export const SettingsModal = () => {
               </button>
             </div>
             <div className="mt-1.5 flex justify-between text-[0.6rem] text-foreground/35 px-1">
-              <span>Smaller</span>
-              <span>Default</span>
-              <span>Larger</span>
+              <span>{t("settings.smaller")}</span>
+              <span>{t("settings.default")}</span>
+              <span>{t("settings.larger")}</span>
             </div>
           </section>
 
@@ -184,7 +222,7 @@ export const SettingsModal = () => {
           <section aria-labelledby="text-size-heading">
             <div className="mb-3 flex items-center justify-between">
               <h3 id="text-size-heading" className="text-xs font-bold uppercase tracking-widest text-foreground/50">
-                Text Size
+                {t("settings.textSize")}
               </h3>
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground/60 tabular-nums">
                 {Math.round(fontScale * 100)}%
@@ -217,9 +255,9 @@ export const SettingsModal = () => {
               </button>
             </div>
             <div className="mt-1.5 flex justify-between text-[0.6rem] text-foreground/35 px-1">
-              <span>Smaller</span>
-              <span>Default</span>
-              <span>Larger</span>
+              <span>{t("settings.smaller")}</span>
+              <span>{t("settings.default")}</span>
+              <span>{t("settings.larger")}</span>
             </div>
 
             {/* Live text-size preview */}
@@ -231,7 +269,7 @@ export const SettingsModal = () => {
                   fontSize: `calc(0.9rem * ${fontScale})`,
                 }}
               >
-                Sample menu item — <strong>RM 18.00</strong>
+                {t("settings.sampleMenu")}
               </p>
             </div>
           </section>
@@ -241,7 +279,7 @@ export const SettingsModal = () => {
             onClick={() => { setUiScale(1); setFontScale(1); setFontTheme("font-3"); }}
             className="w-full rounded-xl border border-border/50 py-2 text-xs font-semibold text-foreground/50 transition hover:bg-muted/40 hover:text-foreground/70"
           >
-            Reset to defaults
+            {t("settings.reset")}
           </button>
 
         </div>
