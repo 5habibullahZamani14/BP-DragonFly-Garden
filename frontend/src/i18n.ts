@@ -12,12 +12,7 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: en },
-      zh: { translation: zh },
-      ms: { translation: ms },
-      ar: { translation: ar },
-      fa: { translation: fa },
-      hi: { translation: hi },
+      en, zh, ms, ar, fa, hi
     },
     lng: localStorage.getItem('a11y-language') || 'en', // Default language
     fallbackLng: 'en',

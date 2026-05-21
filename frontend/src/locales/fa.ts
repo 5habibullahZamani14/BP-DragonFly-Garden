@@ -17,5 +17,23 @@ export default {
     "settings.font2Desc": "گرم و آشنا — امضای باغ با تمام قدرت",
     "settings.font3Label": "ظرافت",
     "settings.font3Desc": "سبک و ظریف — همان صدای باغ، نازک چون زمزمه",
+    
+    "customer.received": "دریافت شد",
+    "customer.cooking": "در حال پخت",
+    "customer.ready": "آماده سرو",
+    "customer.confirmOrder": "تایید سفارش؟",
+    "customer.confirmDesc1": "با پایان زمان به صورت خودکار ارسال می‌شود.",
+    "customer.confirmDesc2": "برای ویرایش دکمه لغو را بزنید.",
+    "customer.total": "مجموع",
+    "customer.cancelGoBack": "لغو — بازگشت به سبد",
+    "customer.dupTitle": "سفارش در حال انجام است",
+    "customer.dupDesc": "آشپزخانه هنوز در حال آماده‌سازی سفارش قبلی شماست. مطمئنید که سفارش دیگری ارسال شود؟",
+    "customer.dupYes": "بله، ارسال کن",
+    "customer.dupCancel": "لغو — صبر می‌کنم",
+    "customer.welcome": "خوش آمدید",
+    "customer.placing": "ثبت",
+    "customer.takeawayOrder": "سفارش بیرون‌بر",
+    "customer.atTable": "در میز",
+    "customer.toTheGarden": "به باغ"
   }
 };

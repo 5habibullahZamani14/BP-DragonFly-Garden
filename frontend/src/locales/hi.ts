@@ -17,5 +17,23 @@ export default {
     "settings.font2Desc": "गर्म और परिचित - बगीचे का हस्ताक्षर पूर्ण शक्ति पर",
     "settings.font3Label": "लालित्य",
     "settings.font3Desc": "हल्का और परिष्कृत - वही बगीचे की आवाज़, फुसफुसाहट जैसी पतली",
+    
+    "customer.received": "प्राप्त किया",
+    "customer.cooking": "तैयार हो रहा है",
+    "customer.ready": "परोसने के लिए तैयार",
+    "customer.confirmOrder": "अपने आदेश की पुष्टि करें?",
+    "customer.confirmDesc1": "टाइमर समाप्त होने पर स्वचालित रूप से भेज रहा है।",
+    "customer.confirmDesc2": "संपादित करने के लिए रद्द करें टैप करें।",
+    "customer.total": "कुल",
+    "customer.cancelGoBack": "रद्द करें - कार्ट पर वापस जाएं",
+    "customer.dupTitle": "ऑर्डर पहले ही प्रगति पर है",
+    "customer.dupDesc": "आपकी रसोई अभी भी पिछले आदेश पर काम कर रही है। क्या आप निश्चित हैं कि आप एक और भेजना चाहते हैं?",
+    "customer.dupYes": "हाँ, आदेश भेजें",
+    "customer.dupCancel": "रद्द करें - प्रतीक्षा करें",
+    "customer.welcome": "स्वागत है",
+    "customer.placing": "दे रहे हैं",
+    "customer.takeawayOrder": "टेकअवे ऑर्डर",
+    "customer.atTable": "टेबल पर",
+    "customer.toTheGarden": "बगीचे में"
   }
 };

@@ -17,5 +17,23 @@ export default {
     "settings.font2Desc": "دافئ ومألوف — توقيع الحديقة بقوتها الكاملة",
     "settings.font3Label": "أناقة",
     "settings.font3Desc": "خفيف وراقي — نفس صوت الحديقة، رقيق كالهمس",
+    
+    "customer.received": "تم الاستلام",
+    "customer.cooking": "جاري الطبخ",
+    "customer.ready": "جاهز للتقديم",
+    "customer.confirmOrder": "تأكيد طلبك؟",
+    "customer.confirmDesc1": "سيتم الإرسال تلقائيًا عند انتهاء الوقت.",
+    "customer.confirmDesc2": "اضغط إلغاء للعودة والتعديل.",
+    "customer.total": "المجموع",
+    "customer.cancelGoBack": "إلغاء — العودة للسلة",
+    "customer.dupTitle": "يوجد طلب قيد التحضير",
+    "customer.dupDesc": "المطبخ لا يزال يحضر طلبك السابق. هل أنت متأكد من إرسال طلب آخر؟",
+    "customer.dupYes": "نعم، إرسال الطلب",
+    "customer.dupCancel": "إلغاء — سأنتظر",
+    "customer.welcome": "مرحباً",
+    "customer.placing": "تقوم بعمل",
+    "customer.takeawayOrder": "طلب خارجي",
+    "customer.atTable": "في طاولة",
+    "customer.toTheGarden": "في الحديقة"
   }
 };

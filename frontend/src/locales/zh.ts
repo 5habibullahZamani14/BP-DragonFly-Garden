@@ -17,5 +17,23 @@ export default {
     "settings.font2Desc": "温暖与熟悉 — 花园标志性风格",
     "settings.font3Label": "优雅",
     "settings.font3Desc": "轻盈与精致 — 同样的花园声音，如耳语般轻柔",
+    
+    "customer.received": "已收到",
+    "customer.cooking": "烹饪中",
+    "customer.ready": "准备上菜",
+    "customer.confirmOrder": "确认您的订单？",
+    "customer.confirmDesc1": "计时结束自动发送。",
+    "customer.confirmDesc2": "点击取消返回并编辑。",
+    "customer.total": "总计",
+    "customer.cancelGoBack": "取消 — 返回购物车",
+    "customer.dupTitle": "订单进行中",
+    "customer.dupDesc": "厨房正在处理您之前的订单。确定现在再发送一个吗？",
+    "customer.dupYes": "是的，发送",
+    "customer.dupCancel": "取消 — 继续等待",
+    "customer.welcome": "欢迎",
+    "customer.placing": "正在下",
+    "customer.takeawayOrder": "外带订单",
+    "customer.atTable": "在桌号",
+    "customer.toTheGarden": "来到花园"
   }
 };

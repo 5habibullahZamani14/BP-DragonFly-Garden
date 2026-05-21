@@ -17,5 +17,23 @@ export default {
     "settings.font2Desc": "Hangat & mesra — gaya taman yang sebenar",
     "settings.font3Label": "Keanggunan",
     "settings.font3Desc": "Ringan & halus — gaya taman yang sama, senipis bisikan",
+    
+    "customer.received": "Diterima",
+    "customer.cooking": "Sedang dimasak",
+    "customer.ready": "Sedia dihidangkan",
+    "customer.confirmOrder": "Sahkan pesanan anda?",
+    "customer.confirmDesc1": "Akan dihantar secara automatik selepas pemasa tamat.",
+    "customer.confirmDesc2": "Tekan Batal untuk mengedit.",
+    "customer.total": "Jumlah",
+    "customer.cancelGoBack": "Batal — kembali ke troli",
+    "customer.dupTitle": "Pesanan sedang diproses",
+    "customer.dupDesc": "Dapur masih menyediakan pesanan anda sebelum ini. Pasti anda mahu menghantar pesanan lagi?",
+    "customer.dupYes": "Ya, hantar pesanan",
+    "customer.dupCancel": "Batal — tunggu",
+    "customer.welcome": "Selamat datang",
+    "customer.placing": "membuat",
+    "customer.takeawayOrder": "Pesanan Bawa Pulang",
+    "customer.atTable": "di Meja",
+    "customer.toTheGarden": "ke taman"
   }
 };
