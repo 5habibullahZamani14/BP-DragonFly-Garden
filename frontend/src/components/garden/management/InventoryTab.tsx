@@ -18,6 +18,7 @@
  *      from the raw stock.
  */
 
+import { useTranslation } from "react-i18next";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -295,7 +296,7 @@ export const InventoryTab = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Inventory Health Status</CardTitle>
+                <CardTitle>{t("m.invHealth")}</CardTitle>
                 <CardDescription>Current stock levels as a percentage of maximum capacity (lowest first)</CardDescription>
               </CardHeader>
               <CardContent>
@@ -432,7 +433,7 @@ export const InventoryTab = ({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Current Stock</Label>
+                    <Label>{t("m.currStock")}</Label>
                     <Input type="number" value={newItem.current_stock} onChange={e => setNewItem({...newItem, current_stock: e.target.value})} />
                   </div>
                   <div className="space-y-2">
@@ -445,7 +446,7 @@ export const InventoryTab = ({
                   </div>
                 </div>
                 <div className="flex gap-2 pt-4">
-                  <Button onClick={() => handleCreateItem(false)} className="bg-orange-600 hover:bg-orange-700 text-white flex-1">Save Item</Button>
+                  <Button onClick={() => handleCreateItem(false)} className="bg-orange-600 hover:bg-orange-700 text-white flex-1">{t("m.saveItem")}</Button>
                   <Button onClick={() => setIsAddingItem(false)} variant="outline" className="flex-1">Cancel</Button>
                 </div>
               </CardContent>
@@ -512,7 +513,7 @@ export const InventoryTab = ({
           <Dialog open={!!editingItem} onOpenChange={(open) => !open && setEditingItem(null)}>
             <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Edit Inventory Item</DialogTitle>
+                <DialogTitle>{t("m.editInvItem")}</DialogTitle>
               </DialogHeader>
               {editingItem && (
                 <div className="space-y-4 pt-4">
@@ -562,7 +563,7 @@ export const InventoryTab = ({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>Current Stock</Label>
+                      <Label>{t("m.currStock")}</Label>
                       <Input type="number" value={editingItem.current_stock} onChange={e => setEditingItem({...editingItem, current_stock: e.target.value})} />
                     </div>
                     <div className="space-y-2">

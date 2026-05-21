@@ -156,10 +156,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           })
         );
       } else {
-        notify("error", "Invalid Employee ID or Name");
+        notify("error", t("payment.invalidLogin"));
       }
     } catch {
-      notify("error", "Failed to verify employee");
+      notify("error", t("payment.failedVerify"));
     }
   };
 
@@ -225,7 +225,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       
       return unpaid;
     } catch (error) {
-      notify("error", "Failed to load payment data");
+      notify("error", t("payment.failedLoad"));
       return null;
     } finally {
       setLoading(false);
@@ -238,7 +238,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
   useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER"], (event) => {
     if (event.type === "CALL_WAITER") {
-      notify("success", `Table ${event.payload?.table_id || 'unknown'} requested assistance!`);
+      notify("success", `Table ${event.payload?.table_id || "unknown"} - ${t("payment.tableHelp")}`);
       return;
     }
     if (loggedInEmployee) {
@@ -248,7 +248,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {
-      notify("error", "Please fill all payment details");
+      notify("error", t("payment.fillDetails"));
       return;
     }
 
@@ -268,12 +268,12 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       if (paymentOrder && paymentOrder.payment_status === "paid") {
         try {
           await printFinalBill(qrCode, selectedOrder.id, loggedInEmployee.name);
-          notify("success", "Payment successful! Final receipt printing.");
+          notify("success", t("payment.paymentSuccess"));
         } catch (e) {
-          notify("error", "Payment successful but printer failed!");
+          notify("error", t("payment.printerFailed"));
         }
       } else {
-        notify("success", "Partial payment recorded.");
+        notify("success", t("payment.partialPayment"));
       }
 
       setSelectedOrder(null);
@@ -281,7 +281,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       // Don't reset selectedPaymentMethod so it stays on Cash
       loadData(); // This should refresh the lists
     } catch (error) {
-      notify("error", getErrorMessage(error, "Failed to process payment"));
+      notify("error", getErrorMessage(error, t("payment.failedProcess")));
     } finally {
       setIsProcessing(false);
     }
@@ -289,7 +289,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
   const handleAddItem = async () => {
     if (!selectedOrder || !newItemId || !newItemQuantity || !loggedInEmployee) {
-        notify("error", "Please select an item and quantity");
+        notify("error", t("payment.selectItem"));
         return;
     }
 
@@ -305,7 +305,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         setNewItemQuantity("1");
         loadData(); // Refresh data to show the new item
     } catch (error) {
-        notify("error", getErrorMessage(error, "Failed to add item"));
+        notify("error", getErrorMessage(error, t("payment.failedAddItem")));
     }
   };
 
@@ -315,17 +315,17 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
-          <HelpModal title="Payment Counter" sections={paymentHelpSections} />
+          <HelpModal title="Payment Counter" sections={getPaymentHelpSections(t)} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl">
           <CardHeader>
-            <CardTitle className="text-2xl text-center text-gray-900">Payment Counter Login</CardTitle>
-            <CardDescription className="text-center">Enter your employee credentials to start your shift.</CardDescription>
+            <CardTitle className="text-2xl text-center text-gray-900">{t("payment.loginTitle")}</CardTitle>
+            <CardDescription className="text-center">{t("payment.loginSub")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="login-id">Employee ID</Label>
+              <Label htmlFor="login-id">{t("payment.empId")}</Label>
               <Input
                 id="login-id"
                 value={loginInputId}
@@ -334,7 +334,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               />
             </div>
             <div>
-              <Label htmlFor="login-name">Employee Name</Label>
+              <Label htmlFor="login-name">{t("payment.empName")}</Label>
               <Input
                 id="login-name"
                 value={loginInputName}
@@ -345,7 +345,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleLogin} className="w-full text-lg h-12">Login</Button>
+            <Button onClick={handleLogin} className="w-full text-lg h-12">{t("payment.loginBtn")}</Button>
           </CardFooter>
         </Card>
         </div>
@@ -381,7 +381,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               {t("payment.shift")}: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
             <div className="flex items-center gap-2 shrink-0">
-              <HelpModal title={t("payment.title")} sections={paymentHelpSections} />
+              <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
               <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
                 <LogOut className="h-4 w-4 mr-2" /> {t("payment.logout")}
               </Button>
@@ -481,7 +481,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div className="space-y-4">
                               <div className="space-y-2">
-                                <Label htmlFor="payment-method">Payment Method</Label>
+                                <Label htmlFor="payment-method">{t("payment.method")}</Label>
                                 <Select value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
                                   <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Select method" />
@@ -520,7 +520,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 
                                 {isSplitMode && (
                                   <div className="bg-white border rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
-                                    <p className="text-xs text-gray-500 mb-2">Select items to pay for separately:</p>
+                                    <p className="text-xs text-gray-500 mb-2">{t("payment.selectItemsToPay")}</p>
                                     {order.items.map((item, index) => (
                                       <div 
                                         key={index} 
@@ -542,7 +542,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 )}
                               </div>
                               <div className="space-y-2 pt-2 border-t border-gray-200">
-                                <Label htmlFor="amount">Tendered Amount (RM)</Label>
+                                <Label htmlFor="amount">{t("payment.tendered")}</Label>
                                 <Input 
                                   id="amount" 
                                   type="number" 
@@ -570,7 +570,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 {isProcessing ? "Processing..." : "Process Payment"}
                               </Button>
                               <Button variant="outline" onClick={() => setAddingItem(true)} size="lg" className="sm:flex-none">
-                                Add Item
+                                {t("payment.addItem")}
                               </Button>
                             </div>
                           </div>
@@ -623,14 +623,14 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       <Dialog open={addingItem} onOpenChange={setAddingItem}>
           <DialogContent className="sm:max-w-[400px]">
               <DialogHeader>
-                  <DialogTitle>Add Last-Minute Item</DialogTitle>
+                  <DialogTitle>{t("payment.addLastMinute")}</DialogTitle>
                   <DialogDescription>
                     Append an item to the order before final payment.
                   </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 mt-4">
                   <div className="space-y-2">
-                      <Label htmlFor="menu-item">Menu Item</Label>
+                      <Label htmlFor="menu-item">{t("payment.menuItem")}</Label>
                       <Select value={newItemId} onValueChange={setNewItemId}>
                           <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select an item" />
@@ -645,10 +645,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       </Select>
                   </div>
                   <div className="space-y-2">
-                      <Label htmlFor="quantity">Quantity</Label>
+                      <Label htmlFor="quantity">{t("payment.quantity")}</Label>
                       <Input id="quantity" type="number" value={newItemQuantity} onChange={e => setNewItemQuantity(e.target.value)} min="1" />
                   </div>
-                  <Button onClick={handleAddItem} className="w-full" size="lg">Add to Order</Button>
+                  <Button onClick={handleAddItem} className="w-full" size="lg">{t("payment.addToOrderBtn")}</Button>
               </div>
           </DialogContent>
       </Dialog>
@@ -672,13 +672,13 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   );
 };
 
-const paymentHelpSections: HelpSection[] = [
+const getPaymentHelpSections = (t: any): HelpSection[] => [
   {
     id: "login",
     title: "1. Login & Session",
     content: (
       <div className="space-y-2">
-        <p>Before you can process payments, log in using your <strong>Employee ID</strong> and <strong>Name</strong>. This ensures every transaction is tracked under your name.</p>
+        <p>Before you can process payments, log in using your <strong>{t("payment.empId")}</strong> and <strong>Name</strong>. This ensures every transaction is tracked under your name.</p>
         <p><strong>Your session is remembered for 7 days.</strong> You will not need to log in again until the week ends or you manually click Logout.</p>
         <p>The ⚙️ Settings icon (top-left) and the ℹ️ Info icon (top-right) are always accessible, even before you log in.</p>
         <p><strong>Note:</strong> The system automatically monitors restaurant working hours. If the restaurant closes, it will automatically end your shift and log you out.</p>
@@ -695,7 +695,7 @@ const paymentHelpSections: HelpSection[] = [
           <li>Verify the Table number and the items listed on the ticket.</li>
           <li>Click the blue <strong>Process Payment</strong> button.</li>
           <li>A window will appear showing the total cost (including VAT and Service Charge) and the <strong>Remaining</strong> amount due.</li>
-          <li>Select the <strong>Payment Method</strong> (e.g., Cash, Card).</li>
+          <li>Select the <strong>{t("payment.method")}</strong> (e.g., Cash, Card).</li>
           <li>Enter the <strong>Tendered Amount</strong> (the amount the customer handed to you). If they gave more than the total, the system will automatically calculate the <strong>Change due</strong>.</li>
           <li>Click <strong>Process</strong>. The system will record the payment and move the order to the Paid list if the balance is fully settled.</li>
         </ol>
@@ -710,9 +710,9 @@ const paymentHelpSections: HelpSection[] = [
         <p>Sometimes a customer will want to add an item right as they are paying (like a last-minute drink or dessert).</p>
         <ol className="list-decimal pl-5 space-y-1">
           <li>Click <strong>Process Payment</strong> on their order.</li>
-          <li>Instead of entering payment, click the <strong>Add Item</strong> button.</li>
+          <li>Instead of entering payment, click the <strong>{t("payment.addItem")}</strong> button.</li>
           <li>Select the item from the dropdown list and enter the quantity.</li>
-          <li>Click <strong>Add to Order</strong>. The item will be instantly added to their bill, the total will update, and inventory will be automatically deducted.</li>
+          <li>Click <strong>{t("payment.addToOrderBtn")}</strong>. The item will be instantly added to their bill, the total will update, and inventory will be automatically deducted.</li>
         </ol>
       </div>
     )

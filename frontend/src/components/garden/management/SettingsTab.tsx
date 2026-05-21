@@ -11,6 +11,7 @@
  * a clean, accessible form. State is persisted through the backend API and
  * reflected instantly in the UI via optimistic updates.
  */
+import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -189,7 +190,7 @@ export const SettingsTab = () => {
       <AccordionItem value="hours" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Restaurant Working Hours</h3>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.restHours")}</h3>
             <p className="text-sm text-muted-foreground font-normal">
               These hours determine when employees are automatically logged out.
               The manager account is exempt from this restriction.
@@ -200,12 +201,12 @@ export const SettingsTab = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="start-time">Opening Time</Label>
+                <Label htmlFor="start-time">{t("m.openTime")}</Label>
                 <Input id="start-time" type="time" value={hours.start}
                   onChange={(e) => setHours({ ...hours, start: e.target.value })} className="w-full text-lg" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end-time">Closing Time</Label>
+                <Label htmlFor="end-time">{t("m.closeTime")}</Label>
                 <Input id="end-time" type="time" value={hours.end}
                   onChange={(e) => setHours({ ...hours, end: e.target.value })} className="w-full text-lg" />
               </div>
@@ -221,7 +222,7 @@ export const SettingsTab = () => {
       <AccordionItem value="kitchen" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Kitchen Access Passcode</h3>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.kitchenPass")}</h3>
             <p className="text-sm text-muted-foreground font-normal">
               This is the passcode your kitchen crew enters to access the Kitchen Board. Share it with your staff.
             </p>
@@ -257,7 +258,7 @@ export const SettingsTab = () => {
       <AccordionItem value="profile" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Manager Profile</h3>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.mgrProfile")}</h3>
             <p className="text-sm text-muted-foreground font-normal">
               Your personal details and login credentials. Your email is used for password recovery.
             </p>
@@ -267,7 +268,7 @@ export const SettingsTab = () => {
           <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
-                <Label htmlFor="mgr-name">Full Name</Label>
+                <Label htmlFor="mgr-name">{t("m.fullName")}</Label>
                 <Input id="mgr-name" value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                   placeholder="e.g. Ahmad bin Ibrahim" />

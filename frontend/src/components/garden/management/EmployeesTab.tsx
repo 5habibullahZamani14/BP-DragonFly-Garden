@@ -22,6 +22,7 @@
  *      from active lists like the Payment Counter login.
  */
 
+import { useTranslation } from "react-i18next";
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -176,11 +177,11 @@ export const EmployeesTab = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Full Name</Label>
+                <Label>{t("m.fullName")}</Label>
                 <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" />
               </div>
               <div className="space-y-2">
-                <Label>Department</Label>
+                <Label>{t("m.dept")}</Label>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                   value={formData.department} 
@@ -194,7 +195,7 @@ export const EmployeesTab = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>Employment Type</Label>
+                <Label>{t("m.empType")}</Label>
                 <select 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                   value={formData.employment_type} 
@@ -210,7 +211,7 @@ export const EmployeesTab = () => {
                 <Input value={formData.contact_info} onChange={(e) => setFormData({...formData, contact_info: e.target.value})} placeholder="012-3456789" />
               </div>
               <div className="space-y-2">
-                <Label>Salary (RM)</Label>
+                <Label>{t("m.salary")}</Label>
                 <Input type="number" value={formData.salary} onChange={(e) => setFormData({...formData, salary: e.target.value})} placeholder="0.00" />
               </div>
               <div className="space-y-2">
@@ -227,7 +228,7 @@ export const EmployeesTab = () => {
               </div>
             </div>
             <div className="flex gap-2 pt-4">
-              <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white flex-1">Save Employee</Button>
+              <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white flex-1">{t("m.saveEmp")}</Button>
               <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">Cancel</Button>
             </div>
           </CardContent>
@@ -239,7 +240,7 @@ export const EmployeesTab = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
             <CardHeader>
-              <CardTitle>Staff Distribution</CardTitle>
+              <CardTitle>{t("m.staffDist")}</CardTitle>
               <CardDescription>Number of employees per department</CardDescription>
             </CardHeader>
             <CardContent>
@@ -269,7 +270,7 @@ export const EmployeesTab = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Payroll Load by Department</CardTitle>
+              <CardTitle>{t("m.payrollLoad")}</CardTitle>
               <CardDescription>Total base salary (RM) per department</CardDescription>
             </CardHeader>
             <CardContent>
@@ -331,8 +332,8 @@ export const EmployeesTab = () => {
                               </p>
                             </div>
                             <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => handleEdit(emp)} className="h-7 text-xs px-2">Edit</Button>
-                              <Button variant="destructive" size="sm" onClick={() => handleArchive(emp.id)} className="h-7 text-xs px-2">Archive</Button>
+                              <Button variant="outline" size="sm" onClick={() => handleEdit(emp)} className="h-7 text-xs px-2">{t("m.edit")}</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleArchive(emp.id)} className="h-7 text-xs px-2">{t("m.archive")}</Button>
                             </div>
                           </div>
                           

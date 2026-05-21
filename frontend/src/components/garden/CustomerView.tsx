@@ -200,7 +200,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           }
         } catch { /* non-critical: orders panel just starts empty */ }
       } catch (err) {
-        if (alive) notify("error", "Failed to load menu. Please refresh.");
+        if (alive) notify("error", t("customer.failedLoadMenu"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -342,7 +342,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       setSubmitCooldown(true);
       setTimeout(() => setSubmitCooldown(false), 3000);
     } catch {
-      notify("error", "Network issue — order failed to send.");
+      notify("error", t("customer.failedSendOrder"));
       pendingCartRef.current = snapshot; // restore so user can retry
       setPendingCart(snapshot);
     } finally { setSubmitting(false); }
@@ -1161,9 +1161,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             if (!tableInfo) return;
             try {
               await callStaff(tableInfo.id);
-              notify('success', 'Staff has been notified. We will be with you shortly.');
+              notify("success", t("customer.staffNotified"));
             } catch (e) {
-              notify('error', 'Failed to notify staff. Please try again.');
+              notify("error", t("customer.failedNotifyStaff"));
             }
           }}
           className="relative mx-auto flex w-full flex-col items-center justify-start gap-1 pt-1 pb-1 text-[0.62rem] font-semibold transition-all text-accent hover:text-accent/80 active:scale-95"

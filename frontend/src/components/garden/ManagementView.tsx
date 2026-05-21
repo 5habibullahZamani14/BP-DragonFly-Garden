@@ -192,7 +192,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
-          <HelpModal title="Manager" sections={managerHelpSections} />
+          <HelpModal title="Manager" sections={getManagerHelpSections(t)} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl border-green-100">
@@ -342,7 +342,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </div>
               </PopoverContent>
             </Popover>
-            <HelpModal title="Manager" sections={managerHelpSections} />
+            <HelpModal title="Manager" sections={getManagerHelpSections(t)} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> {t("manager.logout")}
             </Button>
@@ -422,7 +422,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   );
 };
 
-const managerHelpSections: HelpSection[] = [
+const getManagerHelpSections = (t: any): HelpSection[] => [
   {
     id: "access",
     title: "1. Logging In & Session",

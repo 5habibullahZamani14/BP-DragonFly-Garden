@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import "cropperjs/dist/cropper.css";
 import { useRef } from "react";
 
 export function MenuTab() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<{id: number; name: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +107,7 @@ export function MenuTab() {
     <div className="space-y-6 animate-fade-up">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Menu Management</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.menuMgmt")}</h2>
           <p className="text-sm text-gray-500">Manage dishes, prices, and manual promotions.</p>
         </div>
         <Button onClick={() => { setImageSrc(null); setEditingItem({ is_available: true, price: 0 }); setIsDialogOpen(true); }}>
@@ -181,11 +183,11 @@ export function MenuTab() {
             
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Price (RM) *</Label>
+                <Label>{t("m.price")}</Label>
                 <Input type="number" step="0.01" value={editingItem?.price || ''} onChange={e => setEditingItem(prev => ({...prev, price: parseFloat(e.target.value)}))} />
               </div>
               <div className="grid gap-2">
-                <Label>Category *</Label>
+                <Label>{t("m.category")}</Label>
                 <Select 
                   value={editingItem?.category_id?.toString()} 
                   onValueChange={v => setEditingItem(prev => ({...prev, category_id: parseInt(v)}))}
@@ -201,13 +203,13 @@ export function MenuTab() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Description</Label>
+              <Label>{t("m.description")}</Label>
               <Input value={editingItem?.description || ''} onChange={e => setEditingItem(prev => ({...prev, description: e.target.value}))} />
             </div>
 
             <div className="grid gap-2">
               <div className="flex flex-col gap-1">
-                <Label>Menu Image</Label>
+                <Label>{t("m.menuImage")}</Label>
                 <p className="text-[0.7rem] text-gray-500 leading-tight">
                   Upload any standard image format (JPG, PNG, WebP, HEIC). HD images are fully supported and will be automatically scaled. For best results, crop your photo to a <strong>4:3 aspect ratio</strong>. Maximum file size: <strong>10MB</strong>.
                 </p>
@@ -273,7 +275,7 @@ export function MenuTab() {
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Mark as Popular</Label>
+                  <Label>{t("m.markPopular")}</Label>
                   <p className="text-xs text-gray-500">Manually override AI recommendations.</p>
                 </div>
                 <Switch checked={editingItem?.is_popular || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_popular: c}))} />
@@ -282,7 +284,7 @@ export function MenuTab() {
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>Active Promotion</Label>
+                    <Label>{t("m.activePromo")}</Label>
                     <p className="text-xs text-gray-500">Highlight this item with a promo badge.</p>
                   </div>
                   <Switch checked={editingItem?.is_promo || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_promo: c}))} />
@@ -302,7 +304,7 @@ export function MenuTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Save Item</Button>
+            <Button onClick={handleSave}>{t("m.saveItem")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

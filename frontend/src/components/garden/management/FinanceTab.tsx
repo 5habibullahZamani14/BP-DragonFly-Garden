@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchFinanceData, FinanceData } from "@/lib/api";
@@ -95,7 +96,7 @@ export const FinanceTab = () => {
             <DollarSign className="w-16 h-16" />
           </div>
           <CardContent className="p-6 relative z-10">
-            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">Total Revenue</p>
+            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.totRev")}</p>
             <h4 className="text-4xl font-display font-bold text-emerald-700">RM {metrics.revenue.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded-full">
               <ArrowUpRight className="w-3 h-3 mr-1" /> Gross Income
@@ -121,7 +122,7 @@ export const FinanceTab = () => {
             <TrendingUp className="w-16 h-16" />
           </div>
           <CardContent className="p-6 relative z-10">
-            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">Gross Profit</p>
+            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.grossProf")}</p>
             <h4 className="text-4xl font-display font-bold text-blue-700">RM {metrics.profit.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-full">
               <Activity className="w-3 h-3 mr-1" /> Net Earnings

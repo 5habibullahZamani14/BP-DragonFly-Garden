@@ -260,7 +260,7 @@ export const LogsTab = () => {
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-emerald-500" />
-              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>Order & Revenue Events</h3>
+              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
             </div>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -279,7 +279,7 @@ export const LogsTab = () => {
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-blue-500" />
-              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>System & Inventory Events</h3>
+              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
             </div>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -325,8 +325,8 @@ export const LogsTab = () => {
                 value={timeFrame}
                 onChange={(e) => setTimeFrame(e.target.value)}
               >
-                <option value="all">All Time</option>
-                <option value="24h">Last 24 Hours</option>
+                <option value="all">{t("m.allTime")}</option>
+                <option value="24h">{t("m.last24h")}</option>
                 <option value="7d">Last 7 Days</option>
                 <option value="30d">Last 30 Days</option>
               </select>
@@ -353,9 +353,9 @@ export const LogsTab = () => {
               <tr>
                 <th className="px-6 py-4 rounded-tl-2xl">Timestamp</th>
                 <th className="px-6 py-4">Category</th>
-                <th className="px-6 py-4">Action</th>
-                <th className="px-6 py-4">Actor</th>
-                <th className="px-6 py-4">Target</th>
+                <th className="px-6 py-4">{t("m.action")}</th>
+                <th className="px-6 py-4">{t("m.actor")}</th>
+                <th className="px-6 py-4">{t("m.target")}</th>
                 <th className="px-6 py-4 rounded-tr-2xl">Details</th>
               </tr>
             </thead>
@@ -426,14 +426,14 @@ export const LogsTab = () => {
                   </p>
                 </div>
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
-                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Action</p>
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.action")}</p>
                   <p className="font-bold text-foreground/80">{formatAction(selectedLog.action)}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
-                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Actor</p>
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.actor")}</p>
                   <p className="font-bold text-foreground/70">{selectedLog.actor_name || "System Automated"}</p>
                 </div>
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">

@@ -10,6 +10,7 @@
  * Design notes: I used the Card component with hover shadows,
  * and the Grid3X3, Plus, Edit2, Trash2 icons from Lucide.
  */
+import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -124,16 +125,16 @@ export const TablesTab = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Table Number/Name</Label>
+                <Label>{t("m.tableName")}</Label>
                 <Input value={newTable.table_number} onChange={(e) => setNewTable({...newTable, table_number: e.target.value})} placeholder="e.g. Table 12 or VIP Lounge" />
               </div>
               <div className="space-y-2">
-                <Label>QR Code Identifier</Label>
+                <Label>{t("m.qrId")}</Label>
                 <Input value={newTable.qr_code} onChange={(e) => setNewTable({...newTable, qr_code: e.target.value})} placeholder="e.g. table-12" />
               </div>
             </div>
             <div className="flex gap-2 pt-4">
-              <Button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white flex-1">Save Table</Button>
+              <Button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white flex-1">{t("m.saveTable")}</Button>
               <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">Cancel</Button>
             </div>
           </CardContent>
@@ -148,11 +149,11 @@ export const TablesTab = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Table Number/Name</Label>
+                <Label>{t("m.tableName")}</Label>
                 <Input value={editTable.table_number} onChange={(e) => setEditTable({...editTable, table_number: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>QR Code Identifier</Label>
+                <Label>{t("m.qrId")}</Label>
                 <Input value={editTable.qr_code} onChange={(e) => setEditTable({...editTable, qr_code: e.target.value})} />
               </div>
             </div>
