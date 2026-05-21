@@ -24,6 +24,7 @@ import html2canvas from "html2canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const TablesTab = () => {
+  const { t } = useTranslation();
   const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);

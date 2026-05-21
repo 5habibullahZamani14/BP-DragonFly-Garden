@@ -60,6 +60,7 @@ const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", 
 type ManagerTab = typeof MANAGER_TABS[number];
 
 export const ManagementView = ({ notify }: ManagementViewProps) => {
+  const { t } = useTranslation();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginId, setLoginId] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -182,9 +183,9 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     localStorage.removeItem("managerLogin");
   };
 
-  const goToTab = (t: typeof activeTab) => {
-    setActiveTab(t);
-    sessionStorage.setItem("mgr_active_tab", t);
+  const goToTab = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    sessionStorage.setItem("mgr_active_tab", tab);
   };
 
   if (!isLoggedIn) {

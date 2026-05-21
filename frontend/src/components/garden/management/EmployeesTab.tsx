@@ -34,6 +34,7 @@ import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export const EmployeesTab = () => {
+  const { t } = useTranslation();
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);

@@ -22,6 +22,7 @@ import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile
 import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle } from "lucide-react";
 
 export const SettingsTab = () => {
+  const { t } = useTranslation();
   const [hours, setHours] = useState({ start: "09:00", end: "22:00" });
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaved, setHoursSaved] = useState(false);

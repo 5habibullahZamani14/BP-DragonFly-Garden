@@ -12,6 +12,7 @@ import {
 } from "recharts";
 
 export const FinanceTab = () => {
+  const { t } = useTranslation();
   const [data, setData] = useState<FinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [topItemsCount, setTopItemsCount] = useState<number>(5);

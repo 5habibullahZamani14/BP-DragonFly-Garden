@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ interface CartItem {
 }
 
 export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItems, qrCode, notify, onOrderCreated }: PosOrderModalProps) {
+  const { t } = useTranslation();
   const [orderType, setOrderType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">(initialOrderType);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");

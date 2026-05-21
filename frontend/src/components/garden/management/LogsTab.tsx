@@ -33,6 +33,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 export const LogsTab = () => {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
