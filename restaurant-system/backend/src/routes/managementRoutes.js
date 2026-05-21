@@ -19,8 +19,22 @@
 
 const express = require("express");
 const managementController = require("../controllers/managementController");
+const menuController = require("../controllers/menuController");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
+const path = require("path");
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, "../../../../frontend/public/menu-images"));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'menu-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 const router = express.Router();
 
@@ -115,6 +129,13 @@ router.get("/kitchen-passcode", managementController.getKitchenPasscode);
  * query parameter filters by log category (e.g. EMPLOYEE, INVENTORY, SYSTEM).
  */
 router.get("/logs", managementController.getLogs);
+
+// ── Menu Management ──────────────────────────────────────────────────────────
+
+router.post("/menu", menuController.createMenuItem);
+router.put("/menu/:id", menuController.updateMenuItem);
+router.delete("/menu/:id", menuController.deleteMenuItem);
+router.post("/menu/:id/image", upload.single("image"), menuController.uploadMenuItemImage);
 
 /*
  * GET /management/finance

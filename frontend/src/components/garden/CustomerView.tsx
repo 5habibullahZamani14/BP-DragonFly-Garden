@@ -34,13 +34,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, Leaf, Star, Plus, Minus, ShoppingBag, Check, Flame, X,
-  Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight,
+  Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight, Bell, Smile
 } from "lucide-react";
 import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
-import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders, fetchRecommendations } from "@/lib/api";
+import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders, fetchRecommendations, callStaff } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
 import type { MenuItem, Order, Recommendation } from "@/lib/menu-data";
@@ -384,81 +384,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   }, [menu, query]);
   const showSearch = query.trim().length > 0;
 
-  // Track stage transitions: show a quick confirm pop on the step that *just* completed.
-  const [recentlyCompleted, setRecentlyCompleted] = useState<Record<number, string>>({});
-  useEffect(() => {
-    const next: Record<number, string> = {};
-    let changed = false;
-    orders.forEach((o) => {
-      const prev = prevStageRef.current[o.id];
-      if (prev && prev !== o.status) {
-        const prevIdx = orderStageIndex(prev);
-        if (prevIdx >= 0) {
-          next[o.id] = prev;
-          changed = true;
-          window.setTimeout(() => {
-            setRecentlyCompleted((cur) => {
-              if (cur[o.id] !== prev) return cur;
-              const { [o.id]: _omit, ...rest } = cur;
-              return rest;
-            });
-          }, 1200);
-        }
-      }
-      prevStageRef.current[o.id] = o.status;
-    });
-    if (changed) setRecentlyCompleted((cur) => ({ ...cur, ...next }));
-  }, [orders]);
-
-  // When user opens Orders Status, celebrate newly-ready orders once,
-  // then start the 20-second archive countdown.
-  useEffect(() => {
-    if (tab !== "orders") return;
-    const readyUnseen = orders.filter(
-      (o) => o.status === "ready" && !celebratedIds.has(o.id),
-    );
-    if (readyUnseen.length === 0) return;
-    setCelebratedIds((cur) => {
-      const n = new Set(cur);
-      readyUnseen.forEach((o) => n.add(o.id));
-      return n;
-    });
-    // Start 20-second archive countdown for each newly-seen ready order
-    setArchiveCountdowns((cur) => {
-      const n = { ...cur };
-      readyUnseen.forEach((o) => { if (!(o.id in n) && !keptOrderIds.has(o.id)) n[o.id] = 20; });
-      return n;
-    });
-  }, [tab, orders, celebratedIds, keptOrderIds]);
-
-  // Tick archive countdowns every second
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setArchiveCountdowns((cur) => {
-        const n = { ...cur };
-        let changed = false;
-        Object.keys(n).forEach((k) => {
-          const id = Number(k);
-          if (keptOrderIds.has(id)) return; // paused
-          if (n[id] > 0) { n[id]--; changed = true; }
-          if (n[id] <= 0) {
-            // Auto-archive
-            archiveOrder(id);
-            delete n[id];
-            changed = true;
-          }
-        });
-        return changed ? n : cur;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [archiveOrder, keptOrderIds]);
-
+  // Order tracking has been disabled as per business requirements.
+  // The system relies on physical printed tickets for order fulfillment.
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-7xl pb-32" style={{ paddingTop: "var(--safe-top)" }}>
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
+
+
       {pendingCart && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md animate-fade-up px-6">
           {/* Countdown ring */}
@@ -883,7 +817,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             {filtered.map((item, idx) => (
               <li
                 key={item.id}
-                className="group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)]"
+                className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''}`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
                 {/* winged accent removed per request */}
@@ -922,10 +856,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                     </div>
                     <button
+                      disabled={item.is_sold_out}
                       onClick={() => addToCart(item)}
-                      className="inline-flex items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-90 hover:bg-primary-glow"
+                      className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
                     >
-                      <Plus className="h-3.5 w-3.5" /> Add
+                      {item.is_sold_out ? "Sold Out" : <><Plus className="h-3.5 w-3.5" /> Add</>}
                     </button>
                   </div>
                 </div>
@@ -992,30 +927,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <span className="text-xs text-foreground/50">{orders.length} active</span>
               </div>
               {orders.map((o) => {
-                const ai = orderStageIndex(o.status);
-                const isReady = o.status === "ready";
-                const justCelebrated = isReady && celebratedIds.has(o.id);
                 const RC = "hsl(44,70%,97%)";
-                const RS = "hsl(44,35%,91%)";
                 const timeStr = o.created_at
                   ? new Date(o.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })
                   : null;
-                const archiveSecs = archiveCountdowns[o.id];
-                const isKept = keptOrderIds.has(o.id);
                 return (
-                  <div key={o.id} className={`relative ${justCelebrated ? "animate-ready-celebrate" : "animate-scale-in"}`}>
-                    {justCelebrated && (
-                      <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden z-10">
-                        {[...Array(8)].map((_, i) => {
-                          const angle = (i / 8) * Math.PI * 2;
-                          return (
-                            <span key={i} className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full bg-accent animate-confetti"
-                              style={{ "--cx": `${Math.cos(angle) * 80}px`, "--cy": `${Math.sin(angle) * 80}px`, animationDelay: `${i * 40}ms` } as React.CSSProperties & Record<"--cx"|"--cy",string>}/>
-                          );
-                        })}
-                      </span>
-                    )}
-
+                  <div key={o.id} className="relative animate-scale-in">
                     <div style={{ filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.14))" }}>
 
                       {/* ── ZIGZAG top edge — fixed 16 px teeth, count auto-adjusts ── */}
@@ -1189,7 +1106,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {/* ============ BOTTOM NAV (mobile-app feel) ============ */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-2xl grid-cols-3 items-start bg-background px-2 py-2 md:rounded-t-3xl md:border md:border-border/60 md:shadow-2xl"
+        className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-2xl grid-cols-4 items-start bg-background px-2 py-2 md:rounded-t-3xl md:border md:border-border/60 md:shadow-2xl"
         style={{ paddingBottom: "calc(0.5rem + var(--safe-bottom))" }}
       >
         {/* hairline gold divider on top of nav */}
@@ -1232,6 +1149,32 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             </button>
           );
         })}
+        {/* Call Staff Button - Smile shape */}
+        <button
+          onClick={async () => {
+            if (!tableInfo) return;
+            try {
+              await callStaff(tableInfo.id);
+              notify('success', 'Staff has been notified. We will be with you shortly.');
+            } catch (e) {
+              notify('error', 'Failed to notify staff. Please try again.');
+            }
+          }}
+          className="relative mx-auto flex w-full flex-col items-center justify-start gap-1 pt-1 pb-1 text-[0.62rem] font-semibold transition-all text-accent hover:text-accent/80 active:scale-95"
+        >
+          <span 
+            className="relative flex items-center justify-center w-12 h-7 bg-accent text-accent-foreground shadow-[var(--shadow-soft)]"
+            style={{ 
+              borderBottomLeftRadius: '24px', 
+              borderBottomRightRadius: '24px', 
+              borderTopLeftRadius: '4px', 
+              borderTopRightRadius: '4px' 
+            }}
+          >
+            <Smile className="h-4 w-4" />
+          </span>
+          <span className="leading-none tracking-wide mt-1">Call Staff</span>
+        </button>
       </nav>
 
       {/* ============ CART SHEET ============ */}

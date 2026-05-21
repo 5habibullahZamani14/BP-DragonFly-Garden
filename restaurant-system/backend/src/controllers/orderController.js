@@ -486,6 +486,7 @@ const updateOrderStatus = async (orderId, newStatus, role) => {
   }
 
   await run(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, orderId]);
+  await run(`UPDATE order_items SET item_status = ? WHERE order_id = ?`, [newStatus, orderId]);
 
   return fetchOrderById(orderId);
 };

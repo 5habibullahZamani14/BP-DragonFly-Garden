@@ -255,6 +255,21 @@ export const fetchMenu = async (): Promise<MenuItem[]> => {
   return await safeFetch<MenuItem[]>("/menu");
 };
 
+export interface MenuItem {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  category_id: number;
+  category_name: string;
+  image_url: string | null;
+  is_available: boolean;
+  is_popular: boolean;
+  is_promo: boolean;
+  promo_label: string | null;
+  is_sold_out?: boolean;
+}
+
 export interface Recommendation {
   id: number;
   name: string;
@@ -268,6 +283,47 @@ export const fetchRecommendations = async (cartItemIds: number[]): Promise<Recom
   if (cartItemIds.length === 0) return [];
   return await safeFetch(`/menu/recommendations?cart_items=${cartItemIds.join(',')}`);
 };
+
+export type MenuItemPayload = {
+  name: string;
+  description?: string;
+  price: number;
+  category_id: number;
+  image_url?: string;
+  is_available?: boolean;
+  is_popular?: boolean;
+  is_promo?: boolean;
+  promo_label?: string;
+};
+
+export const createMenuItem = async (data: MenuItemPayload) =>
+  safeFetch<MenuItem>("/management/menu", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+export const updateMenuItem = async (id: number, data: Partial<MenuItemPayload>) =>
+  safeFetch<MenuItem>(`/management/menu/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+export const deleteMenuItem = async (id: number) =>
+  safeFetch<{ success: boolean }>(`/management/menu/${id}`, { method: "DELETE" });
+
+export const uploadMenuItemImage = async (id: number, file: Blob) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  return safeFetch<{ success: boolean; image_url: string }>(`/management/menu/${id}/image`, {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const fetchCategories = async () =>
+  safeFetch<{id: number; name: string}[]>("/menu/categories");
 
 /*
  * fetchTable looks up a table by QR code. If the server returns nothing
@@ -366,10 +422,21 @@ export const refreshOrder = async (qr: string, id: number) =>
 export const fetchActiveOrdersForTable = async (tableId: number, qr: string): Promise<Order[]> =>
   safeFetch<Order[]>(`/orders/by-table/${tableId}`, undefined, qr);
 
-export const updateItemStatus = async (qr: string, orderId: number, itemId: number, status: string): Promise<Order> =>
-  safeFetch<Order>(`/orders/${orderId}/items/${itemId}/status`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
-  }, qr);
+export const markItemStatus = async (qrCode: string, orderId: number, itemId: number, status: string) => {
+  return safeFetch<Order>(`/orders/${orderId}/items/${itemId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "X-QR-Code": qrCode },
+    body: JSON.stringify({ status })
+  });
+};
+
+export const callStaff = async (table_id: number) => {
+  return safeFetch<{success: boolean}>('/orders/call-waiter', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ table_id })
+  });
+};
 
 export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
   safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);

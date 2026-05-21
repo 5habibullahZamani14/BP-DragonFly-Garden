@@ -34,8 +34,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign } from "lucide-react";
+import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils } from "lucide-react";
 import { SettingsTab } from "./management/SettingsTab";
+import { MenuTab } from "./management/MenuTab";
 import { EmployeesTab } from "./management/EmployeesTab";
 import { InventoryTab } from "./management/InventoryTab";
 import { LogsTab } from "./management/LogsTab";
@@ -54,7 +55,7 @@ interface ManagementViewProps {
   notify: (kind: "success" | "error", text: string) => void;
 }
 
-const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance"] as const;
+const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
 
 export const ManagementView = ({ notify }: ManagementViewProps) => {
@@ -144,6 +145,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         setIsLoggedIn(true);
         localStorage.setItem("managerLogin", JSON.stringify({
           id: loginId.trim(),
+          token: result.token,
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
         }));
       } else {
@@ -388,6 +390,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer" onClick={() => goToTab("menu")}>
+              <CardContent className="pt-6">
+                <Utensils className="h-10 w-10 text-yellow-500 mb-4" />
+                <CardTitle className="mb-2">Menu</CardTitle>
+                <CardDescription>Dishes, prices, and manual promotions</CardDescription>
+              </CardContent>
+            </Card>
+
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer" onClick={() => goToTab("finance")}>
               <CardContent className="pt-6">
                 <DollarSign className="h-10 w-10 text-rose-500 mb-4" />
@@ -404,6 +414,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "tables" && <TablesTab />}
         {activeTab === "logs" && <LogsTab />}
         {activeTab === "finance" && <FinanceTab />}
+        {activeTab === "menu" && <MenuTab />}
         
       </div>
     </div>

@@ -79,6 +79,16 @@ const orderRoutes = (broadcast) => {
     res.status(201).json(order);
   }));
 
+  /*
+   * POST /orders/call-waiter
+   * Customer presses "Call Staff" button. Broadcasts CALL_WAITER event to staff.
+   */
+  router.post("/call-waiter", asyncHandler(async (req, res) => {
+    const { table_id } = req.body;
+    broadcast({ type: "CALL_WAITER", payload: { table_id, time: new Date() } });
+    res.json({ success: true });
+  }));
+
   router.post("/:id/checkout", asyncHandler(async (req, res) => {
     const { cashierName } = req.body;
     // We must use fetchOrderWithPayments from paymentController to get vat_rate, service_charge_rate, and total_with_vat

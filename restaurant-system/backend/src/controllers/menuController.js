@@ -54,6 +54,12 @@ const getMenu = async (req, res) => {
       menu_items.is_popular,
       menu_items.is_promo,
       menu_items.promo_label,
+      (
+        SELECT CASE WHEN MIN(ii.current_stock - (mii.quantity_required / COALESCE(ii.usage_conversion, 1.0))) < 0 THEN 1 ELSE 0 END
+        FROM menu_item_ingredients mii
+        JOIN inventory_items ii ON mii.inventory_item_id = ii.id
+        WHERE mii.menu_item_id = menu_items.id
+      ) AS is_sold_out,
       categories.id as category_id,
       categories.name as category,
       categories.name as category_name
@@ -69,7 +75,8 @@ const getMenu = async (req, res) => {
       ...row,
       is_available: !!row.is_available,
       is_popular: !!row.is_popular,
-      is_promo: !!row.is_promo
+      is_promo: !!row.is_promo,
+      is_sold_out: !!row.is_sold_out
     }));
     res.json(normalized);
   } catch (error) {
@@ -234,4 +241,79 @@ const getRecommendations = async (req, res) => {
   }
 };
 
-module.exports = { getMenu, getCategories, recomputePopular, getRecommendations };
+const createMenuItem = async (req, res) => {
+  const { name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label } = req.body;
+  try {
+    const result = await run(
+      `INSERT INTO menu_items (name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description || '', price, category_id, image_url || '', is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '']
+    );
+    res.json({ id: result.lastID, success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateMenuItem = async (req, res) => {
+  const { id } = req.params;
+  const { name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label } = req.body;
+  try {
+    await run(
+      `UPDATE menu_items 
+       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label)
+       WHERE id = ?`,
+      [name, description, price, category_id, image_url, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteMenuItem = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
+    if (existing.length > 0 && existing[0].image_url) {
+      const fs = require('fs');
+      const path = require('path');
+      const oldPath = path.join(__dirname, '../../../../frontend/public', existing[0].image_url);
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (e) { console.error("Error deleting old image:", e); }
+      }
+    }
+    await run(`DELETE FROM menu_items WHERE id = ?`, [id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const uploadMenuItemImage = async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No image file provided." });
+  }
+
+  try {
+    const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
+    if (existing.length > 0 && existing[0].image_url) {
+      const fs = require('fs');
+      const path = require('path');
+      const oldPath = path.join(__dirname, '../../../../frontend/public', existing[0].image_url);
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (e) { console.error("Error deleting old image:", e); }
+      }
+    }
+
+    const newImageUrl = `/menu-images/${req.file.filename}`;
+    await run(`UPDATE menu_items SET image_url = ? WHERE id = ?`, [newImageUrl, id]);
+
+    res.json({ success: true, image_url: newImageUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage };

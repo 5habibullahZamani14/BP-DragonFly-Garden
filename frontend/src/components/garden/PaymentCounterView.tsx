@@ -234,7 +234,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     loadData();
   }, [loadData]);
 
-  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT"], (event) => {
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER"], (event) => {
+    if (event.type === "CALL_WAITER") {
+      notify("success", `Table ${event.payload?.table_id || 'unknown'} requested assistance!`);
+      return;
+    }
     if (loggedInEmployee) {
       loadData();
     }
