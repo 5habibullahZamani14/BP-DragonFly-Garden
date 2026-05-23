@@ -390,7 +390,100 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // The system relies on physical printed tickets for order fulfillment.
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-7xl pb-32" style={{ paddingTop: "var(--safe-top)" }}>
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground animate-fade-in" dir={i18n.dir()}>
+      <aside className="w-[26%] sm:w-[22%] md:w-1/5 lg:w-[11%] h-full border-e border-border/60 bg-card/30 flex flex-col pt-6 overflow-y-auto shrink-0 pb-10 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
+        <nav className="flex flex-col gap-3 px-2">
+          {([
+            { id: "home", label: t("customer.home"), icon: Home },
+            { id: "menu", label: t("customer.menu"), icon: UtensilsCrossed },
+            { id: "orders", label: t("customer.orders"), icon: Receipt },
+          ] as const).map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            const badge = id === "orders" ? orders.filter(o => o.status === "ready" && !celebratedIds.has(o.id)).length : 0;
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  switchTab(id);
+                  if (id === "menu") scrollToMenu();
+                  if (id === "home" || id === "orders") document.getElementById("main-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-1 text-[0.65rem] font-semibold transition-all ${
+                  active ? "bg-primary text-primary-foreground shadow-md scale-[1.02]" : "text-foreground/50 hover:bg-muted/50 hover:text-foreground/80"
+                }`}
+              >
+                <span className="relative grid place-items-center">
+                  <Icon className={`relative h-[1.35rem] w-[1.35rem] transition-transform duration-300 ${active ? "scale-110" : ""}`} strokeWidth={active ? 2.4 : 2} />
+                  {badge > 0 && (
+                    <span className="absolute -right-2 -top-1 grid h-4 w-4 place-items-center rounded-full bg-berry text-[0.55rem] font-bold text-berry-foreground shadow-sm animate-pulse-soft">
+                      {badge}
+                    </span>
+                  )}
+                </span>
+                <span className="leading-tight tracking-wide text-center">{label}</span>
+              </button>
+            );
+          })}
+
+          <button
+            onClick={async () => {
+              if (!tableInfo) return;
+              try {
+                await callStaff(tableInfo.id);
+                notify("success", t("customer.staffNotified"));
+              } catch (e) {
+                notify("error", t("customer.failedNotifyStaff"));
+              }
+            }}
+            className="relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-1 text-[0.65rem] font-semibold transition-all text-accent hover:bg-accent/10 active:scale-95 mt-2"
+          >
+            <span className="relative grid place-items-center bg-accent text-accent-foreground p-1.5 rounded-xl shadow-sm">
+              <Smile className="relative h-4 w-4" strokeWidth={2.4} />
+            </span>
+            <span className="leading-tight tracking-wide text-center">{t("customer.callStaff")}</span>
+          </button>
+        </nav>
+
+        {tab !== "orders" && (
+          <div className="mt-8 flex flex-col gap-2 px-2 animate-fade-in">
+            <div className="w-8 h-[2px] bg-border/60 mx-auto mb-3 rounded-full" />
+            
+            {["All", ...Array.from(new Set(menu.map(i => i.category_name)))].map((c) => {
+              const Icon = CAT_ICON[c] || UtensilsCrossed;
+              const active = c === category;
+              const cLabel = c === "All" ? t("customer.catAll") :
+                             c === "Mains" ? t("customer.catMains") :
+                             c === "Small Bites" ? t("customer.catSmallBites") :
+                             c === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") :
+                             c === "Beverages" ? t("customer.catBeverages") :
+                             c === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") :
+                             c === "Herbal Tea" ? t("customer.catHerbalTea") : c;
+                             
+              return (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setCategory(c);
+                    switchTab("menu");
+                    scrollToMenu();
+                  }}
+                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-2 px-1 text-[0.65rem] transition-all ${
+                    active ? "bg-accent/15 text-accent font-bold ring-1 ring-accent/30" : "text-foreground/60 hover:bg-muted/50 font-medium"
+                  }`}
+                >
+                  <div className={`grid place-items-center rounded-xl p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
+                    <Icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
+                  </div>
+                  <span className="leading-tight text-center truncate w-full px-1">{cLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+
+      <div className="flex-1 h-full relative flex flex-col bg-background/50">
+        <main id="main-scroll" className="flex-1 overflow-y-auto relative pb-8 no-scrollbar">
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
 
@@ -758,7 +851,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 </div>
                 <div className="p-2.5">
                   <h3 className="font-display text-sm font-semibold leading-tight line-clamp-1">{item.name}</h3>
-                  <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
+                  <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
                   <p className="mt-1 font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                 </div>
               </article>
@@ -777,35 +870,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           <span className="text-xs font-medium text-foreground/50">{filtered.length} {t("customer.items")}</span>
         </div>
 
-        {/* Sticky category icons (Grab-style, moved from top of page) */}
-        <div className="sticky top-[7.5rem] z-20 -mx-5 mb-4 px-5 pt-5 pb-3 cream-frost">
-          <div className="flex gap-3 overflow-x-auto overflow-y-visible no-scrollbar -mt-1 pt-1">
-            {categories.map((c) => {
-              const Icon = CAT_ICON[c] || UtensilsCrossed;
-              const active = c === category;
-              return (
-                <button
-                  key={c}
-                  onClick={() => setCategory(c)}
-                  className="flex shrink-0 flex-col items-center gap-1.5 w-16"
-                >
-                  <span className={`cat-icon ${active ? "cat-icon-active" : ""}`}>
-                    <Icon className={`h-6 w-6 ${active ? "" : "text-primary"}`} />
-                  </span>
-                  <span className={`text-[0.62rem] font-semibold leading-tight text-center ${active ? "text-primary" : "text-foreground/60"}`}>
-                    {c === "All" ? t("customer.catAll") :
-                     c === "Mains" ? t("customer.catMains") :
-                     c === "Small Bites" ? t("customer.catSmallBites") :
-                     c === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") :
-                     c === "Beverages" ? t("customer.catBeverages") :
-                     c === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") :
-                     c === "Herbal Tea" ? t("customer.catHerbalTea") : c}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Sticky category icons removed and relocated to Sidebar */}
 
         {loading ? (
           <div className="space-y-3">
@@ -860,7 +925,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   </p>
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div>
-                      <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
+                      <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
                       <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                     </div>
                     <button
@@ -1093,97 +1158,22 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
       )}
 
-      {cartCount > 0 && (
+      {/* Floating cart summary */}
+      {cart.length > 0 && !cartOpen && tab !== "orders" && (
         <button
           onClick={() => setCartOpen(true)}
-          className="btn-emerald fixed inset-x-4 z-40 mx-auto flex max-w-2xl items-center justify-between rounded-full px-5 py-3.5 animate-slide-down"
-          style={{ bottom: "calc(4.5rem + var(--safe-bottom))" }}
+          className="absolute bottom-6 left-4 right-4 z-40 mx-auto flex max-w-sm animate-bounce-soft items-center justify-between rounded-full px-5 py-3.5 text-primary-foreground shadow-[var(--shadow-deep)]"
+          style={{ background: "var(--gradient-hero)" }}
         >
-          <span className="flex items-center gap-3">
-            <span className="relative grid h-9 w-9 place-items-center rounded-full bg-accent text-accent-foreground">
-              <ShoppingBag className="h-4 w-4" />
-              <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-berry text-[0.6rem] font-bold text-berry-foreground">
-                {cartCount}
-              </span>
+          <span className="flex items-center gap-2">
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-xs font-bold shadow-sm">
+              {cart.reduce((a, b) => a + b.quantity, 0)}
             </span>
-            <span className="font-semibold">{t("customer.viewCart")}</span>
+            <span className="text-sm font-medium tracking-wide text-primary-foreground/90">{t("customer.viewCart")}</span>
           </span>
           <span className="font-display text-lg font-semibold">{formatRM(total)}</span>
         </button>
       )}
-
-      {/* ============ BOTTOM NAV (mobile-app feel) ============ */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-2xl grid-cols-4 items-start bg-background px-2 py-2 md:rounded-t-3xl md:border md:border-border/60 md:shadow-2xl"
-        style={{ paddingBottom: "calc(0.5rem + var(--safe-bottom))" }}
-      >
-        {/* hairline gold divider on top of nav */}
-        <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 hairline-gold" />
-        {([
-          { id: "home", label: t("customer.home"), icon: Home },
-          { id: "menu", label: t("customer.menu"), icon: UtensilsCrossed },
-          { id: "orders", label: t("customer.orders"), icon: Receipt },
-        ] as const).map(({ id, label, icon: Icon }) => {
-          const active = tab === id;
-          const badge = id === "orders" ? orders.filter(o => o.status === "ready" && !celebratedIds.has(o.id)).length : 0;
-          return (
-            <button
-              key={id}
-              onClick={() => {
-                switchTab(id);
-                if (id === "menu") scrollToMenu();
-                if (id === "home" || id === "orders") window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className={`relative mx-auto flex w-full flex-col items-center justify-start gap-1 px-1 pt-2 pb-1 text-[0.62rem] font-semibold transition-all ${
-                active ? "text-primary" : "text-foreground/45 hover:text-foreground/65"
-              }`}
-            >
-              <span className="relative grid place-items-center">
-                {/* soft golden glow behind active icon */}
-                {active && (
-                  <span aria-hidden className="absolute inset-0 -m-1.5 rounded-full"
-                    style={{
-                      background: "radial-gradient(circle, hsl(var(--accent) / 0.30) 0%, transparent 70%)",
-                    }} />
-                )}
-                <Icon className={`relative h-[1.35rem] w-[1.35rem] transition-transform duration-300 ${active ? "scale-110" : ""}`}
-                  strokeWidth={active ? 2.4 : 2} />
-              </span>
-              <span className="leading-none tracking-wide">{label}</span>
-              {active && (
-                <span className="absolute bottom-0 h-[3px] w-6 rounded-full"
-                  style={{ background: "var(--gradient-gold)", boxShadow: "0 0 8px hsl(var(--accent) / 0.6)" }} />
-              )}
-            </button>
-          );
-        })}
-        {/* Call Staff Button - Smile shape */}
-        <button
-          onClick={async () => {
-            if (!tableInfo) return;
-            try {
-              await callStaff(tableInfo.id);
-              notify("success", t("customer.staffNotified"));
-            } catch (e) {
-              notify("error", t("customer.failedNotifyStaff"));
-            }
-          }}
-          className="relative mx-auto flex w-full flex-col items-center justify-start gap-1 pt-1 pb-1 text-[0.62rem] font-semibold transition-all text-accent hover:text-accent/80 active:scale-95"
-        >
-          <span 
-            className="relative flex items-center justify-center w-12 h-7 bg-accent text-accent-foreground shadow-[var(--shadow-soft)]"
-            style={{ 
-              borderBottomLeftRadius: '24px', 
-              borderBottomRightRadius: '24px', 
-              borderTopLeftRadius: '4px', 
-              borderTopRightRadius: '4px' 
-            }}
-          >
-            <Smile className="h-4 w-4" />
-          </span>
-          <span className="leading-none tracking-wide mt-1">{t("customer.callStaff")}</span>
-        </button>
-      </nav>
 
       {/* ============ CART SHEET ============ */}
       {cartOpen && (
@@ -1285,6 +1275,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           </div>
         </div>
       )}
+        </main>
+      </div>
     </div>
   );
 };
