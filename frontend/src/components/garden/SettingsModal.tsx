@@ -165,9 +165,9 @@ export const SettingsModal = () => {
                   className="font-semibold text-base block mb-0.5"
                   style={{ fontFamily: selectedFont.headingFamily }}
                 >
-                  Dragonfly Garden
+                  {t("settings.dragonflyGarden")}
                 </span>
-                The quick brown fox jumps over the lazy dog. Fresh from the farm, served with love.
+                {t("settings.fontPreviewText")}
               </p>
               <p className="mt-2 text-[0.65rem] text-foreground/40 font-sans">
                 {t(`settings.font${FONT_OPTIONS.findIndex(f => f.id === selectedFont.id) + 1}Desc`)}

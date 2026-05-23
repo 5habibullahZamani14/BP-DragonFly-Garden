@@ -40,6 +40,7 @@ export const InventoryTab = ({
   initialSubTab?: "overview" | "stock" | "recipes", 
   initialEditItemId?: number 
 }) => {
+  const { t } = useTranslation();
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">(initialSubTab);
   
   // Stock State
