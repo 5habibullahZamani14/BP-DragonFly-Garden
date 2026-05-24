@@ -17,7 +17,7 @@
  * requests that do not need the role QR code appended.
  */
 
-import type { MenuItem, Order as BaseOrder } from "./menu-data";
+import type { Order as BaseOrder } from "./menu-data";
 
 export type Order = BaseOrder & {
   order_type?: string;

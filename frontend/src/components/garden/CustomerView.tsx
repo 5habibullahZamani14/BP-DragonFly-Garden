@@ -40,10 +40,22 @@ import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import butterflyHero from "@/assets/butterfly-hero.png";
-import { fetchMenu, fetchTable, placeOrder, refreshOrder, fetchActiveOrdersForTable, customerArchiveOrder, fetchCustomerArchivedOrders, fetchRecommendations, callStaff } from "@/lib/api";
+import {
+  fetchMenu,
+  fetchTable,
+  placeOrder,
+  refreshOrder,
+  fetchActiveOrdersForTable,
+  customerArchiveOrder,
+  fetchCustomerArchivedOrders,
+  fetchRecommendations,
+  callStaff,
+  type MenuItem,
+  type Order,
+  type Recommendation,
+} from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
-import type { MenuItem, Order, Recommendation } from "@/lib/menu-data";
 import { useTranslation } from "react-i18next";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
@@ -58,6 +70,8 @@ type Notify = (kind: "success" | "error", text: string) => void;
 interface Props { qrCode: string; notify: Notify; }
 
 type CartLine = { id: number; name: string; price: number; quantity: number; notes: string };
+type CartSource = Pick<MenuItem, "id" | "name" | "price">;
+type OrderWithVat = Order & { total_with_vat?: number | string | null };
 
 // Map category names to friendly icons (Grab-style)
 const CAT_ICON: Record<string, typeof Soup> = {
@@ -69,7 +83,7 @@ const CAT_ICON: Record<string, typeof Soup> = {
 };
 
 export const CustomerView = ({ qrCode, notify }: Props) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
@@ -117,7 +131,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   
   // ── Upselling ───────────────────────────────────────────────────────────
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recsLoading, setRecsLoading] = useState(false);
   // ── Archive countdown (20 s after ready order is seen) ──────────────────
   const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
@@ -258,6 +272,18 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   }, []);
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(menu.map((i) => i.category_name)))], [menu]);
+  const categoryLabel = (name: string) => {
+    const keys: Record<string, string> = {
+      All: "customer.catAll",
+      Mains: "customer.catMains",
+      "Small Bites": "customer.catSmallBites",
+      "Enzyme Drinks": "customer.catEnzymeDrinks",
+      Beverages: "customer.catBeverages",
+      "Pre-Order Specials": "customer.catPreOrderSpecials",
+      "Herbal Tea": "customer.catHerbalTea",
+    };
+    return keys[name] ? t(keys[name]) : name;
+  };
   const filtered = useMemo(() => {
     let list = category === "All" ? menu : menu.filter((i) => i.category_name === category);
     if (query.trim()) {
@@ -272,7 +298,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const cartCount = cart.reduce((n, c) => n + c.quantity, 0);
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
 
-  const addToCart = (item: MenuItem) => {
+  const addToCart = (item: CartSource) => {
     setCart((c) => {
       const ex = c.find((x) => x.id === item.id);
       if (ex) return c.map((x) => (x.id === item.id ? { ...x, quantity: x.quantity + 1 } : x));
@@ -391,7 +417,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground animate-fade-in" dir={i18n.dir()}>
-      <aside className="w-[26%] sm:w-[22%] md:w-1/5 lg:w-[11%] h-full border-e border-border/60 bg-card/30 flex flex-col pt-6 overflow-y-auto shrink-0 pb-10 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
+      <aside className="w-1/4 sm:w-[23%] md:w-1/5 lg:w-[11%] xl:w-[10%] h-full border-e border-border/60 bg-card/30 flex flex-col pt-6 overflow-y-auto shrink-0 pb-10 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
         <nav className="flex flex-col gap-3 px-2">
           {([
             { id: "home", label: t("customer.home"), icon: Home },
@@ -404,8 +430,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <button
                 key={id}
                 onClick={() => {
+                  if (id === "menu") {
+                    scrollToMenu();
+                    return;
+                  }
                   switchTab(id);
-                  if (id === "menu") scrollToMenu();
                   if (id === "home" || id === "orders") document.getElementById("main-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-1 text-[0.65rem] font-semibold transition-all ${
@@ -444,42 +473,31 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           </button>
         </nav>
 
-        {tab !== "orders" && (
-          <div className="mt-8 flex flex-col gap-2 px-2 animate-fade-in">
-            <div className="w-8 h-[2px] bg-border/60 mx-auto mb-3 rounded-full" />
-            
-            {["All", ...Array.from(new Set(menu.map(i => i.category_name)))].map((c) => {
-              const Icon = CAT_ICON[c] || UtensilsCrossed;
-              const active = c === category;
-              const cLabel = c === "All" ? t("customer.catAll") :
-                             c === "Mains" ? t("customer.catMains") :
-                             c === "Small Bites" ? t("customer.catSmallBites") :
-                             c === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") :
-                             c === "Beverages" ? t("customer.catBeverages") :
-                             c === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") :
-                             c === "Herbal Tea" ? t("customer.catHerbalTea") : c;
-                             
-              return (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setCategory(c);
-                    switchTab("menu");
-                    scrollToMenu();
-                  }}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-2 px-1 text-[0.65rem] transition-all ${
-                    active ? "bg-accent/15 text-accent font-bold ring-1 ring-accent/30" : "text-foreground/60 hover:bg-muted/50 font-medium"
-                  }`}
-                >
-                  <div className={`grid place-items-center rounded-xl p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
-                    <Icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
-                  </div>
-                  <span className="leading-tight text-center truncate w-full px-1">{cLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div className="mt-8 flex flex-col gap-2 px-2 animate-fade-in">
+          <div className="w-8 h-[2px] bg-border/60 mx-auto mb-3 rounded-full" />
+
+          {categories.map((c) => {
+            const Icon = CAT_ICON[c] || UtensilsCrossed;
+            const active = c === category;
+            return (
+              <button
+                key={c}
+                onClick={() => {
+                  setCategory(c);
+                  scrollToMenu();
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-2 px-1 text-[0.6rem] sm:text-[0.65rem] transition-all ${
+                  active ? "bg-accent/15 text-accent font-bold ring-1 ring-accent/30" : "text-foreground/60 hover:bg-muted/50 font-medium"
+                }`}
+              >
+                <div className={`grid place-items-center rounded-xl p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
+                  <Icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
+                </div>
+                <span className="leading-tight text-center truncate w-full px-1">{categoryLabel(c)}</span>
+              </button>
+            );
+          })}
+        </div>
       </aside>
 
       <div className="flex-1 h-full relative flex flex-col bg-background/50">
@@ -834,7 +852,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               >
                 {/* winged accent removed per request */}
                 <div className="relative aspect-[4/3] overflow-hidden rounded-t-[20px]">
-                  <img src={item.image_url} alt={item.name} loading="lazy"
+                  <img src={item.image_url ?? undefined} alt={item.name} loading="lazy"
                     className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" />
                   {item.is_popular && (
                     <span className="absolute left-2 top-2 inline-flex items-center gap-0.5 rounded-md bg-accent px-1.5 py-0.5 text-[0.58rem] font-extrabold uppercase text-accent-foreground shadow">
@@ -851,7 +869,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 </div>
                 <div className="p-2.5">
                   <h3 className="font-display text-sm font-semibold leading-tight line-clamp-1">{item.name}</h3>
-                  <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
+                  <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{categoryLabel(item.category_name)}</p>
                   <p className="mt-1 font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                 </div>
               </article>
@@ -925,7 +943,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   </p>
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div>
-                      <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{item.category_name === "Mains" ? t("customer.catMains") : item.category_name === "Small Bites" ? t("customer.catSmallBites") : item.category_name === "Enzyme Drinks" ? t("customer.catEnzymeDrinks") : item.category_name === "Beverages" ? t("customer.catBeverages") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name === "Pre-Order Specials" ? t("customer.catPreOrderSpecials") : item.category_name === "Herbal Tea" ? t("customer.catHerbalTea") : item.category_name}</p>
+                      <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
                       <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                     </div>
                     <button
@@ -1143,7 +1161,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="truncate font-medium text-foreground/70">Ticket #{o.daily_ticket_number || o.id}</span>
                       <span className="truncate text-foreground/40">· {(o.items?.length || 0)} item{(o.items?.length || 0) === 1 ? "" : "s"}</span>
                     </div>
-                    <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as any).total_with_vat || o.total_price * 1.166))}</span>
+                    <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || o.total_price * 1.166))}</span>
                   </li>
                 ))}
               </ul>
@@ -1250,7 +1268,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <div className="mt-auto pt-2 flex items-center justify-between">
                           <span className="text-xs font-bold text-primary">{formatRM(rec.price)}</span>
                           <button 
-                            onClick={() => addToCart({ ...rec, category_name: 'Add-on', description: '', is_available: true, is_popular: false, is_promo: false })}
+                            onClick={() => addToCart(rec)}
                             className="bg-primary text-white grid place-items-center h-6 w-6 rounded-full active:scale-90"
                           >
                             <Plus className="h-3 w-3" />
