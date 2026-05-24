@@ -530,7 +530,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       </aside>
 
       <div className="min-w-0 flex-1 h-full relative flex flex-col bg-background/50">
-        <main id="main-scroll" className={`min-w-0 flex-1 overflow-y-auto relative no-scrollbar ${cart.length > 0 && !cartOpen && tab !== "orders" ? "pb-32" : "pb-8"}`}>
+        <main id="main-scroll" className={`min-w-0 flex-1 overflow-y-auto relative no-scrollbar ${cart.length > 0 && !cartOpen && tab !== "orders" ? "pb-40" : "pb-8"}`}>
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
 
@@ -1356,19 +1356,46 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </main>
         {/* Floating cart summary */}
         {cart.length > 0 && !cartOpen && tab !== "orders" && (
-          <button
-            onClick={() => setCartOpen(true)}
-            className="absolute bottom-[max(1rem,var(--safe-bottom))] left-4 right-4 z-40 mx-auto flex max-w-sm animate-bounce-soft items-center justify-between rounded-full border-2 border-white/80 px-5 py-3.5 text-white shadow-[0_2px_0_0_rgba(255,255,255,0.55)_inset,0_-4px_0_0_rgba(67,35,0,0.22)_inset,0_18px_36px_-12px_rgba(0,0,0,0.55),0_0_0_6px_rgba(255,255,255,0.25)] transition hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_0_rgba(255,255,255,0.5)_inset,0_-2px_0_0_rgba(67,35,0,0.25)_inset,0_10px_20px_-10px_rgba(0,0,0,0.55),0_0_0_5px_rgba(255,255,255,0.22)]"
-            style={{ background: "linear-gradient(135deg, hsl(152 72% 10%) 0%, hsl(158 68% 18%) 42%, hsl(39 96% 48%) 100%)" }}
-          >
-            <span className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-primary shadow-[0_4px_10px_rgba(0,0,0,0.25)] ring-1 ring-white/80">
-                {cart.reduce((a, b) => a + b.quantity, 0)}
+          <div className="absolute bottom-[max(1rem,var(--safe-bottom))] left-3 right-3 z-50 mx-auto max-w-sm pointer-events-none">
+            <div
+              className="absolute -inset-1 rounded-[1.4rem] opacity-90 blur-lg animate-pulse"
+              style={{ background: "linear-gradient(90deg, #a855f7, #ec4899, #fbbf24)" }}
+              aria-hidden
+            />
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className="pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[1.25rem] border-[3px] border-white px-4 py-4 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.35)_inset,0_20px_40px_-12px_rgba(109,40,217,0.65),0_8px_24px_rgba(236,72,153,0.45)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: "linear-gradient(125deg, #4c1d95 0%, #be185d 48%, #ea580c 100%)",
+              }}
+            >
+              <span
+                className="pointer-events-none absolute inset-0 opacity-30"
+                style={{ background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.55) 50%, transparent 60%)" }}
+                aria-hidden
+              />
+              <span className="relative flex min-w-0 flex-1 items-center gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/95 text-violet-700 shadow-lg ring-2 ring-white/90">
+                  <ShoppingBag className="h-5 w-5" strokeWidth={2.25} />
+                </span>
+                <span className="flex min-w-0 flex-col items-start leading-tight">
+                  <span className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-amber-200/95">
+                    {t("customer.viewCart")}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="rounded-md bg-black/25 px-2 py-0.5 text-sm font-black tabular-nums">
+                      {cart.reduce((a, b) => a + b.quantity, 0)}
+                    </span>
+                    <span className="truncate text-sm font-semibold text-white/90">{t("customer.items")}</span>
+                  </span>
+                </span>
               </span>
-              <span className="text-sm font-extrabold tracking-wide drop-shadow-sm">{t("customer.viewCart")}</span>
-            </span>
-            <span className="font-display text-lg font-black drop-shadow-sm">{formatRM(total)}</span>
-          </button>
+              <span className="relative shrink-0 rounded-xl bg-white px-3 py-2 font-display text-lg font-black text-violet-900 shadow-md ring-2 ring-amber-300/80">
+                {formatRM(total)}
+              </span>
+            </button>
+          </div>
         )}
       </div>
     </div>
