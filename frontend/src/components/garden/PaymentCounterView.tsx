@@ -126,8 +126,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [currentTime, setCurrentTime] = useState(new Date());
   const unacknowledgedAssistanceCount = assistanceRequests.filter((request) => !request.acknowledged_at).length;
 
-  const formatAssistanceTime = (value: string) =>
-    new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const formatAssistanceTime = (value: string) => {
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+    const normalized = hasTimezone ? value : `${value.replace(" ", "T")}Z`;
+    return new Date(normalized).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
