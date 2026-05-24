@@ -27,18 +27,26 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { fetchInventory, createInventoryItem, updateInventoryStock, fetchRecipes, updateRecipe, fetchMenuItems } from "@/lib/api";
-import type { InventoryItem, Recipe, RecipeIngredient } from "@/lib/api";
-import type { MenuItem } from "@/lib/menu-data";
+import type { InventoryItem, MenuItem, Recipe, RecipeIngredient } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 
+type EditableInventoryItem = Omit<InventoryItem, "current_stock" | "max_stock" | "low_stock_threshold_percent" | "usage_conversion"> & {
+  current_stock: number | string;
+  max_stock: number | string;
+  low_stock_threshold_percent: number | string;
+  usage_conversion?: number | string;
+};
+
 export const InventoryTab = ({
   initialSubTab = "overview",
-  initialEditItemId
+  initialEditItemId,
+  onInventoryChanged,
 }: {
   initialSubTab?: "overview" | "stock" | "recipes",
-  initialEditItemId?: number
+  initialEditItemId?: number,
+  onInventoryChanged?: () => void
 }) => {
   const { t } = useTranslation();
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">(initialSubTab);
@@ -49,7 +57,7 @@ export const InventoryTab = ({
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
   const [addWarning, setAddWarning] = useState<{ message: string, isExact: boolean } | null>(null);
-  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [editingItem, setEditingItem] = useState<EditableInventoryItem | null>(null);
 
   // Recipe State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -141,7 +149,8 @@ export const InventoryTab = ({
       });
       setIsAddingItem(false);
       setNewItem({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
-      loadData();
+      await loadData();
+      onInventoryChanged?.();
     } catch (e) {
       console.error(e);
     }
@@ -155,13 +164,14 @@ export const InventoryTab = ({
         category: editingItem.category,
         unit: editingItem.unit,
         usage_unit: editingItem.usage_unit,
-        usage_conversion: parseFloat(editingItem.usage_conversion) || 1,
-        current_stock: parseFloat(editingItem.current_stock) || 0,
-        max_stock: parseFloat(editingItem.max_stock) || 100,
-        low_stock_threshold_percent: parseFloat(editingItem.low_stock_threshold_percent) || 15
+        usage_conversion: parseFloat(String(editingItem.usage_conversion ?? 1)) || 1,
+        current_stock: parseFloat(String(editingItem.current_stock)) || 0,
+        max_stock: parseFloat(String(editingItem.max_stock)) || 100,
+        low_stock_threshold_percent: parseFloat(String(editingItem.low_stock_threshold_percent)) || 15
       });
       setEditingItem(null);
-      loadData();
+      await loadData();
+      onInventoryChanged?.();
     } catch (e) {
       console.error(e);
     }
@@ -170,7 +180,8 @@ export const InventoryTab = ({
   const handleUpdateStock = async (id: number, current_stock: number, max_stock: number) => {
     try {
       await updateInventoryStock(id, { current_stock, max_stock });
-      loadData();
+      await loadData();
+      onInventoryChanged?.();
     } catch (e) {
       console.error(e);
     }
@@ -180,7 +191,7 @@ export const InventoryTab = ({
     setSelectedMenuItem(menuItemId);
     const existingRecipe = recipes.find(r => r.id === menuItemId);
     if (existingRecipe) {
-      setEditingRecipe([...existingRecipe.ingredients]);
+        setEditingRecipe([...(existingRecipe.ingredients || [])]);
     } else {
       setEditingRecipe([]);
     }

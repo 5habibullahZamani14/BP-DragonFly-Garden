@@ -417,8 +417,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground animate-fade-in" dir={i18n.dir()}>
-      <aside className="w-1/4 sm:w-[23%] md:w-1/5 lg:w-[11%] xl:w-[10%] h-full border-e border-border/60 bg-card/30 flex flex-col pt-6 overflow-y-auto shrink-0 pb-10 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
-        <nav className="flex flex-col gap-3 px-2">
+      <aside className="basis-1/5 sm:basis-[23%] md:basis-1/5 lg:basis-[11%] xl:basis-[10%] max-w-[5rem] sm:max-w-[7rem] md:max-w-none h-full border-e border-border/60 bg-card/30 flex flex-col shrink-0 overflow-y-auto px-1.5 pt-[max(0.75rem,var(--safe-top))] pb-[max(0.75rem,var(--safe-bottom))] sm:px-2 sm:pt-4 sm:pb-4 md:pt-5 md:pb-5 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
+        <nav className="flex flex-col gap-1 sm:gap-1.5">
           {([
             { id: "home", label: t("customer.home"), icon: Home },
             { id: "menu", label: t("customer.menu"), icon: UtensilsCrossed },
@@ -437,12 +437,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   switchTab(id);
                   if (id === "home" || id === "orders") document.getElementById("main-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-1 text-[0.65rem] font-semibold transition-all ${
+                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[0.55rem] font-semibold transition-all sm:gap-1.5 sm:rounded-2xl sm:py-2 sm:text-[0.6rem] md:py-2.5 md:text-[0.65rem] ${
                   active ? "bg-primary text-primary-foreground shadow-md scale-[1.02]" : "text-foreground/50 hover:bg-muted/50 hover:text-foreground/80"
                 }`}
               >
                 <span className="relative grid place-items-center">
-                  <Icon className={`relative h-[1.35rem] w-[1.35rem] transition-transform duration-300 ${active ? "scale-110" : ""}`} strokeWidth={active ? 2.4 : 2} />
+                  <Icon className={`relative h-4 w-4 transition-transform duration-300 sm:h-5 sm:w-5 md:h-[1.35rem] md:w-[1.35rem] ${active ? "scale-110" : ""}`} strokeWidth={active ? 2.4 : 2} />
                   {badge > 0 && (
                     <span className="absolute -right-2 -top-1 grid h-4 w-4 place-items-center rounded-full bg-berry text-[0.55rem] font-bold text-berry-foreground shadow-sm animate-pulse-soft">
                       {badge}
@@ -464,17 +464,17 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 notify("error", t("customer.failedNotifyStaff"));
               }
             }}
-            className="relative flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 px-1 text-[0.65rem] font-semibold transition-all text-accent hover:bg-accent/10 active:scale-95 mt-2"
+            className="relative mt-1 flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[0.55rem] font-semibold transition-all text-accent hover:bg-accent/10 active:scale-95 sm:mt-1.5 sm:gap-1.5 sm:rounded-2xl sm:py-2 sm:text-[0.6rem] md:py-2.5 md:text-[0.65rem]"
           >
-            <span className="relative grid place-items-center bg-accent text-accent-foreground p-1.5 rounded-xl shadow-sm">
-              <Smile className="relative h-4 w-4" strokeWidth={2.4} />
+            <span className="relative grid place-items-center bg-accent text-accent-foreground p-1 rounded-lg shadow-sm sm:p-1.5 sm:rounded-xl">
+              <Smile className="relative h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.4} />
             </span>
             <span className="leading-tight tracking-wide text-center">{t("customer.callStaff")}</span>
           </button>
         </nav>
 
-        <div className="mt-8 flex flex-col gap-2 px-2 animate-fade-in">
-          <div className="w-8 h-[2px] bg-border/60 mx-auto mb-3 rounded-full" />
+        <div className="mt-3 flex flex-col gap-1 animate-fade-in sm:mt-4 sm:gap-1.5 md:mt-5">
+          <div className="w-7 h-[2px] bg-border/60 mx-auto mb-1.5 rounded-full sm:mb-2" />
 
           {categories.map((c) => {
             const Icon = CAT_ICON[c] || UtensilsCrossed;
@@ -486,12 +486,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   setCategory(c);
                   scrollToMenu();
                 }}
-                className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-2 px-1 text-[0.6rem] sm:text-[0.65rem] transition-all ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[0.54rem] transition-all sm:gap-1.5 sm:rounded-2xl sm:py-1.5 sm:text-[0.6rem] md:text-[0.65rem] ${
                   active ? "bg-accent/15 text-accent font-bold ring-1 ring-accent/30" : "text-foreground/60 hover:bg-muted/50 font-medium"
                 }`}
               >
-                <div className={`grid place-items-center rounded-xl p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
-                  <Icon className="h-[1.1rem] w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
+                <div className={`grid place-items-center rounded-lg p-1 sm:rounded-xl sm:p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
+                  <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-[1.1rem] md:w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
                 </div>
                 <span className="leading-tight text-center truncate w-full px-1">{categoryLabel(c)}</span>
               </button>
@@ -500,8 +500,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
       </aside>
 
-      <div className="flex-1 h-full relative flex flex-col bg-background/50">
-        <main id="main-scroll" className="flex-1 overflow-y-auto relative pb-8 no-scrollbar">
+      <div className="min-w-0 flex-1 h-full relative flex flex-col bg-background/50">
+        <main id="main-scroll" className="min-w-0 flex-1 overflow-y-auto relative pb-8 no-scrollbar">
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
 

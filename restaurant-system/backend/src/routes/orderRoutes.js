@@ -14,6 +14,7 @@
  */
 
 const express = require("express");
+const db = require("../database/db");
 const {
   createOrder,
   getOrder,
@@ -34,8 +35,40 @@ const {
   validateOrderIdParam,
   validateOrderQuery,
 } = require("../middleware/validation");
-const { requireKitchenCrew } = require("../middleware/role-based-access");
+const { requireKitchenCrew, requirePaymentCounter } = require("../middleware/role-based-access");
 const printerService = require("../services/printerService");
+
+const run = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.run(sql, params, function runCallback(err) {
+      if (err) reject(err);
+      else resolve({ id: this.lastID, changes: this.changes });
+    });
+  });
+
+const get = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+
+const all = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+
+const logArchive = async (action, targetId, targetName, details = {}, actor = {}) => {
+  await run(
+    `INSERT INTO grand_archive_logs (category, action, actor_id, actor_name, target_id, target_name, details)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ["STAFF", action, actor.id || null, actor.name || null, String(targetId), targetName, JSON.stringify(details)]
+  );
+};
 
 /*
  * orderRoutes is a factory function rather than a plain router export.
@@ -85,8 +118,58 @@ const orderRoutes = (broadcast) => {
    */
   router.post("/call-waiter", asyncHandler(async (req, res) => {
     const { table_id } = req.body;
-    broadcast({ type: "CALL_WAITER", payload: { table_id, time: new Date() } });
-    res.json({ success: true });
+    const table = await get("SELECT id, table_number FROM tables WHERE id = ?", [table_id]);
+    const tableNumber = table?.table_number || `Table ${table_id}`;
+    const result = await run(
+      `INSERT INTO staff_assistance_requests (table_id, table_number) VALUES (?, ?)`,
+      [table_id, tableNumber]
+    );
+    const request = await get("SELECT * FROM staff_assistance_requests WHERE id = ?", [result.id]);
+
+    await logArchive("ASSISTANCE_REQUESTED", result.id, tableNumber, {
+      table_id,
+      table_number: tableNumber,
+      requested_at: request.requested_at,
+    });
+
+    broadcast({ type: "CALL_WAITER", payload: request });
+    res.json({ success: true, request });
+  }));
+
+  router.get("/call-waiter/today", requirePaymentCounter, asyncHandler(async (req, res) => {
+    const requests = await all(
+      `SELECT *
+         FROM staff_assistance_requests
+        WHERE archived_at IS NULL
+          AND date(requested_at, 'localtime') = date('now', 'localtime')
+        ORDER BY requested_at DESC, id DESC`
+    );
+    res.json(requests);
+  }));
+
+  router.patch("/call-waiter/:requestId/acknowledge", requirePaymentCounter, asyncHandler(async (req, res) => {
+    const requestId = Number(req.params.requestId);
+    const { employee_id, employee_name } = req.body || {};
+    await run(
+      `UPDATE staff_assistance_requests
+          SET acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP),
+              acknowledged_by_id = COALESCE(acknowledged_by_id, ?),
+              acknowledged_by_name = COALESCE(acknowledged_by_name, ?)
+        WHERE id = ?`,
+      [employee_id || null, employee_name || null, requestId]
+    );
+    const request = await get("SELECT * FROM staff_assistance_requests WHERE id = ?", [requestId]);
+    if (!request) return res.status(404).json({ error: "Assistance request not found" });
+
+    await logArchive("ASSISTANCE_ACKNOWLEDGED", request.id, request.table_number, {
+      table_id: request.table_id,
+      table_number: request.table_number,
+      requested_at: request.requested_at,
+      acknowledged_at: request.acknowledged_at,
+    }, { id: employee_id, name: employee_name });
+
+    broadcast({ type: "CALL_WAITER_ACK", payload: request });
+    res.json(request);
   }));
 
   router.post("/:id/checkout", asyncHandler(async (req, res) => {

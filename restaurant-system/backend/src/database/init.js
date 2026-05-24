@@ -323,6 +323,25 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
 
   /*
+   * Staff assistance requests are created when customers press Call Staff.
+   * Current-day requests stay visible to the payment counter; older requests
+   * are marked archived by the nightly archive job.
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS staff_assistance_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_id INTEGER NOT NULL,
+      table_number TEXT NOT NULL,
+      requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      acknowledged_at DATETIME,
+      acknowledged_by_id TEXT,
+      acknowledged_by_name TEXT,
+      archived_at DATETIME
+    )
+  `);
+  await ensureIndex("idx_staff_assistance_today", "staff_assistance_requests", "requested_at DESC, archived_at, acknowledged_at");
+
+  /*
    * restaurant_settings stores configuration values as key-value pairs.
    * Currently used for work_hours (when the payment counter is active)
    * and the manager's credentials. Using a key-value table means adding

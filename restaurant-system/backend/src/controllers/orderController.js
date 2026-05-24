@@ -612,6 +612,21 @@ const archiveYesterdaysOrders = async () => {
   }
 };
 
+const archiveStaffAssistanceRequests = async () => {
+  try {
+    const result = await run(
+      `UPDATE staff_assistance_requests
+       SET archived_at = CURRENT_TIMESTAMP
+       WHERE archived_at IS NULL
+         AND date(requested_at, 'localtime') < date('now', 'localtime')`
+    );
+    return result.changes || 0;
+  } catch (e) {
+    console.error("[archive] archiveStaffAssistanceRequests failed:", e.message);
+    return 0;
+  }
+};
+
 /* markOrderPaid sets the payment_status to paid and archives the order. */
 const markOrderPaid = async (orderId) => {
   await run("BEGIN TRANSACTION");
@@ -641,5 +656,6 @@ module.exports = {
   kitchenArchiveOrder,
   getKitchenArchivedOrders,
   archiveYesterdaysOrders,
+  archiveStaffAssistanceRequests,
   markOrderPaid
 };

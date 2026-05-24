@@ -39,24 +39,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square } from "lucide-react";
-import { fetchUnpaidOrders, fetchPaidOrders, fetchPaymentMethods, processPayment, addOrderItem, fetchMenuItems, fetchEmployees, fetchSettings, printFinalBill } from "@/lib/api";
-import type { PaymentOrder } from "@/lib/api";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square, Bell, CheckCircle2 } from "lucide-react";
+import {
+  fetchUnpaidOrders,
+  fetchPaidOrders,
+  fetchPaymentMethods,
+  processPayment,
+  addOrderItem,
+  fetchMenuItems,
+  fetchEmployees,
+  fetchSettings,
+  printFinalBill,
+  fetchStaffAssistanceRequests,
+  acknowledgeStaffAssistanceRequest,
+} from "@/lib/api";
+import type { MenuItem, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
 import { PosOrderModal } from "./PosOrderModal";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 interface PaymentMethod {
   id: number;
   name: string;
-}
-
-interface MenuItem {
-  id: number;
-  name: string;
-  price: number;
 }
 
 interface PaymentCounterViewProps {
@@ -93,6 +101,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [loading, setLoading] = useState(true);
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">("TAKEAWAY");
+  const [assistanceRequests, setAssistanceRequests] = useState<StaffAssistanceRequest[]>([]);
+  const [activeAssistanceRequest, setActiveAssistanceRequest] = useState<StaffAssistanceRequest | null>(null);
   
   const [splitItems, setSplitItems] = useState<number[]>([]);
   const [isSplitMode, setIsSplitMode] = useState(false);
@@ -101,7 +111,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     if (isSplitMode && selectedOrder) {
       const splitSubtotal = splitItems.reduce((sum, index) => {
         const item = selectedOrder.items[index];
-        return sum + (item.price_at_order_time * item.quantity);
+        return sum + ((item.price_at_order_time ?? 0) * item.quantity);
       }, 0);
       const service = splitSubtotal * (selectedOrder.service_charge_rate || 0.1);
       const tax = (splitSubtotal + service) * (selectedOrder.vat_rate || 0.06);
@@ -114,6 +124,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   };
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  const unacknowledgedAssistanceCount = assistanceRequests.filter((request) => !request.acknowledged_at).length;
+
+  const formatAssistanceTime = (value: string) =>
+    new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -232,13 +246,64 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   }, [notify, qrCode, loggedInEmployee]);
 
+  const loadAssistanceRequests = useCallback(async () => {
+    if (!loggedInEmployee) return;
+    try {
+      const requests = await fetchStaffAssistanceRequests(qrCode);
+      setAssistanceRequests(requests || []);
+    } catch (error) {
+      console.error("Failed to load assistance requests", error);
+    }
+  }, [loggedInEmployee, qrCode]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER"], (event) => {
+  useEffect(() => {
+    loadAssistanceRequests();
+  }, [loadAssistanceRequests]);
+
+  useEffect(() => {
+    if (!activeAssistanceRequest) return;
+    const timer = setTimeout(() => {
+      setActiveAssistanceRequest(null);
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [activeAssistanceRequest]);
+
+  const acknowledgeAssistance = async (request: StaffAssistanceRequest) => {
+    if (!loggedInEmployee || request.acknowledged_at) return;
+    try {
+      const updated = await acknowledgeStaffAssistanceRequest(qrCode, request.id, {
+        employee_id: loggedInEmployee.id,
+        employee_name: loggedInEmployee.name,
+      });
+      setAssistanceRequests((current) =>
+        current.map((item) => item.id === updated.id ? updated : item)
+      );
+      setActiveAssistanceRequest((current) => current?.id === updated.id ? null : current);
+    } catch (error) {
+      notify("error", "Failed to acknowledge assistance request.");
+    }
+  };
+
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
     if (event.type === "CALL_WAITER") {
-      notify("success", `Table ${event.payload?.table_id || "unknown"} - ${t("payment.tableHelp")}`);
+      const request = event.payload as StaffAssistanceRequest;
+      setAssistanceRequests((current) => {
+        if (current.some((item) => item.id === request.id)) return current;
+        return [request, ...current];
+      });
+      setActiveAssistanceRequest(request);
+      return;
+    }
+    if (event.type === "CALL_WAITER_ACK") {
+      const request = event.payload as StaffAssistanceRequest;
+      setAssistanceRequests((current) =>
+        current.map((item) => item.id === request.id ? request : item)
+      );
+      setActiveAssistanceRequest((current) => current?.id === request.id ? null : current);
       return;
     }
     if (loggedInEmployee) {
@@ -356,6 +421,26 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   // Main UI when logged in
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+      {activeAssistanceRequest && (
+        <div className="fixed right-5 top-5 z-50 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-green-200 bg-white p-4 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-green-100 text-green-700">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-gray-900">{activeAssistanceRequest.table_number} requested assistance</p>
+              <p className="mt-1 text-sm text-gray-500">{formatAssistanceTime(activeAssistanceRequest.requested_at)}</p>
+            </div>
+            <button
+              onClick={() => acknowledgeAssistance(activeAssistanceRequest)}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-green-600 text-white shadow-sm transition hover:bg-green-700 active:scale-95"
+              aria-label="Acknowledge assistance request"
+            >
+              <CheckCircle2 className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 gap-4">
           <div className="flex items-center gap-4">
@@ -381,6 +466,54 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               {t("payment.shift")}: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
             <div className="flex items-center gap-2 shrink-0">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title="Staff assistance requests">
+                    <Bell className="h-5 w-5 text-gray-600" />
+                    {unacknowledgedAssistanceCount > 0 && (
+                      <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500 shadow-sm" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 overflow-hidden rounded-xl border-green-100 p-0 shadow-lg">
+                  <div className="border-b bg-gray-50/80 px-4 py-3">
+                    <h3 className="flex items-center gap-2 font-semibold text-gray-800">
+                      <Bell className="h-4 w-4 text-green-600" /> Staff Assistance
+                    </h3>
+                  </div>
+                  <div className="max-h-[320px] overflow-y-auto">
+                    {assistanceRequests.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-gray-500">No assistance requests today.</div>
+                    ) : (
+                      <div className="flex flex-col">
+                        {assistanceRequests.map((request) => (
+                          <div key={request.id} className="flex items-start gap-3 border-b px-4 py-3 last:border-0">
+                            <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${request.acknowledged_at ? "bg-green-500" : "bg-red-500"}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-800">{request.table_number} requested assistance</p>
+                              <p className="mt-1 text-xs text-gray-500">{formatAssistanceTime(request.requested_at)}</p>
+                              {request.acknowledged_at && (
+                                <p className="mt-1 text-xs text-green-700">
+                                  Acknowledged {formatAssistanceTime(request.acknowledged_at)}
+                                </p>
+                              )}
+                            </div>
+                            {!request.acknowledged_at && (
+                              <button
+                                onClick={() => acknowledgeAssistance(request)}
+                                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-green-600 text-white transition hover:bg-green-700 active:scale-95"
+                                aria-label="Acknowledge assistance request"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
               <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
                 <LogOut className="h-4 w-4 mr-2" /> {t("payment.logout")}
@@ -535,7 +668,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                           )}
                                           <span className="text-sm font-medium">{item.quantity}x {item.item_name}</span>
                                         </div>
-                                        <span className="text-sm">RM {(item.price_at_order_time * item.quantity).toFixed(2)}</span>
+                                        <span className="text-sm">RM {((item.price_at_order_time ?? 0) * item.quantity).toFixed(2)}</span>
                                       </div>
                                     ))}
                                   </div>
@@ -672,7 +805,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   );
 };
 
-const getPaymentHelpSections = (t: any): HelpSection[] => [
+const getPaymentHelpSections = (t: TFunction): HelpSection[] => [
   {
     id: "login",
     title: "1. Login & Session",

@@ -51,7 +51,7 @@ const getWsBase = () => {
 const WS_BASE = getWsBase();
 
 /* The four event types the backend can push over WebSocket. */
-export type WSEventType = "NEW_ORDER" | "ORDER_STATUS_UPDATE" | "ITEM_STATUS_UPDATE" | "NEW_PAYMENT" | "INVENTORY_UPDATE";
+export type WSEventType = "NEW_ORDER" | "ORDER_STATUS_UPDATE" | "ITEM_STATUS_UPDATE" | "NEW_PAYMENT" | "INVENTORY_UPDATE" | "CALL_WAITER" | "CALL_WAITER_ACK";
 
 interface WSEvent {
   type: WSEventType;

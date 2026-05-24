@@ -392,6 +392,33 @@ export const printFinalBill = async (qr: string, orderId: number, cashierName: s
   }, qr);
 };
 
+export interface StaffAssistanceRequest {
+  id: number;
+  table_id: number;
+  table_number: string;
+  requested_at: string;
+  acknowledged_at?: string | null;
+  acknowledged_by_id?: string | null;
+  acknowledged_by_name?: string | null;
+  archived_at?: string | null;
+}
+
+export const fetchStaffAssistanceRequests = async (qr: string): Promise<StaffAssistanceRequest[]> => {
+  return await safeFetch<StaffAssistanceRequest[]>("/orders/call-waiter/today", undefined, qr);
+};
+
+export const acknowledgeStaffAssistanceRequest = async (
+  qr: string,
+  requestId: number,
+  body: { employee_id: string; employee_name: string }
+): Promise<StaffAssistanceRequest> => {
+  return await safeFetch<StaffAssistanceRequest>(`/orders/call-waiter/${requestId}/acknowledge`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, qr);
+};
+
 export const createCounterOrder = async (
   qr: string,
   body: CounterOrderPayload

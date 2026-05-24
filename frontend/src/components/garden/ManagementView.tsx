@@ -31,6 +31,7 @@
 
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,13 @@ interface ManagementViewProps {
 
 const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
+type ManagerNotification = {
+  id: string;
+  type: "low_stock";
+  title: string;
+  message: string;
+  action: () => void;
+};
 
 export const ManagementView = ({ notify }: ManagementViewProps) => {
   const { t } = useTranslation();
@@ -100,7 +108,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, []);
 
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
   const [inventoryAction, setInventoryAction] = useState<{subTab?: "overview" | "stock" | "recipes", editItemId?: number} | null>(null);
 
   const loadNotifications = async () => {
@@ -412,7 +420,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
         {activeTab === "settings" && <SettingsTab />}
         {activeTab === "employees" && <EmployeesTab />}
-        {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} />}
+        {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} onInventoryChanged={loadNotifications} />}
         {activeTab === "tables" && <TablesTab />}
         {activeTab === "logs" && <LogsTab />}
         {activeTab === "finance" && <FinanceTab />}
@@ -423,7 +431,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   );
 };
 
-const getManagerHelpSections = (t: any): HelpSection[] => [
+const getManagerHelpSections = (t: TFunction): HelpSection[] => [
   {
     id: "access",
     title: "1. Logging In & Session",
