@@ -33,22 +33,22 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 
-export const InventoryTab = ({ 
-  initialSubTab = "overview", 
-  initialEditItemId 
-}: { 
-  initialSubTab?: "overview" | "stock" | "recipes", 
-  initialEditItemId?: number 
+export const InventoryTab = ({
+  initialSubTab = "overview",
+  initialEditItemId
+}: {
+  initialSubTab?: "overview" | "stock" | "recipes",
+  initialEditItemId?: number
 }) => {
   const { t } = useTranslation();
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "stock" | "recipes">(initialSubTab);
-  
+
   // Stock State
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
-  const [addWarning, setAddWarning] = useState<{message: string, isExact: boolean} | null>(null);
+  const [addWarning, setAddWarning] = useState<{ message: string, isExact: boolean } | null>(null);
   const [editingItem, setEditingItem] = useState<any | null>(null);
 
   // Recipe State
@@ -83,10 +83,10 @@ export const InventoryTab = ({
       setLoading(true);
       const invData = await fetchInventory();
       setInventory(invData || []);
-      
+
       const menuData = await fetchMenuItems("");
       setMenuItems(menuData || []);
-      
+
       const recipeData = await fetchRecipes();
       setRecipes(recipeData || []);
     } catch (e) {
@@ -110,18 +110,18 @@ export const InventoryTab = ({
 
     const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
     const newNameNorm = normalize(newItem.name);
-    
+
     if (!force) {
       const exactDuplicate = inventory.find(item => normalize(item.name) === newNameNorm);
       if (exactDuplicate) {
         setAddWarning({ message: `An exact match ("${exactDuplicate.name}") already exists. This cannot be added.`, isExact: true });
         return;
       }
-      
+
       const similarDuplicate = inventory.find(item => {
         const existingNameNorm = normalize(item.name);
         return (existingNameNorm.includes(newNameNorm) && newNameNorm.length >= 4) ||
-               (newNameNorm.includes(existingNameNorm) && existingNameNorm.length >= 4);
+          (newNameNorm.includes(existingNameNorm) && existingNameNorm.length >= 4);
       });
 
       if (similarDuplicate) {
@@ -254,21 +254,21 @@ export const InventoryTab = ({
       </div>
 
       <div className="flex gap-4 border-b border-gray-200 pb-2 overflow-x-auto">
-        <button 
+        <button
           className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "overview" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
           onClick={() => setActiveSubTab("overview")}
         >
           <Activity className="h-4 w-4 inline mr-2" />
           Overview Analytics
         </button>
-        <button 
+        <button
           className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "stock" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
           onClick={() => setActiveSubTab("stock")}
         >
           <Package className="h-4 w-4 inline mr-2" />
           Raw Stock Levels
         </button>
-        <button 
+        <button
           className={`px-4 py-2 font-medium text-sm rounded-t-lg whitespace-nowrap ${activeSubTab === "recipes" ? "bg-orange-100 text-orange-700" : "text-gray-500 hover:text-gray-700"}`}
           onClick={() => setActiveSubTab("recipes")}
         >
@@ -306,8 +306,8 @@ export const InventoryTab = ({
                     <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                       <XAxis type="number" domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
-                      <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
-                      <Tooltip formatter={(value: number) => [`${value}%`, 'Stock Level']} cursor={{fill: 'transparent'}} />
+                      <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value: number) => [`${value}%`, 'Stock Level']} cursor={{ fill: 'transparent' }} />
                       <ReferenceLine x={20} stroke="red" strokeDasharray="3 3" label={{ position: 'top', value: 'Avg Threshold', fill: 'red', fontSize: 10 }} />
                       <Bar dataKey="percent" radius={[0, 4, 4, 0]} barSize={15}>
                         {healthData.slice(0, 15).map((entry, index) => (
@@ -330,9 +330,9 @@ export const InventoryTab = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 25 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} tick={{fontSize: 11}} />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} tick={{ fontSize: 11 }} />
                       <YAxis allowDecimals={false} />
-                      <Tooltip formatter={(value: number) => [value, 'Ingredients']} cursor={{fill: 'transparent'}} />
+                      <Tooltip formatter={(value: number) => [value, 'Ingredients']} cursor={{ fill: 'transparent' }} />
                       <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -391,11 +391,11 @@ export const InventoryTab = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Item Name</Label>
-                    <Input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="e.g. Tomatoes" />
+                    <Input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="e.g. Tomatoes" />
                   </div>
                   <div className="space-y-2">
                     <Label>Category</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
                       <option value="Vegetables">Vegetables</option>
                       <option value="Meat">Meat</option>
                       <option value="Dairy">Dairy</option>
@@ -405,7 +405,7 @@ export const InventoryTab = ({
                   </div>
                   <div className="space-y-2">
                     <Label>Purchase Unit (Stored As)</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})}>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })}>
                       <option value="kg">Kilograms (kg)</option>
                       <option value="g">Grams (g)</option>
                       <option value="L">Liters (L)</option>
@@ -415,7 +415,7 @@ export const InventoryTab = ({
                   </div>
                   <div className="space-y-2">
                     <Label>Recipe Usage Unit</Label>
-                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.usage_unit} onChange={e => setNewItem({...newItem, usage_unit: e.target.value})}>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newItem.usage_unit} onChange={e => setNewItem({ ...newItem, usage_unit: e.target.value })}>
                       <option value="g">Grams (g)</option>
                       <option value="kg">Kilograms (kg)</option>
                       <option value="ml">Milliliters (ml)</option>
@@ -429,21 +429,21 @@ export const InventoryTab = ({
                     <div className="text-sm font-medium text-green-800">Conversion Rate:</div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-green-900">1 {newItem.unit} = </span>
-                      <Input type="number" className="w-24 h-8" value={newItem.usage_conversion} onChange={e => setNewItem({...newItem, usage_conversion: e.target.value})} />
+                      <Input type="number" className="w-24 h-8" value={newItem.usage_conversion} onChange={e => setNewItem({ ...newItem, usage_conversion: e.target.value })} />
                       <span className="text-sm font-semibold text-green-900">{newItem.usage_unit}</span>
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>{t("m.currStock")}</Label>
-                    <Input type="number" value={newItem.current_stock} onChange={e => setNewItem({...newItem, current_stock: e.target.value})} />
+                    <Input type="number" value={newItem.current_stock} onChange={e => setNewItem({ ...newItem, current_stock: e.target.value })} />
                   </div>
                   <div className="space-y-2">
                     <Label>Max Capacity (100%)</Label>
-                    <Input type="number" value={newItem.max_stock} onChange={e => setNewItem({...newItem, max_stock: e.target.value})} />
+                    <Input type="number" value={newItem.max_stock} onChange={e => setNewItem({ ...newItem, max_stock: e.target.value })} />
                   </div>
                   <div className="space-y-2">
                     <Label>Low Stock Warning Threshold (%)</Label>
-                    <Input type="number" value={newItem.low_stock_threshold_percent} onChange={e => setNewItem({...newItem, low_stock_threshold_percent: e.target.value})} />
+                    <Input type="number" value={newItem.low_stock_threshold_percent} onChange={e => setNewItem({ ...newItem, low_stock_threshold_percent: e.target.value })} />
                   </div>
                 </div>
                 <div className="flex gap-2 pt-4">
@@ -486,15 +486,15 @@ export const InventoryTab = ({
                         </div>
                       </div>
                       <div className="flex gap-2 pt-2">
-                        <Input 
-                          type="number" 
+                        <Input
+                          type="number"
                           className="w-24"
-                          placeholder="Amount" 
+                          placeholder="Amount"
                           id={`restock-${item.id}`}
                           defaultValue={item.current_stock}
                         />
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => {
                             const val = parseFloat((document.getElementById(`restock-${item.id}`) as HTMLInputElement).value);
@@ -521,11 +521,11 @@ export const InventoryTab = ({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Item Name</Label>
-                      <Input value={editingItem.name} onChange={e => setEditingItem({...editingItem, name: e.target.value})} />
+                      <Input value={editingItem.name} onChange={e => setEditingItem({ ...editingItem, name: e.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label>Category</Label>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.category} onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}>
                         <option value="Vegetables">Vegetables</option>
                         <option value="Meat">Meat</option>
                         <option value="Dairy">Dairy</option>
@@ -535,7 +535,7 @@ export const InventoryTab = ({
                     </div>
                     <div className="space-y-2">
                       <Label>Purchase Unit</Label>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.unit} onChange={e => setEditingItem({...editingItem, unit: e.target.value})}>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.unit} onChange={e => setEditingItem({ ...editingItem, unit: e.target.value })}>
                         <option value="kg">Kilograms (kg)</option>
                         <option value="g">Grams (g)</option>
                         <option value="L">Liters (L)</option>
@@ -545,7 +545,7 @@ export const InventoryTab = ({
                     </div>
                     <div className="space-y-2">
                       <Label>Recipe Usage Unit</Label>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.usage_unit} onChange={e => setEditingItem({...editingItem, usage_unit: e.target.value})}>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editingItem.usage_unit} onChange={e => setEditingItem({ ...editingItem, usage_unit: e.target.value })}>
                         <option value="g">Grams (g)</option>
                         <option value="kg">Kilograms (kg)</option>
                         <option value="ml">Milliliters (ml)</option>
@@ -559,21 +559,21 @@ export const InventoryTab = ({
                       <div className="text-sm font-medium text-green-800">Conversion Rate:</div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-green-900">1 {editingItem.unit} = </span>
-                        <Input type="number" className="w-24 h-8" value={editingItem.usage_conversion} onChange={e => setEditingItem({...editingItem, usage_conversion: e.target.value})} />
+                        <Input type="number" className="w-24 h-8" value={editingItem.usage_conversion} onChange={e => setEditingItem({ ...editingItem, usage_conversion: e.target.value })} />
                         <span className="text-sm font-semibold text-green-900">{editingItem.usage_unit}</span>
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>{t("m.currStock")}</Label>
-                      <Input type="number" value={editingItem.current_stock} onChange={e => setEditingItem({...editingItem, current_stock: e.target.value})} />
+                      <Input type="number" value={editingItem.current_stock} onChange={e => setEditingItem({ ...editingItem, current_stock: e.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label>Max Capacity (100%)</Label>
-                      <Input type="number" value={editingItem.max_stock} onChange={e => setEditingItem({...editingItem, max_stock: e.target.value})} />
+                      <Input type="number" value={editingItem.max_stock} onChange={e => setEditingItem({ ...editingItem, max_stock: e.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label>Low Stock Warning Threshold (%)</Label>
-                      <Input type="number" value={editingItem.low_stock_threshold_percent} onChange={e => setEditingItem({...editingItem, low_stock_threshold_percent: e.target.value})} />
+                      <Input type="number" value={editingItem.low_stock_threshold_percent} onChange={e => setEditingItem({ ...editingItem, low_stock_threshold_percent: e.target.value })} />
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 pt-4 border-t">
@@ -611,8 +611,8 @@ export const InventoryTab = ({
                 <h3 className="font-bold text-gray-700 whitespace-nowrap">Menu Items</h3>
                 <div className="relative w-full max-w-[200px] xl:max-w-[300px]">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input 
-                    placeholder="Search dishes..." 
+                  <Input
+                    placeholder="Search dishes..."
                     className="pl-9 h-9 bg-white"
                     value={recipeSearchQuery}
                     onChange={(e) => setRecipeSearchQuery(e.target.value)}
@@ -621,8 +621,8 @@ export const InventoryTab = ({
               </div>
               <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
                 {menuItems.filter(item => item.name.toLowerCase().includes(recipeSearchQuery.toLowerCase())).map(item => (
-                  <div 
-                    key={item.id} 
+                  <div
+                    key={item.id}
                     onClick={() => selectRecipe(item.id)}
                     className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3 ${selectedMenuItem === item.id ? 'bg-orange-100 border-orange-300 shadow-sm' : 'bg-white hover:bg-gray-50 border-gray-200'}`}
                   >
@@ -648,68 +648,68 @@ export const InventoryTab = ({
             </div>
 
             <div className="">
-            {selectedMenuItem ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{menuItems.find(m => m.id === selectedMenuItem)?.name} Recipe</CardTitle>
-                  <CardDescription>Define exactly what gets deducted from inventory when this is ordered.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {editingRecipe.length === 0 ? (
-                    <div className="text-center p-6 bg-gray-50 rounded-lg text-gray-500 border border-dashed border-gray-300">
-                      No ingredients defined for this item yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {editingRecipe.map((ing, idx) => (
-                        <div key={idx} className="flex gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
-                          <select 
-                            className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            value={ing.inventory_item_id}
-                            onChange={(e) => updateIngredientInRecipe(idx, 'inventory_item_id', e.target.value)}
-                          >
-                            {inventory.map(inv => (
-                              <option key={inv.id} value={inv.id}>{inv.name} ({inv.usage_unit || inv.unit})</option>
-                            ))}
-                          </select>
-                          <div className="flex items-center gap-2">
-                            <Input 
-                              type="number" 
-                              className="w-24" 
-                              value={ing.quantity_required}
-                              onChange={(e) => updateIngredientInRecipe(idx, 'quantity_required', e.target.value)}
-                            />
-                            <span className="text-sm font-medium text-gray-500 w-8">
-                              {inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.usage_unit || 
-                               inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.unit}
-                            </span>
+              {selectedMenuItem ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{menuItems.find(m => m.id === selectedMenuItem)?.name} Recipe</CardTitle>
+                    <CardDescription>Define exactly what gets deducted from inventory when this is ordered.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {editingRecipe.length === 0 ? (
+                      <div className="text-center p-6 bg-gray-50 rounded-lg text-gray-500 border border-dashed border-gray-300">
+                        No ingredients defined for this item yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {editingRecipe.map((ing, idx) => (
+                          <div key={idx} className="flex gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <select
+                              className="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              value={ing.inventory_item_id}
+                              onChange={(e) => updateIngredientInRecipe(idx, 'inventory_item_id', e.target.value)}
+                            >
+                              {inventory.map(inv => (
+                                <option key={inv.id} value={inv.id}>{inv.name} ({inv.usage_unit || inv.unit})</option>
+                              ))}
+                            </select>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                className="w-24"
+                                value={ing.quantity_required}
+                                onChange={(e) => updateIngredientInRecipe(idx, 'quantity_required', e.target.value)}
+                              />
+                              <span className="text-sm font-medium text-gray-500 w-8">
+                                {inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.usage_unit ||
+                                  inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.unit}
+                              </span>
+                            </div>
+                            <Button variant="destructive" size="icon" onClick={() => removeIngredientFromRecipe(idx)}>
+                              &times;
+                            </Button>
                           </div>
-                          <Button variant="destructive" size="icon" onClick={() => removeIngredientFromRecipe(idx)}>
-                            &times;
-                          </Button>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={handleAddIngredientToRecipe} className="flex-1 border-dashed">
+                        <Plus className="h-4 w-4 mr-2" /> Add Ingredient
+                      </Button>
+                      <Button onClick={saveRecipe} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white">
+                        <Save className="h-4 w-4 mr-2" /> Save Recipe
+                      </Button>
                     </div>
-                  )}
-                  
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleAddIngredientToRecipe} className="flex-1 border-dashed">
-                      <Plus className="h-4 w-4 mr-2" /> Add Ingredient
-                    </Button>
-                    <Button onClick={saveRecipe} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white">
-                      <Save className="h-4 w-4 mr-2" /> Save Recipe
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                <UtensilsCrossed className="h-16 w-16 mb-4 text-gray-300" />
-                <p>Select a menu item from the list to edit its recipe ingredients.</p>
-              </div>
-            )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center p-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <UtensilsCrossed className="h-16 w-16 mb-4 text-gray-300" />
+                  <p>Select a menu item from the list to edit its recipe ingredients.</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         </div>
       )}
     </div>
