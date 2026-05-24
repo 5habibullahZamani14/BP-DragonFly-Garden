@@ -99,11 +99,11 @@ export const SettingsTab = () => {
   const saveProfile = async () => {
     setProfileError("");
     if (!profile.name.trim() || !profile.id.trim()) {
-      setProfileError("Name and Manager ID are required.");
+      setProfileError(t("m.profileNameRequired"));
       return;
     }
     if (newPassword && newPassword !== confirmPassword) {
-      setProfileError("Passwords do not match.");
+      setProfileError(t("m.passwordMismatch"));
       return;
     }
     setProfileSaving(true);
@@ -120,7 +120,7 @@ export const SettingsTab = () => {
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2500);
     } catch (e) {
-      setProfileError("Failed to save. Please try again.");
+      setProfileError(t("m.profileSaveFailed"));
     } finally {
       setProfileSaving(false);
     }
@@ -159,7 +159,7 @@ export const SettingsTab = () => {
       if (err.message && err.message.includes("already exists")) {
         setShowOverwriteConfirm(true);
       } else {
-        setBackupMsg({ text: `⚠️ ${err.message || "Failed to create backup"}`, isError: true });
+        setBackupMsg({ text: `⚠️ ${err.message || t("m.backupCreateFailed")}`, isError: true });
       }
     } finally {
       setBackupLoading(false);
@@ -174,15 +174,15 @@ export const SettingsTab = () => {
     setRestoreLoading(filename);
     try {
       await restoreBackup(filename);
-      window.alert("System restored successfully. The page will now reload.");
+      window.alert(t("m.restoreSuccess"));
       window.location.reload();
     } catch (err: any) {
-      window.alert(`Restore failed: ${err.message || "Unknown error"}`);
+      window.alert(t("m.restoreFailed", { message: err.message || "Unknown error" }));
       setRestoreLoading(null);
     }
   };
 
-  if (hoursLoading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading settings...</div>;
+  if (hoursLoading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingSettings")}</div>;
 
   return (
     <Accordion type="single" collapsible className="space-y-6">
@@ -192,10 +192,7 @@ export const SettingsTab = () => {
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.restHours")}</h3>
-            <p className="text-sm text-muted-foreground font-normal">
-              These hours determine when employees are automatically logged out.
-              The manager account is exempt from this restriction.
-            </p>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.hoursDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-6 pt-4 pb-6 border-t">
@@ -213,7 +210,7 @@ export const SettingsTab = () => {
               </div>
             </div>
             <Button onClick={saveHours} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> : "Save Hours"}
+              {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.saveHours")}
             </Button>
           </div>
         </AccordionContent>
@@ -224,22 +221,20 @@ export const SettingsTab = () => {
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.kitchenPass")}</h3>
-            <p className="text-sm text-muted-foreground font-normal">
-              This is the passcode your kitchen crew enters to access the Kitchen Board. Share it with your staff.
-            </p>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.kitchenPassDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-6 pt-4 pb-6 border-t">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="kitchen-passcode">Passcode</Label>
+              <Label htmlFor="kitchen-passcode">{t("m.passcodeLabel")}</Label>
               <div className="relative">
                 <Input
                   id="kitchen-passcode"
                   type={showPasscode ? "text" : "password"}
                   value={kitchenPasscode}
                   onChange={(e) => setKitchenPasscode(e.target.value)}
-                  placeholder="Enter new kitchen passcode..."
+                  placeholder={t("m.kitchenPassPlaceholder")}
                   className="pr-10"
                 />
                 <button type="button" onClick={() => setShowPasscode(!showPasscode)}
@@ -249,7 +244,7 @@ export const SettingsTab = () => {
               </div>
             </div>
             <Button onClick={savePasscode} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {passcodeSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> : "Update Passcode"}
+              {passcodeSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.updatePasscode")}
             </Button>
           </div>
         </AccordionContent>
@@ -260,9 +255,7 @@ export const SettingsTab = () => {
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.mgrProfile")}</h3>
-            <p className="text-sm text-muted-foreground font-normal">
-              Your personal details and login credentials. Your email is used for password recovery.
-            </p>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.profileDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-6 pt-4 pb-6 border-t">
@@ -272,38 +265,38 @@ export const SettingsTab = () => {
                 <Label htmlFor="mgr-name">{t("m.fullName")}</Label>
                 <Input id="mgr-name" value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                  placeholder="e.g. Ahmad bin Ibrahim" />
+                  placeholder={t("m.namePlaceholderMgr")} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mgr-id">Manager ID <span className="text-xs text-foreground/50">(used to log in)</span></Label>
+                <Label htmlFor="mgr-id">{t("m.mgrId")} <span className="text-xs text-foreground/50">{t("m.managerIdHint")}</span></Label>
                 <Input id="mgr-id" value={profile.id}
                   onChange={(e) => setProfile({ ...profile, id: e.target.value })}
-                  placeholder="e.g. admin" />
+                  placeholder={t("manager.loginPlaceholderId")} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mgr-email">Email Address <span className="text-xs text-foreground/50">(for password recovery)</span></Label>
+                <Label htmlFor="mgr-email">{t("m.emailLabel")} <span className="text-xs text-foreground/50">{t("m.emailHint")}</span></Label>
                 <Input id="mgr-email" type="email" value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  placeholder="e.g. manager@dragonflygarden.com" />
+                  placeholder={t("m.emailPlaceholder")} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mgr-phone">Phone / WhatsApp</Label>
+                <Label htmlFor="mgr-phone">{t("m.phoneLabel")}</Label>
                 <Input id="mgr-phone" value={profile.phone}
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                  placeholder="e.g. +60 12-345 6789" />
+                  placeholder={t("m.phonePlaceholder")} />
               </div>
             </div>
 
             {/* Change password */}
             <div className="border-t pt-4 space-y-3">
-              <p className="text-sm font-semibold text-foreground/70">Change Password <span className="font-normal text-foreground/40">(leave blank to keep current)</span></p>
+              <p className="text-sm font-semibold text-foreground/70">{t("m.changePass")} <span className="font-normal text-foreground/40">{t("m.changePasswordHint")}</span></p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="new-pw">New Password</Label>
+                  <Label htmlFor="new-pw">{t("m.newPassword")}</Label>
                   <div className="relative">
                     <Input id="new-pw" type={showPassword ? "text" : "password"}
                       value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="New password..." className="pr-10" />
+                      placeholder={t("m.newPasswordPlaceholder")} className="pr-10" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/50 hover:text-foreground">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -311,10 +304,10 @@ export const SettingsTab = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-pw">Confirm Password</Label>
+                  <Label htmlFor="confirm-pw">{t("m.confirmPassword")}</Label>
                   <Input id="confirm-pw" type={showPassword ? "text" : "password"}
                     value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Repeat new password..." />
+                    placeholder={t("m.confirmPasswordPlaceholder")} />
                 </div>
               </div>
             </div>
@@ -322,9 +315,9 @@ export const SettingsTab = () => {
             {profileError && <p className="text-sm text-destructive font-medium">{profileError}</p>}
 
             <Button onClick={saveProfile} disabled={profileSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {profileSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                : profileSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</>
-                : "Save Profile"}
+              {profileSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("m.saving")}</>
+                : profileSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
+                : t("m.saveProfile")}
             </Button>
           </div>
         </AccordionContent>
@@ -334,10 +327,8 @@ export const SettingsTab = () => {
       <AccordionItem value="recovery" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Password Recovery</h3>
-            <p className="text-sm text-muted-foreground font-normal">
-              Forgot your password? Enter your registered email and we will send your credentials to you.
-            </p>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.passwordRecovery")}</h3>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.forgotDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-6 pt-4 pb-6 border-t">
@@ -347,12 +338,12 @@ export const SettingsTab = () => {
                 type="email"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
-                placeholder="Enter your registered email..."
+                placeholder={t("m.resetEmailPlaceholder")}
                 className="flex-1"
               />
               <Button onClick={sendReset} disabled={resetSending} variant="outline" className="flex gap-2 shrink-0">
                 {resetSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                Send
+                {t("m.send")}
               </Button>
             </div>
             {resetMsg && <p className="text-sm text-foreground/70">{resetMsg}</p>}
@@ -365,11 +356,9 @@ export const SettingsTab = () => {
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-blue-50/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg text-blue-900 flex items-center gap-2">
-              <Database className="h-5 w-5 text-blue-600" /> System Backup & Restore
+              <Database className="h-5 w-5 text-blue-600" /> {t("m.sysBackup")}
             </h3>
-            <p className="text-sm text-blue-700/70 font-normal">
-              Create complete offline snapshots of the database, or restore the entire system instantly from an older backup file.
-            </p>
+            <p className="text-sm text-blue-700/70 font-normal">{t("m.backupDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-6 pt-4 pb-6 border-t border-blue-100 bg-blue-50/20">
@@ -377,16 +366,16 @@ export const SettingsTab = () => {
             {/* Create Backup */}
             <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
               <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                <DownloadCloud className="h-4 w-4 text-blue-500" /> Create New Backup
+                <DownloadCloud className="h-4 w-4 text-blue-500" /> {t("m.createNewBackup")}
               </h4>
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1 space-y-1">
-                  <Label className="text-xs text-gray-500">Backup File Name</Label>
+                  <Label className="text-xs text-gray-500">{t("m.backupFileName")}</Label>
                   <div className="flex items-center">
                     <Input 
                       value={backupName} 
                       onChange={(e) => { setBackupName(e.target.value); setShowOverwriteConfirm(false); setBackupMsg(null); }}
-                      placeholder="e.g. end_of_month_backup"
+                      placeholder={t("m.backupNamePlaceholder")}
                       className="rounded-r-none border-r-0 focus-visible:ring-0 focus-visible:border-blue-500"
                     />
                     <div className="h-10 px-3 flex items-center bg-gray-50 border border-l-0 border-input rounded-r-md text-sm text-gray-500 font-mono">
@@ -402,15 +391,15 @@ export const SettingsTab = () => {
                       className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
                     >
                       {backupLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Save Backup
+                      {t("m.saveBackup")}
                     </Button>
                   ) : (
                     <div className="flex items-center gap-2 w-full sm:w-auto animate-in slide-in-from-right-4">
                       <div className="text-sm font-bold text-amber-600 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" /> Already exists. Overwrite?
+                        <AlertCircle className="h-4 w-4" /> {t("m.backupOverwrite")}
                       </div>
-                      <Button onClick={() => handleCreateBackup(true)} variant="destructive" size="sm">Yes</Button>
-                      <Button onClick={() => setShowOverwriteConfirm(false)} variant="outline" size="sm">No</Button>
+                      <Button onClick={() => handleCreateBackup(true)} variant="destructive" size="sm">{t("m.yes")}</Button>
+                      <Button onClick={() => setShowOverwriteConfirm(false)} variant="outline" size="sm">{t("m.no")}</Button>
                     </div>
                   )}
                 </div>
@@ -425,11 +414,11 @@ export const SettingsTab = () => {
             {/* List Backups */}
             <div className="space-y-3">
               <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                <UploadCloud className="h-4 w-4 text-emerald-500" /> Available Backups
+                <UploadCloud className="h-4 w-4 text-emerald-500" /> {t("m.availableBackups")}
               </h4>
               {backups.length === 0 ? (
                 <div className="text-center p-6 bg-white rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
-                  No backups found on the server.
+                  {t("m.noBackups")}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -449,9 +438,9 @@ export const SettingsTab = () => {
                         className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 transition-colors"
                       >
                         {restoreLoading === file.filename ? (
-                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Restoring...</>
+                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("m.restoring")}</>
                         ) : (
-                          "Restore This Version"
+                          t("m.restoreThisVersion")
                         )}
                       </Button>
                     </div>

@@ -15,7 +15,7 @@ import "cropperjs/dist/cropper.css";
 import { useRef } from "react";
 
 export function MenuTab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<{id: number; name: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export function MenuTab() {
       setItems(menuData);
       setCategories(catData);
     } catch (e) {
-      toast.error("Failed to load menu data");
+      toast.error(t("m.loadMenuFailed"));
     } finally {
       setLoading(false);
     }
@@ -45,7 +45,7 @@ export function MenuTab() {
 
   const handleSave = async () => {
     if (!editingItem?.name || !editingItem?.price || !editingItem?.category_id) {
-      toast.error("Please fill all required fields");
+      toast.error(t("m.fillRequired"));
       return;
     }
     
@@ -53,11 +53,11 @@ export function MenuTab() {
       let finalItemId = editingItem.id;
       if (editingItem.id) {
         await updateMenuItem(editingItem.id, editingItem as any);
-        toast.success("Menu item updated");
+        toast.success(t("m.itemUpdated"));
       } else {
         const res = await createMenuItem(editingItem as any) as any;
         finalItemId = res.id;
-        toast.success("Menu item created");
+        toast.success(t("m.itemCreated"));
       }
 
       if (imageSrc && cropperRef.current && cropperRef.current.cropper) {
@@ -76,7 +76,7 @@ export function MenuTab() {
 
       setIsDialogOpen(false);
     } catch (e) {
-      toast.error("Failed to save menu item");
+      toast.error(t("m.saveFailed"));
     }
   };
 
@@ -91,33 +91,33 @@ export function MenuTab() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this menu item?")) return;
+    if (!confirm(t("m.confirmDelete"))) return;
     try {
       await deleteMenuItem(id);
-      toast.success("Menu item deleted");
+      toast.success(t("m.itemDeleted"));
       loadData();
     } catch (e) {
-      toast.error("Failed to delete menu item");
+      toast.error(t("m.deleteFailed"));
     }
   };
 
   const filteredItems = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="space-y-6 animate-fade-up" dir={i18n.dir()}>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.menuMgmt")}</h2>
-          <p className="text-sm text-gray-500">Manage dishes, prices, and manual promotions.</p>
+          <p className="text-sm text-gray-500">{t("m.menuMgmtDesc")}</p>
         </div>
         <Button onClick={() => { setImageSrc(null); setEditingItem({ is_available: true, price: 0 }); setIsDialogOpen(true); }}>
-          <Plus className="mr-2 h-4 w-4" /> Add Menu Item
+          <Plus className="me-2 h-4 w-4" /> {t("m.addMenuItem")}
         </Button>
       </div>
 
       <div className="flex gap-4 items-center">
         <Input 
-          placeholder="Search menu items..." 
+          placeholder={t("m.searchMenuItems")} 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-md bg-white shadow-sm"
@@ -125,7 +125,7 @@ export function MenuTab() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12"><p className="text-gray-500 animate-pulse">Loading menu...</p></div>
+        <div className="text-center py-12"><p className="text-gray-500 animate-pulse">{t("m.loadingMenu")}</p></div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filteredItems.map(item => (
@@ -138,7 +138,7 @@ export function MenuTab() {
                     <ImageIcon className="h-8 w-8 opacity-50" />
                   </div>
                 )}
-                <div className="absolute top-2 right-2 flex gap-1">
+                <div className="absolute top-2 end-2 flex gap-1">
                   {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
                   {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
                 </div>
@@ -168,16 +168,16 @@ export function MenuTab() {
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto" dir={i18n.dir()}>
           <DialogHeader>
-            <DialogTitle>{editingItem?.id ? 'Edit Menu Item' : 'New Menu Item'}</DialogTitle>
+            <DialogTitle>{editingItem?.id ? t("m.editMenuItem") : t("m.newMenuItem")}</DialogTitle>
             <DialogDescription>
-              Set pricing, categories, and manually override promotions.
+              {t("m.menuDialogDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name *</Label>
+              <Label>{t("m.itemName")}</Label>
               <Input value={editingItem?.name || ''} onChange={e => setEditingItem(prev => ({...prev, name: e.target.value}))} />
             </div>
             
@@ -192,7 +192,7 @@ export function MenuTab() {
                   value={editingItem?.category_id?.toString()} 
                   onValueChange={v => setEditingItem(prev => ({...prev, category_id: parseInt(v)}))}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("m.selectCategory")} /></SelectTrigger>
                   <SelectContent>
                     {categories.map(c => (
                       <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
@@ -210,15 +210,15 @@ export function MenuTab() {
             <div className="grid gap-2">
               <div className="flex flex-col gap-1">
                 <Label>{t("m.menuImage")}</Label>
-                <p className="text-[0.7rem] text-gray-500 leading-tight">
-                  Upload any standard image format (JPG, PNG, WebP, HEIC). HD images are fully supported and will be automatically scaled. For best results, crop your photo to a <strong>4:3 aspect ratio</strong>. Maximum file size: <strong>10MB</strong>.
+                <p className="text-[0.7rem] text-gray-500 leading-tight text-start">
+                  {t("m.menuImageHelp")}
                 </p>
               </div>
               {!imageSrc ? (
                 <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 mt-1">
-                  {editingItem?.image_url && <img src={editingItem.image_url} alt="Current" className="h-24 object-contain mb-2 rounded shadow-sm" />}
+                  {editingItem?.image_url && <img src={editingItem.image_url} alt={t("m.currentImage")} className="h-24 object-contain mb-2 rounded shadow-sm" />}
                   <Input type="file" accept="image/*" onChange={onFileChange} className="max-w-[250px]" />
-                  <p className="text-xs text-gray-500">Select an image from your device.</p>
+                  <p className="text-xs text-gray-500">{t("m.selectImageDevice")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -232,12 +232,12 @@ export function MenuTab() {
                       viewMode={1}
                       background={false}
                       responsive={true}
-                      checkOrientation={false} // https://github.com/fengyuanchen/cropperjs/issues/671
+                      checkOrientation={false}
                     />
                   </div>
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button type="button" variant="outline" size="sm" onClick={() => cropperRef.current?.cropper.rotate(90)}>
-                      <RotateCw className="h-4 w-4 mr-2" /> Rotate
+                      <RotateCw className="h-4 w-4 me-2" /> {t("m.rotate")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => {
                       const cropper = cropperRef.current?.cropper;
@@ -246,54 +246,54 @@ export function MenuTab() {
                          cropper.scaleX(currentScaleX === 1 ? -1 : 1);
                       }
                     }}>
-                      <FlipHorizontal className="h-4 w-4 mr-2" /> Flip
+                      <FlipHorizontal className="h-4 w-4 me-2" /> {t("m.flip")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => cropperRef.current?.cropper.zoom(0.1)}>
-                      <ZoomIn className="h-4 w-4 mr-2" /> Zoom In
+                      <ZoomIn className="h-4 w-4 me-2" /> {t("m.zoomIn")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => cropperRef.current?.cropper.zoom(-0.1)}>
-                      <ZoomOut className="h-4 w-4 mr-2" /> Zoom Out
+                      <ZoomOut className="h-4 w-4 me-2" /> {t("m.zoomOut")}
                     </Button>
                     <Button type="button" variant="ghost" size="sm" className="text-red-500" onClick={() => setImageSrc(null)}>
-                      <Trash2 className="h-4 w-4 mr-2" /> Cancel Image
+                      <Trash2 className="h-4 w-4 me-2" /> {t("m.cancelImage")}
                     </Button>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-xl space-y-4 border border-gray-100 mt-2">
-              <h4 className="font-semibold text-sm text-gray-900 border-b pb-2">Manual Overrides</h4>
+            <div className="bg-gray-50 p-4 rounded-xl space-y-4 border border-gray-100 mt-2 text-start">
+              <h4 className="font-semibold text-sm text-gray-900 border-b pb-2">{t("m.manualOverrides")}</h4>
               
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Available</Label>
-                  <p className="text-xs text-gray-500">Is this item currently available?</p>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5 min-w-0">
+                  <Label>{t("m.available")}</Label>
+                  <p className="text-xs text-gray-500">{t("m.availableDesc")}</p>
                 </div>
                 <Switch checked={editingItem?.is_available || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_available: c}))} />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5 min-w-0">
                   <Label>{t("m.markPopular")}</Label>
-                  <p className="text-xs text-gray-500">Manually override AI recommendations.</p>
+                  <p className="text-xs text-gray-500">{t("m.markPopularDesc")}</p>
                 </div>
                 <Switch checked={editingItem?.is_popular || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_popular: c}))} />
               </div>
 
               <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5 min-w-0">
                     <Label>{t("m.activePromo")}</Label>
-                    <p className="text-xs text-gray-500">Highlight this item with a promo badge.</p>
+                    <p className="text-xs text-gray-500">{t("m.activePromoDesc")}</p>
                   </div>
                   <Switch checked={editingItem?.is_promo || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_promo: c}))} />
                 </div>
                 {editingItem?.is_promo && (
                   <div className="grid gap-2 pt-2 animate-in fade-in slide-in-from-top-2">
-                    <Label>Promo Badge Label</Label>
+                    <Label>{t("m.promoBadgeLabel")}</Label>
                     <Input 
-                      placeholder="e.g. 20% OFF or NEW" 
+                      placeholder={t("m.promoBadgePlaceholder")} 
                       value={editingItem?.promo_label || ''} 
                       onChange={e => setEditingItem(prev => ({...prev, promo_label: e.target.value}))} 
                     />
@@ -303,7 +303,7 @@ export function MenuTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t("m.cancel")}</Button>
             <Button onClick={handleSave}>{t("m.saveItem")}</Button>
           </DialogFooter>
         </DialogContent>

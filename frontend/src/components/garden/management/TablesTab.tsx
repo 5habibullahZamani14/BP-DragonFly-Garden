@@ -95,7 +95,7 @@ export const TablesTab = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this table?")) return;
+    if (!confirm(t("m.confirmDeleteTable"))) return;
     try {
       await deleteTable(id);
       loadTables();
@@ -104,24 +104,24 @@ export const TablesTab = () => {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading tables...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingTables")}</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Grid3X3 className="h-6 w-6 text-green-600" />
-          Restaurant Tables
+          {t("m.restaurantTables")}
         </h2>
         <Button onClick={() => setIsAdding(true)} className="bg-green-600 hover:bg-green-700 text-white">
-          <Plus className="h-4 w-4 mr-2" /> Add Table
+          <Plus className="h-4 w-4 mr-2" /> {t("m.addTable")}
         </Button>
       </div>
 
       {isAdding && (
         <Card className="border-green-200 shadow-md">
           <CardHeader>
-            <CardTitle>New Table</CardTitle>
+            <CardTitle>{t("m.newTable")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -136,7 +136,7 @@ export const TablesTab = () => {
             </div>
             <div className="flex gap-2 pt-4">
               <Button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white flex-1">{t("m.saveTable")}</Button>
-              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">Cancel</Button>
+              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">{t("m.cancel")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -145,7 +145,7 @@ export const TablesTab = () => {
       {editingTableId && (
         <Card className="border-blue-200 shadow-md">
           <CardHeader>
-            <CardTitle>Edit Table</CardTitle>
+            <CardTitle>{t("m.editTable")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -159,8 +159,8 @@ export const TablesTab = () => {
               </div>
             </div>
             <div className="flex gap-2 pt-4">
-              <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 text-white flex-1">Update Table</Button>
-              <Button onClick={() => setEditingTableId(null)} variant="outline" className="flex-1">Cancel</Button>
+              <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 text-white flex-1">{t("m.updateTable")}</Button>
+              <Button onClick={() => setEditingTableId(null)} variant="outline" className="flex-1">{t("m.cancel")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -219,8 +219,8 @@ export const TablesTab = () => {
                 {/* The SCAN ME Center Badge */}
                 <div className="absolute inset-0 flex items-center justify-center z-20">
                   <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                    <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">Scan</span>
-                    <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">Me</span>
+                    <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                    <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
                   </div>
                 </div>
               </div>
@@ -230,7 +230,7 @@ export const TablesTab = () => {
 
             <div className="w-full mt-4">
               <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md" onClick={handleDownloadQR}>
-                <Download className="w-4 h-4 mr-2" /> Download QR Image
+                <Download className="w-4 h-4 mr-2" /> {t("m.downloadQr")}
               </Button>
             </div>
           </div>

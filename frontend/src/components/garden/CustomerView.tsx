@@ -144,6 +144,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     try { return sessionStorage.getItem(`dfg_show_archived_${qrCode}`) === 'true'; }
     catch { return false; }
   });
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   useEffect(() => {
     sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
   }, [archivedOrders, qrCode]);
@@ -151,7 +152,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     sessionStorage.setItem(`dfg_show_archived_${qrCode}`, String(showArchived));
   }, [showArchived, qrCode]);
 
-  // Dismiss search popup when user interacts anywhere outside the search bar / popup
+  // Dismiss search when tapping outside the search bar / results (not on scroll — that cleared the query while typing)
   useEffect(() => {
     if (!query.trim()) return;
     const dismiss = (e: Event) => {
@@ -160,17 +161,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         setQuery("");
       }
     };
-    // Capture so it fires before child handlers, including scroll/touch/wheel
     document.addEventListener("pointerdown", dismiss, true);
-    document.addEventListener("touchstart", dismiss, true);
-    window.addEventListener("wheel", dismiss, { passive: true });
-    window.addEventListener("scroll", dismiss, { passive: true, capture: true });
-    return () => {
-      document.removeEventListener("pointerdown", dismiss, true);
-      document.removeEventListener("touchstart", dismiss, true);
-      window.removeEventListener("wheel", dismiss);
-      window.removeEventListener("scroll", dismiss, { capture: true });
-    };
+    return () => document.removeEventListener("pointerdown", dismiss, true);
   }, [query]);
 
   // Load recommendations when cart opens or changes
@@ -264,12 +256,49 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   useEffect(() => {
     const onScroll = () => {
       if (!heroRef.current) return;
-      const y = Math.min(window.scrollY, 280);
+      const el = document.getElementById("main-scroll");
+      const y = Math.min(el?.scrollTop ?? 0, 280);
       heroRef.current.style.setProperty("--py", `${y * 0.25}px`);
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const el = document.getElementById("main-scroll");
+    el?.addEventListener("scroll", onScroll, { passive: true });
+    return () => el?.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Compact sticky header after scrolling past the crest
+  useEffect(() => {
+    const el = document.getElementById("main-scroll");
+    if (!el) return;
+    const onScroll = () => setHeaderCollapsed(el.scrollTop > 40);
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [tab]);
+
+  const tableGreeting = useMemo(() => {
+    if (!tableInfo) {
+      return { line: t("customer.toTheGarden") };
+    }
+    if (/(takeaway|counter|to[- ]?go)/i.test(tableInfo.table_number)) {
+      return {
+        line: (
+          <>
+            {t("customer.placing")}{" "}
+            <span className="text-primary italic">{t("customer.takeawayOrder")}</span>
+          </>
+        ),
+      };
+    }
+    const num = tableInfo.table_number.replace(/^table-?/i, "").trim();
+    return {
+      line: (
+        <>
+          {t("customer.atTable")}{" "}
+          <span className="text-primary italic">{num}</span>
+        </>
+      ),
+    };
+  }, [tableInfo, t]);
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(menu.map((i) => i.category_name)))], [menu]);
   const categoryLabel = (name: string) => {
@@ -578,33 +607,81 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {/* ============ TOP BAR (sticky, app-like) ============ */}
 
-      <div className="sticky top-0 z-30 px-5 pt-4 pb-3 cream-frost">
-        <div className="absolute top-4 left-5">
+      <div
+        className={`sticky top-0 z-30 px-5 cream-frost transition-[padding] duration-300 ${
+          headerCollapsed ? "pt-2 pb-2" : "pt-4 pb-3"
+        }`}
+      >
+        <div className={`absolute left-5 z-40 transition-[top] duration-300 ${headerCollapsed ? "top-2" : "top-4"}`}>
           <SettingsModal />
         </div>
-        {/* Hero ??" blueprint layout: WELCOME text on top, big butterfly centered, search below */}
-        <div className="flex flex-col items-center text-center mt-2">
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.36em] text-foreground/55">{t("customer.welcome")}</p>
-          <p className="mt-1.5 font-display text-xl font-semibold" style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}>
-            {tableInfo ? (
-              /(takeaway|counter|to[- ]?go)/i.test(tableInfo.table_number) ? (
-                <>{t("customer.placing")} <span className="text-primary italic">{t("customer.takeawayOrder")}</span></>
-              ) : (
-                <>{t("customer.atTable")} <span className="text-primary italic">{tableInfo.table_number.replace(/^table-?/i, "").trim()}</span></>
-              )
-            ) : t("customer.toTheGarden")}
-          </p>
-          <img
-            src={butterflyHero}
-            alt="Golden butterfly"
-            className="mt-2 h-32 w-56 animate-wing-flap object-contain drop-shadow-[0_18px_24px_rgba(120,80,20,0.22)]"
-          />
+
+        {/* Expanded crest — butterfly beside welcome (pl clears settings button) */}
+        <div
+          className={`flex items-center justify-start gap-3 overflow-hidden ps-[3.25rem] transition-all duration-300 ${
+            headerCollapsed
+              ? "pointer-events-none max-h-0 opacity-0"
+              : "mt-2 max-h-20 opacity-100"
+          }`}
+          aria-hidden={headerCollapsed}
+        >
+          <div
+            className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border border-border/50 bg-white/80 shadow-sm"
+            aria-hidden
+          >
+            <img
+              src={butterflyHero}
+              alt=""
+              className="h-[2.35rem] w-[2.35rem] animate-wing-flap object-contain object-[46%_52%] drop-shadow-[0_4px_8px_rgba(120,80,20,0.18)]"
+            />
+          </div>
+          <div className="min-w-0 text-start">
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.28em] text-foreground/55">
+              {t("customer.welcome")}
+            </p>
+            <p
+              className="mt-0.5 font-display text-lg font-semibold leading-tight"
+              style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}
+            >
+              {tableGreeting.line}
+            </p>
+          </div>
+        </div>
+
+        {/* Collapsed mini row — shows while scrolling */}
+        <div
+          className={`flex items-center justify-start gap-2 ps-[3.25rem] transition-all duration-300 ${
+            headerCollapsed ? "mt-1 max-h-14 opacity-100" : "max-h-0 overflow-hidden opacity-0"
+          }`}
+          aria-hidden={!headerCollapsed}
+        >
+          <div
+            className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full border border-border/50 bg-white/80 shadow-sm"
+            aria-hidden
+          >
+            <img
+              src={butterflyHero}
+              alt=""
+              className="h-[1.65rem] w-[1.65rem] animate-wing-flap object-contain object-[46%_52%]"
+            />
+          </div>
+          <div className="min-w-0 leading-tight">
+            <p className="text-[0.55rem] font-bold uppercase tracking-[0.24em] text-foreground/55">
+              {t("customer.welcome")}
+            </p>
+            <p className="truncate font-display text-sm font-semibold">{tableGreeting.line}</p>
+          </div>
         </div>
 
         {/* Search */}
-        <div className="relative mt-3" ref={searchWrapRef}>
+        <div
+          className={`relative transition-[margin] duration-300 ${headerCollapsed ? "mt-1.5" : "mt-2.5"}`}
+          ref={searchWrapRef}
+        >
           <div
-            className="flex items-center gap-2 rounded-full px-4 py-2.5 transition-all focus-within:ring-2 focus-within:ring-accent/60"
+            className={`flex items-center gap-2 rounded-full px-4 transition-all focus-within:ring-2 focus-within:ring-accent/60 ${
+              headerCollapsed ? "py-2" : "py-2.5"
+            }`}
             style={{
               background: "linear-gradient(180deg, hsl(44 75% 98%) 0%, hsl(42 60% 95%) 100%)",
               boxShadow: "var(--shadow-soft), inset 0 1px 0 hsl(40 90% 96% / 0.9)",
@@ -646,10 +723,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     <Leaf className="h-4 w-4 text-foreground/40" />
                   </div>
                   <p className="font-display text-sm text-foreground/70">
-                    Sorry, that's not on the farm menu today.
+                    {t("customer.notOnMenu")}
                   </p>
                   <p className="mt-1 text-xs text-foreground/40">
-                    Try a different dish or browse the full menu below.
+                    {t("customer.tryBrowseMenu")}
                   </p>
                 </div>
               ) : (
@@ -810,7 +887,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <div className="relative flex flex-1 flex-col justify-between p-4">
                   <div>
                     <span className="inline-block rounded-md bg-white/95 px-1.5 py-0.5 text-[0.58rem] font-extrabold uppercase tracking-widest text-berry">
-                      {p.promo_label === "PRE-ORDER 3 DAYS" ? t("customer.preOrder3Days") : p.promo_label || "Promo"}
+                      {p.promo_label === "PRE-ORDER 3 DAYS" ? t("customer.preOrder3Days") : p.promo_label || t("customer.promoFallback")}
                     </span>
                     <h3 className="mt-2 font-display text-xl font-bold leading-tight text-balance">{p.name}</h3>
                   </div>
@@ -939,7 +1016,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </h3>
                   </div>
                   <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
-                    {item.description || "Fresh from the farm."}
+                    {item.description || t("customer.descriptionFallback")}
                   </p>
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div>
@@ -1015,7 +1092,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <div className="mx-5 mb-8 space-y-6">
               <div className="flex items-end justify-between">
                 <span className="eyebrow">{t("customer.inProgress")}</span>
-                <span className="text-xs text-foreground/50">{orders.length} active</span>
+                <span className="text-xs text-foreground/50">{t("customer.ordersActiveCount", { count: orders.length })}</span>
               </div>
               {orders.map((o) => {
                 const RC = "hsl(44,70%,97%)";
@@ -1121,14 +1198,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 className="flex items-center gap-2 w-full text-left mb-2"
               >
                 <span className="eyebrow flex-1">{t("customer.archivedTickets")}</span>
-                <span className="text-[0.65rem] text-foreground/40">{archivedOrders.length} · {showArchived ? "hide ▲" : "show ▼"}</span>
+                <span className="text-[0.65rem] text-foreground/40">{archivedOrders.length} · {showArchived ? t("customer.archivedHide") : t("customer.archivedShow")}</span>
               </button>
               {showArchived && (
                 <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card/70">
                   {archivedOrders.map(o => (
                     <li key={`arch-${o.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
                       <div className="min-w-0">
-                        <p className="font-semibold text-foreground/70">Ticket #{o.daily_ticket_number || o.id}</p>
+                        <p className="font-semibold text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</p>
                         <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
                       </div>
                       <span className="shrink-0 font-display text-foreground/55">
@@ -1158,8 +1235,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <li key={`hist-${o.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <Check className="h-3.5 w-3.5 shrink-0 text-leaf" />
-                      <span className="truncate font-medium text-foreground/70">Ticket #{o.daily_ticket_number || o.id}</span>
-                      <span className="truncate text-foreground/40">· {(o.items?.length || 0)} item{(o.items?.length || 0) === 1 ? "" : "s"}</span>
+                      <span className="truncate font-medium text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</span>
+                      <span className="truncate text-foreground/40">· {t((o.items?.length || 0) === 1 ? "customer.historyItemCount_one" : "customer.historyItemCount_other", { count: o.items?.length || 0 })}</span>
                     </div>
                     <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || o.total_price * 1.166))}</span>
                   </li>
@@ -1198,7 +1275,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="font-display text-base font-semibold leading-tight">{c.name}</h3>
-                      <p className="text-xs text-foreground/50">{formatRM(c.price)} each</p>
+                      <p className="text-xs text-foreground/50">{formatRM(c.price)} {t("customer.priceEach")}</p>
                     </div>
                     <strong className="font-display text-base">{formatRM(c.price * c.quantity)}</strong>
                   </div>
@@ -1242,7 +1319,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         )}
                         {!rec.is_fallback && (
                           <div className="absolute top-1 left-1 bg-white/90 backdrop-blur rounded text-[0.55rem] font-bold px-1 py-0.5 text-accent-foreground shadow-sm">
-                            Often bought together
+                            {t("customer.oftenBoughtTogether")}
                           </div>
                         )}
                       </div>
@@ -1270,7 +1347,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <strong className="font-display text-2xl font-semibold">{formatRM(total)}</strong>
               </div>
               <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo || submitCooldown || !!pendingCart} onClick={startConfirmation} className="w-full">
-                {submitCooldown ? "Order sent ✓" : submitting ? "Sending..." : "Send order →"}
+                {submitCooldown ? t("customer.orderSent") : submitting ? t("customer.sending") : t("customer.sendOrder")}
               </PetalButton>
             </div>
           </div>

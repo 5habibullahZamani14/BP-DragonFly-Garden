@@ -66,18 +66,18 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
-      notify("error", "Cart is empty!");
+      notify("error", t("pos.cartEmpty"));
       return;
     }
     if (orderType === "PICKUP") {
       if (!customerName.trim() || !customerPhone.trim() || !collectionTime.trim()) {
-        notify("error", "Name, Phone, and Collection Time are required for Pickup");
+        notify("error", t("pos.pickupRequired"));
         return;
       }
     }
     if (orderType === "DELIVERY") {
       if (!customerName.trim() || !customerPhone.trim() || !deliveryAddress.trim()) {
-        notify("error", "Name, Phone, and Address are required for Delivery");
+        notify("error", t("pos.deliveryRequired"));
         return;
       }
     }
@@ -98,7 +98,13 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
         }))
       });
       
-      notify("success", `${orderType} order created successfully!`);
+      notify("success", t("pos.orderCreatedSuccess", {
+        orderType: t(
+          orderType === "TAKEAWAY" ? "pos.orderTypeTakeaway"
+            : orderType === "PICKUP" ? "pos.orderTypePickup"
+            : "pos.orderTypeDelivery"
+        ),
+      }));
       onOrderCreated(order);
       onOpenChange(false);
       
@@ -109,7 +115,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
       setCollectionTime("");
       setDeliveryAddress("");
     } catch (e) {
-      notify("error", "Failed to create order");
+      notify("error", t("pos.orderCreateFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -123,7 +129,13 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
             {orderType === "TAKEAWAY" && <ShoppingBag className="h-6 w-6 text-green-600" />}
             {orderType === "PICKUP" && <Clock className="h-6 w-6 text-orange-600" />}
             {orderType === "DELIVERY" && <MapPin className="h-6 w-6 text-blue-600" />}
-            New {orderType.charAt(0) + orderType.slice(1).toLowerCase()} Order
+            {t("pos.newOrderTitle", {
+              orderType: t(
+                orderType === "TAKEAWAY" ? "pos.orderTypeTakeaway"
+                  : orderType === "PICKUP" ? "pos.orderTypePickup"
+                  : "pos.orderTypeDelivery"
+              ),
+            })}
           </DialogTitle>
         </DialogHeader>
 
@@ -139,22 +151,22 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                   <h3 className="font-semibold text-gray-800 mb-2">{t("pos.customerDetails")}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Name *</Label>
+                      <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {t("pos.name")}</Label>
                       <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t("pos.name")} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone *</Label>
+                      <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("pos.phone")}</Label>
                       <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder={t("pos.phone")} />
                     </div>
                     {orderType === "PICKUP" && (
                       <div className="space-y-2 col-span-2">
-                        <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Collection Time *</Label>
+                        <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {t("pos.collectionTime")}</Label>
                         <Input type="time" value={collectionTime} onChange={e => setCollectionTime(e.target.value)} />
                       </div>
                     )}
                     {orderType === "DELIVERY" && (
                       <div className="space-y-2 col-span-2">
-                        <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Delivery Address *</Label>
+                        <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {t("pos.deliveryAddress")}</Label>
                         <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder={t("pos.deliveryAddress")} />
                       </div>
                     )}
@@ -198,8 +210,8 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
           <div className="w-[400px] bg-gray-50 flex flex-col shrink-0 border-l">
             <div className="p-6 pb-2 border-b bg-white">
               <h2 className="text-xl font-bold text-gray-800 flex items-center justify-between">
-                Current Order
-                <span className="bg-gray-100 text-gray-600 text-sm px-2 py-1 rounded-full">{cart.reduce((a,b)=>a+b.quantity,0)} items</span>
+                {t("pos.currentOrder")}
+                <span className="bg-gray-100 text-gray-600 text-sm px-2 py-1 rounded-full">{t("pos.cartItemCount", { count: cart.reduce((a, b) => a + b.quantity, 0) })}</span>
               </h2>
             </div>
             
@@ -251,7 +263,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                 disabled={cart.length === 0 || isSubmitting}
                 size="lg"
               >
-                {isSubmitting ? "Processing..." : `Checkout Order`}
+                {isSubmitting ? t("common.processing") : t("pos.checkoutOrder")}
               </Button>
             </div>
           </div>

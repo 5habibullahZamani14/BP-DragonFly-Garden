@@ -35,6 +35,33 @@ const run = (sql, params = []) =>
     });
   });
 
+const fs = require("fs");
+const path = require("path");
+
+/** Remove a menu image file only when no other menu item still references it. */
+const deleteMenuImageIfUnused = async (imageUrl, excludeItemId = null) => {
+  if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
+
+  const params = [imageUrl];
+  let sql = `SELECT id FROM menu_items WHERE image_url = ?`;
+  if (excludeItemId != null) {
+    sql += ` AND id != ?`;
+    params.push(excludeItemId);
+  }
+
+  const stillUsed = await all(sql, params);
+  if (stillUsed.length > 0) return;
+
+  const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
+      console.error("Error deleting menu image:", e);
+    }
+  }
+};
+
 /*
  * getMenu returns all currently available menu items, each with its category
  * information and flags for popular/promo status. I normalise the boolean
@@ -275,15 +302,11 @@ const deleteMenuItem = async (req, res) => {
   const { id } = req.params;
   try {
     const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
-    if (existing.length > 0 && existing[0].image_url) {
-      const fs = require('fs');
-      const path = require('path');
-      const oldPath = path.join(__dirname, '../../../../frontend/public', existing[0].image_url);
-      if (fs.existsSync(oldPath)) {
-        try { fs.unlinkSync(oldPath); } catch (e) { console.error("Error deleting old image:", e); }
-      }
-    }
+    const oldImageUrl = existing.length > 0 ? existing[0].image_url : null;
     await run(`DELETE FROM menu_items WHERE id = ?`, [id]);
+    if (oldImageUrl) {
+      await deleteMenuImageIfUnused(oldImageUrl);
+    }
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -298,17 +321,14 @@ const uploadMenuItemImage = async (req, res) => {
 
   try {
     const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
-    if (existing.length > 0 && existing[0].image_url) {
-      const fs = require('fs');
-      const path = require('path');
-      const oldPath = path.join(__dirname, '../../../../frontend/public', existing[0].image_url);
-      if (fs.existsSync(oldPath)) {
-        try { fs.unlinkSync(oldPath); } catch (e) { console.error("Error deleting old image:", e); }
-      }
-    }
+    const oldImageUrl = existing.length > 0 ? existing[0].image_url : null;
 
     const newImageUrl = `/menu-images/${req.file.filename}`;
     await run(`UPDATE menu_items SET image_url = ? WHERE id = ?`, [newImageUrl, id]);
+
+    if (oldImageUrl && oldImageUrl !== newImageUrl) {
+      await deleteMenuImageIfUnused(oldImageUrl, id);
+    }
 
     res.json({ success: true, image_url: newImageUrl });
   } catch (error) {

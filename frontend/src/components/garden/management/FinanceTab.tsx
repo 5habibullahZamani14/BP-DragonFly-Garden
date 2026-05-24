@@ -73,7 +73,7 @@ export const FinanceTab = () => {
     return (
       <div className="flex justify-center items-center h-64 text-foreground/40 font-medium">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-3"></div>
-        Calculating Financial Models...
+        {t("m.calculatingFinance")}
       </div>
     );
   }
@@ -84,9 +84,9 @@ export const FinanceTab = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
           <h2 className="text-3xl font-display font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
-            Financial Intelligence
+            {t("m.finInt")}
           </h2>
-          <p className="text-foreground/60 mt-1 font-medium">Comprehensive profit & loss visualization engine.</p>
+          <p className="text-foreground/60 mt-1 font-medium">{t("m.financeDesc")}</p>
         </div>
       </div>
 
@@ -100,7 +100,7 @@ export const FinanceTab = () => {
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.totRev")}</p>
             <h4 className="text-4xl font-display font-bold text-emerald-700">RM {metrics.revenue.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded-full">
-              <ArrowUpRight className="w-3 h-3 mr-1" /> Gross Income
+              <ArrowUpRight className="w-3 h-3 mr-1" /> {t("m.grossIncome")}
             </div>
           </CardContent>
         </Card>
@@ -110,10 +110,10 @@ export const FinanceTab = () => {
             <PackageOpen className="w-16 h-16" />
           </div>
           <CardContent className="p-6 relative z-10">
-            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">Cost of Goods (COGS)</p>
+            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.cogs")}</p>
             <h4 className="text-4xl font-display font-bold text-rose-700">RM {metrics.cost.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-rose-600 bg-rose-50 w-fit px-2 py-1 rounded-full">
-              <ArrowDownRight className="w-3 h-3 mr-1" /> Ingredient Costs
+              <ArrowDownRight className="w-3 h-3 mr-1" /> {t("m.ingredientCosts")}
             </div>
           </CardContent>
         </Card>
@@ -126,7 +126,7 @@ export const FinanceTab = () => {
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.grossProf")}</p>
             <h4 className="text-4xl font-display font-bold text-blue-700">RM {metrics.profit.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-full">
-              <Activity className="w-3 h-3 mr-1" /> Net Earnings
+              <Activity className="w-3 h-3 mr-1" /> {t("m.netEarn")}
             </div>
           </CardContent>
         </Card>
@@ -136,10 +136,10 @@ export const FinanceTab = () => {
             <PieChart className="w-16 h-16" />
           </div>
           <CardContent className="p-6 relative z-10">
-            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">Average Margin</p>
+            <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.averageMargin")}</p>
             <h4 className="text-4xl font-display font-bold text-violet-700">{metrics.margin.toFixed(1)}%</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-violet-600 bg-violet-50 w-fit px-2 py-1 rounded-full">
-              <PieChart className="w-3 h-3 mr-1" /> Profitability
+              <PieChart className="w-3 h-3 mr-1" /> {t("m.profitability")}
             </div>
           </CardContent>
         </Card>
@@ -151,7 +151,7 @@ export const FinanceTab = () => {
         <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 h-[400px] flex flex-col">
           <div className="mb-6 flex items-center gap-2 px-2">
             <Activity className="h-5 w-5 text-accent" />
-            <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>Revenue Timeline</h3>
+            <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.revenueTimeline")}</h3>
           </div>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -178,13 +178,13 @@ export const FinanceTab = () => {
             <div>
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-blue-500" />
-                <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>Top Profit Drivers</h3>
+                <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.topProfitDrivers")}</h3>
               </div>
-              <p className="text-xs text-foreground/50 mt-1">Items ranked by total gross profit generated.</p>
+              <p className="text-xs text-foreground/50 mt-1">{t("m.topProfitDesc")}</p>
             </div>
             
             <div className="flex items-center gap-2 bg-white/80 rounded-full px-4 py-1.5 shadow-sm border border-foreground/5">
-              <span className="text-xs font-semibold text-foreground/60 whitespace-nowrap">Show Top</span>
+              <span className="text-xs font-semibold text-foreground/60 whitespace-nowrap">{t("m.showTop")}</span>
               <input 
                 type="number" 
                 min={1}
@@ -200,12 +200,12 @@ export const FinanceTab = () => {
                   setTopItemsCount(val);
                 }}
               />
-              <span className="text-xs font-semibold text-foreground/60 mr-1">Items</span>
+              <span className="text-xs font-semibold text-foreground/60 mr-1">{t("m.itemsLabel")}</span>
               <button 
                 onClick={() => setTopItemsCount(data?.items.length || 100)}
                 className="text-[0.65rem] uppercase tracking-wider font-bold bg-primary/10 text-primary hover:bg-primary/20 px-2 py-1 rounded-full transition-colors"
               >
-                All
+                {t("m.all")}
               </button>
             </div>
           </div>

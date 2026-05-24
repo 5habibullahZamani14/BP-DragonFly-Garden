@@ -32,6 +32,7 @@ import { fetchEmployees, createEmployee, updateEmployee } from "@/lib/api";
 import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 
 export const EmployeesTab = () => {
   const { t } = useTranslation();
@@ -110,7 +111,7 @@ export const EmployeesTab = () => {
   };
 
   const handleArchive = async (id: number) => {
-    if (confirm("Are you sure you want to archive this employee?")) {
+    if (confirm(t("m.confirmArchive"))) {
       try {
         await updateEmployee(id, { is_archived: 1 });
         loadEmployees();
@@ -149,37 +150,45 @@ export const EmployeesTab = () => {
       payroll[dept] = (payroll[dept] || 0) + Number(emp.salary || 0);
     });
 
-    const pie = Object.entries(deptCounts).map(([name, value]) => ({ name, value }));
-    const bar = Object.entries(payroll).map(([name, totalSalary]) => ({ name, totalSalary }));
+    const pie = Object.entries(deptCounts).map(([name, value]) => ({
+      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
+      deptKey: name,
+      value,
+    }));
+    const bar = Object.entries(payroll).map(([name, totalSalary]) => ({
+      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
+      deptKey: name,
+      totalSalary,
+    }));
 
     return { groupedEmployees: grouped, pieData: pie, barData: bar };
   }, [employees]);
 
-  if (loading && employees.length === 0) return <div className="p-8 text-center text-gray-500 animate-pulse">Loading employees...</div>;
+  if (loading && employees.length === 0) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingEmployees")}</div>;
 
   return (
     <div className="space-y-6 pb-12">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Users className="h-6 w-6 text-blue-600" />
-          Employee Directory & Analytics
+          {t("m.empDir")}
         </h2>
         <Button onClick={() => { setIsAdding(true); setEditingId(null); }} className="bg-blue-600 hover:bg-blue-700 text-white">
-          <UserPlus className="h-4 w-4 mr-2" /> Add Employee
+          <UserPlus className="h-4 w-4 mr-2" /> {t("m.addEmp")}
         </Button>
       </div>
 
       {isAdding && (
         <Card className="border-blue-200 shadow-md mb-8">
           <CardHeader>
-            <CardTitle>{editingId ? "Edit Employee" : "New Employee"}</CardTitle>
-            <CardDescription>Fill in the details below. A unique 4-digit ID will be generated automatically upon saving.</CardDescription>
+            <CardTitle>{editingId ? t("m.editEmployee") : t("m.newEmployee")}</CardTitle>
+            <CardDescription>{t("m.newEmployeeDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t("m.fullName")}</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="e.g. John Doe" />
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder={t("m.namePlaceholderEmp")} />
               </div>
               <div className="space-y-2">
                 <Label>{t("m.dept")}</Label>
@@ -188,11 +197,9 @@ export const EmployeesTab = () => {
                   value={formData.department} 
                   onChange={(e) => setFormData({...formData, department: e.target.value})}
                 >
-                  <option value="Waiter">Waiter</option>
-                  <option value="Chef">Chef</option>
-                  <option value="Chef Assistant">Chef Assistant</option>
-                  <option value="Cashier">Cashier</option>
-                  <option value="Manager">Manager</option>
+                  {Object.entries(DEPT_LABEL_KEYS).filter(([k]) => k !== "Other").map(([value, key]) => (
+                    <option key={value} value={value}>{t(key)}</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
@@ -202,13 +209,13 @@ export const EmployeesTab = () => {
                   value={formData.employment_type} 
                   onChange={(e) => setFormData({...formData, employment_type: e.target.value})}
                 >
-                  <option value="Full-Time">Full-Time</option>
-                  <option value="Part-Time">Part-Time</option>
-                  <option value="Contract">Contract</option>
+                  {Object.entries(EMP_TYPE_LABEL_KEYS).map(([value, key]) => (
+                    <option key={value} value={value}>{t(key)}</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>Contact Info (Phone/Email)</Label>
+                <Label>{t("m.contactInfo")}</Label>
                 <Input value={formData.contact_info} onChange={(e) => setFormData({...formData, contact_info: e.target.value})} placeholder="012-3456789" />
               </div>
               <div className="space-y-2">
@@ -216,21 +223,21 @@ export const EmployeesTab = () => {
                 <Input type="number" value={formData.salary} onChange={(e) => setFormData({...formData, salary: e.target.value})} placeholder="0.00" />
               </div>
               <div className="space-y-2">
-                <Label>Bonuses (RM)</Label>
+                <Label>{t("m.bonuses")}</Label>
                 <Input type="number" value={formData.bonuses} onChange={(e) => setFormData({...formData, bonuses: e.target.value})} placeholder="0.00" />
               </div>
               <div className="space-y-2">
-                <Label>Shift Start Time</Label>
+                <Label>{t("m.shiftStart")}</Label>
                 <Input type="time" value={formData.shift_start} onChange={(e) => setFormData({...formData, shift_start: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Shift End Time</Label>
+                <Label>{t("m.shiftEnd")}</Label>
                 <Input type="time" value={formData.shift_end} onChange={(e) => setFormData({...formData, shift_end: e.target.value})} />
               </div>
             </div>
             <div className="flex gap-2 pt-4">
               <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white flex-1">{t("m.saveEmp")}</Button>
-              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">Cancel</Button>
+              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">{t("m.cancel")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -242,7 +249,7 @@ export const EmployeesTab = () => {
           <Card>
             <CardHeader>
               <CardTitle>{t("m.staffDist")}</CardTitle>
-              <CardDescription>Number of employees per department</CardDescription>
+              <CardDescription>{t("m.staffDistDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[250px] w-full">
@@ -259,10 +266,10 @@ export const EmployeesTab = () => {
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
                       {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={departmentColors[entry.name] || '#94a3b8'} />
+                        <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [value, 'Employees']} />
+                    <Tooltip formatter={(value: number) => [value, t("m.chartEmployees")]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -272,7 +279,7 @@ export const EmployeesTab = () => {
           <Card>
             <CardHeader>
               <CardTitle>{t("m.payrollLoad")}</CardTitle>
-              <CardDescription>Total base salary (RM) per department</CardDescription>
+              <CardDescription>{t("m.payrollDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[250px] w-full">
@@ -281,10 +288,10 @@ export const EmployeesTab = () => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" />
                     <YAxis tickFormatter={(val) => `${val / 1000}k`} />
-                    <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, 'Total Salary']} cursor={{fill: 'transparent'}} />
+                    <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'transparent'}} />
                     <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]}>
                       {barData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={departmentColors[entry.name] || '#94a3b8'} />
+                        <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -298,7 +305,7 @@ export const EmployeesTab = () => {
       {/* Grouped Employee Lists */}
       {employees.length === 0 ? (
         <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-          <p className="text-gray-500">No active employees found.</p>
+          <p className="text-gray-500">{t("m.noEmployees")}</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -309,9 +316,9 @@ export const EmployeesTab = () => {
                   className="w-4 h-4 rounded-full" 
                   style={{ backgroundColor: departmentColors[dept] || '#94a3b8' }}
                 />
-                <h3 className="text-xl font-bold text-gray-800">{dept} Department</h3>
+                <h3 className="text-xl font-bold text-gray-800">{t("m.departmentHeader", { dept: labelForStoredValue(t, DEPT_LABEL_KEYS, dept) })}</h3>
                 <span className="text-sm font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                  {emps.length} Members
+                  {t("m.membersCount", { count: emps.length })}
                 </span>
               </div>
               
@@ -320,7 +327,7 @@ export const EmployeesTab = () => {
                   <Card key={emp.id} className="overflow-hidden hover:shadow-md transition-shadow">
                     <div className="flex flex-col sm:flex-row h-full">
                       <div className="bg-blue-50 p-4 flex flex-col justify-center items-center border-r border-blue-100 min-w-[120px] shrink-0">
-                        <div className="text-xs text-blue-500 font-semibold uppercase tracking-wider mb-1">ID</div>
+                        <div className="text-xs text-blue-500 font-semibold uppercase tracking-wider mb-1">{t("m.idLabel")}</div>
                         <div className="text-2xl font-mono font-bold text-blue-800">{emp.employee_id}</div>
                       </div>
                       <div className="p-4 flex-1 flex flex-col justify-between">
@@ -329,7 +336,7 @@ export const EmployeesTab = () => {
                             <div>
                               <h3 className="text-lg font-bold text-gray-900">{emp.name}</h3>
                               <p className="text-sm font-medium text-gray-500 flex items-center gap-1">
-                                <Briefcase className="h-3.5 w-3.5" /> {emp.employment_type}
+                                <Briefcase className="h-3.5 w-3.5" /> {labelForStoredValue(t, EMP_TYPE_LABEL_KEYS, emp.employment_type || "")}
                               </p>
                             </div>
                             <div className="flex gap-2">
@@ -349,11 +356,11 @@ export const EmployeesTab = () => {
                             </div>
                             <div className="flex items-center gap-2 truncate">
                               <Phone className="h-4 w-4 text-gray-400" />
-                              <span>{emp.contact_info || "No contact info"}</span>
+                              <span>{emp.contact_info || t("m.noContact")}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-gray-400" />
-                              <span>Joined: {new Date(emp.hire_date).toLocaleDateString()}</span>
+                              <span>{t("m.joined", { date: new Date(emp.hire_date).toLocaleDateString() })}</span>
                             </div>
                           </div>
                         </div>

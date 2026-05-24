@@ -122,8 +122,8 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       setNotifications(lowStock.map((item: InventoryItem) => ({
         id: `inv-${item.id}`,
         type: "low_stock",
-        title: "Low Stock Alert",
-        message: `${item.name} is running low (${Number(item.current_stock).toFixed(1)} ${item.unit} remaining).`,
+        title: t("manager.lowStockTitle"),
+        message: t("manager.lowStockMessage", { name: item.name, stock: Number(item.current_stock).toFixed(1), unit: item.unit }),
         action: () => {
           setInventoryAction({ subTab: "stock", editItemId: item.id });
           goToTab("inventory");
@@ -144,7 +144,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {
-      setLoginError("Please enter both Manager ID and Password.");
+      setLoginError(t("manager.loginErrorBoth"));
       return;
     }
     setLoginLoading(true);
@@ -159,10 +159,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
         }));
       } else {
-        setLoginError("Invalid Manager ID or Password. Please try again.");
+        setLoginError(t("manager.loginErrorInvalid"));
       }
     } catch {
-      setLoginError("Could not connect to the server. Please check your connection.");
+      setLoginError(t("manager.loginErrorConnection"));
     } finally {
       setLoginLoading(false);
     }
@@ -178,7 +178,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         ? "✅ " + result.message
         : "⚠️ " + result.message);
     } catch {
-      setForgotMsg("⚠️ Could not send email. Check the backend email configuration.");
+      setForgotMsg("⚠️ " + t("manager.emailFailed"));
     } finally {
       setForgotSending(false);
     }
@@ -201,7 +201,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
-          <HelpModal title="Manager" sections={getManagerHelpSections(t)} />
+          <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl border-green-100">
@@ -223,7 +223,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                       id="login-id"
                       value={loginId}
                       onChange={(e) => { setLoginId(e.target.value); setLoginError(""); }}
-                      placeholder="e.g. admin"
+                      placeholder={t("manager.loginPlaceholderId")}
                       onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     />
                   </div>
@@ -234,7 +234,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                       type="password"
                       value={loginPassword}
                       onChange={(e) => { setLoginPassword(e.target.value); setLoginError(""); }}
-                      placeholder="Enter password..."
+                      placeholder={t("manager.loginPlaceholderPassword")}
                       onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                     />
                   </div>
@@ -244,7 +244,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                     onClick={() => { setShowForgot(true); setLoginError(""); }}
                     className="text-xs text-green-700 hover:underline"
                   >
-                    Forgot your password?
+                    {t("manager.forgot")}
                   </button>
                 </>
               ) : (
@@ -268,7 +268,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                     onClick={() => { setShowForgot(false); setForgotMsg(""); }}
                     className="text-xs text-green-700 hover:underline"
                   >
-                    ← Back to login
+                    {t("manager.backLogin")}
                   </button>
                 </>
               )}
@@ -276,7 +276,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             {!showForgot && (
               <CardFooter>
                 <Button onClick={handleLogin} disabled={loginLoading} className="w-full text-lg h-12 bg-green-700 hover:bg-green-800">
-                  {loginLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Verifying...</> : t("manager.accessDash")}
+                  {loginLoading ? <><Loader2 className="h-5 w-5 animate-spin mr-2" /> {t("manager.verifying")}</> : t("manager.accessDash")}
                 </Button>
               </CardFooter>
             )}
@@ -300,7 +300,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
                 <Settings className="h-8 w-8 text-green-700" />
-                Management Dashboard
+                {t("manager.dashboardTitle")}
               </h1>
               <p className="text-gray-500 mt-1">{t("manager.subtitle")}</p>
             </div>
@@ -311,11 +311,11 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
             </span>
             <span className="text-sm font-medium text-gray-700 hidden sm:inline border-l border-gray-300 pl-4">
-              User: <span className="text-green-700 font-bold">Admin</span>
+              {t("manager.userLabel")} <span className="text-green-700 font-bold">{t("manager.userAdmin")}</span>
             </span>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title="Notifications">
+                <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title={t("manager.notifications")}>
                   <Bell className="h-5 w-5 text-gray-600" />
                   {notifications.length > 0 && (
                     <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm" />
@@ -325,7 +325,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               <PopoverContent align="end" className="w-80 p-0 overflow-hidden rounded-xl shadow-lg border-green-100">
                 <div className="bg-gray-50/80 px-4 py-3 border-b">
                   <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-green-600" /> Notifications
+                    <Bell className="h-4 w-4 text-green-600" /> {t("manager.notifications")}
                   </h3>
                 </div>
                 <div className="max-h-[300px] overflow-y-auto">
@@ -351,7 +351,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </div>
               </PopoverContent>
             </Popover>
-            <HelpModal title="Manager" sections={getManagerHelpSections(t)} />
+            <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> {t("manager.logout")}
             </Button>
@@ -431,103 +431,16 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   );
 };
 
+const managerHelpHtml = (t: TFunction, key: string) => (
+  <div className="space-y-2" dangerouslySetInnerHTML={{ __html: t(key) }} />
+);
+
 const getManagerHelpSections = (t: TFunction): HelpSection[] => [
-  {
-    id: "access",
-    title: "1. Logging In & Session",
-    content: (
-      <div className="space-y-2">
-        <p>Use your Manager ID (<strong>admin</strong>) and Manager Name (<strong>manager</strong>) to log in. Your session is remembered for <strong>7 days</strong> — you will not need to log in again until the session expires or you click Logout.</p>
-        <p>The ⚙️ Settings icon (top-left) and the ℹ️ Info icon (top-right) are always accessible, even before you log in.</p>
-      </div>
-    )
-  },
-  {
-    id: "overview",
-    title: "2. Dashboard Overview",
-    content: (
-      <div className="space-y-2">
-        <p>The Management Dashboard is your central hub for controlling the restaurant. It is divided into five main sections:</p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li><strong>Settings:</strong> Configure restaurant working hours.</li>
-          <li><strong>Employees:</strong> Manage staff, salaries, and shifts.</li>
-          <li><strong>Inventory:</strong> Track raw materials and build recipes.</li>
-          <li><strong>Tables:</strong> Add or remove physical tables and generate QR codes.</li>
-          <li><strong>Grand Archive:</strong> View complete logs of all system activity.</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    id: "add-table",
-    title: "3. How to Add, Rename, or Remove a Table",
-    content: (
-      <div className="space-y-2">
-        <p>To manage the physical tables in your restaurant:</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Click on the <strong>{t("manager.tables")}</strong> card from the main overview.</li>
-          <li>To <strong>Add a Table</strong>: Click the green "+ Add Table" button. Enter a human-readable name (e.g., "Table 1") and a unique QR Code Identifier (e.g., "table-1"). Click Save. The system will automatically generate a scannable QR code.</li>
-          <li>To <strong>Rename/Edit</strong>: Hover over an existing table card and click the blue pencil icon. Update the details and click Update.</li>
-          <li>To <strong>Remove</strong>: Hover over the table card and click the red trash icon. Confirm the deletion. <em>Note: This will break any existing printed QR codes for this table.</em></li>
-        </ol>
-      </div>
-    )
-  },
-  {
-    id: "manage-employees",
-    title: "4. How to Manage Employees & Roles",
-    content: (
-      <div className="space-y-2">
-        <p>The Employees section allows you to manage your workforce and view payroll analytics:</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Click the <strong>{t("manager.employees")}</strong> card. At the top, you will see charts breaking down staff distribution and payroll load.</li>
-          <li>To <strong>Add Staff</strong>: Click "+ Add Employee". Fill out their Name, Department, Salary, and Shift Times. The system will automatically generate a unique Employee ID.</li>
-          <li>To <strong>Edit</strong>: Find the employee and click "Edit". Adjust their salary, shift times, or contact info.</li>
-          <li>To <strong>Remove/Archive</strong>: Click "Archive". The employee will be removed from active use but their historical data is preserved in the Grand Archive.</li>
-        </ol>
-      </div>
-    )
-  },
-  {
-    id: "working-hours",
-    title: "5. Setting Restaurant Working Hours",
-    content: (
-      <div className="space-y-2">
-        <p>The restaurant's operating hours dictate when employees can actively process orders.</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Navigate to the <strong>{t("manager.settings")}</strong> tab.</li>
-          <li>Under "Restaurant Operating Hours", define the Start Time and End Time.</li>
-          <li><strong>Important:</strong> When the End Time is reached, any cashier currently logged into the Payment Counter will be automatically logged out by the system.</li>
-        </ol>
-      </div>
-    )
-  },
-  {
-    id: "inventory-recipes",
-    title: "6. Tracking Inventory & Building Recipes",
-    content: (
-      <div className="space-y-2">
-        <p>The Inventory system ensures you never run out of ingredients. It has three sub-tabs:</p>
-        <ul className="list-disc pl-5 space-y-2">
-          <li><strong>Overview Analytics:</strong> Shows a chart of your stock health. Items below their warning threshold appear red.</li>
-          <li><strong>Raw Stock Levels:</strong> Click "+ Add Inventory Item" to register raw ingredients. Set the maximum capacity and the low-stock warning percentage. You can manually update stock levels here when a delivery arrives.</li>
-          <li><strong>Menu Recipes Builder:</strong> Select a menu item, then add ingredients to it. When a customer orders that item, the exact quantities defined here are automatically deducted from Raw Stock.</li>
-        </ul>
-      </div>
-    )
-  },
-  {
-    id: "display-settings",
-    title: "7. Display Settings",
-    content: (
-      <div className="space-y-2">
-        <p>Tap the <strong>⚙️ Settings icon</strong> in the top-left corner to open Display Settings. From there you can:</p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>Switch between three font styles (Clarity, Classic, Elegance).</li>
-          <li>Adjust the Interface Size and Text Size using sliders or +/− buttons.</li>
-        </ul>
-        <p>All settings are saved automatically and remembered across visits.</p>
-      </div>
-    )
-  },
+  { id: "access", title: t("manager.help.access.title"), content: managerHelpHtml(t, "manager.help.access.body") },
+  { id: "overview", title: t("manager.help.overview.title"), content: managerHelpHtml(t, "manager.help.overview.body") },
+  { id: "add-table", title: t("manager.help.tables.title"), content: managerHelpHtml(t, "manager.help.tables.body") },
+  { id: "manage-employees", title: t("manager.help.employees.title"), content: managerHelpHtml(t, "manager.help.employees.body") },
+  { id: "working-hours", title: t("manager.help.hours.title"), content: managerHelpHtml(t, "manager.help.hours.body") },
+  { id: "inventory-recipes", title: t("manager.help.inventory.title"), content: managerHelpHtml(t, "manager.help.inventory.body") },
+  { id: "display-settings", title: t("manager.help.display.title"), content: managerHelpHtml(t, "manager.help.display.body") },
 ];

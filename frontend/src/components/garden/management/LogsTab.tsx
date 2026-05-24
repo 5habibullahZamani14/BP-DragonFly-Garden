@@ -21,6 +21,7 @@
  *      and compliance.
  */
 
+import { useTranslation } from "react-i18next";
 import { useCallback, useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -231,7 +232,7 @@ export const LogsTab = () => {
     return (
       <div className="flex flex-col items-center justify-center p-16 animate-pulse text-foreground/40">
         <Activity className="h-8 w-8 mb-4 opacity-50" />
-        <p className="font-display text-lg">Unearthing the archives...</p>
+        <p className="font-display text-lg">{t("m.unearthingArchives")}</p>
       </div>
     );
   }
@@ -242,15 +243,15 @@ export const LogsTab = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
           <h2 className="text-3xl font-display font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
-            Grand Archive
+            {t("m.grandArchive")}
           </h2>
-          <p className="text-foreground/60 mt-1 font-medium">The immutable history of DragonFly Garden.</p>
+          <p className="text-foreground/60 mt-1 font-medium">{t("m.grandArchiveDesc")}</p>
         </div>
         <Button 
           onClick={downloadExcel} 
           className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg transition-transform hover:scale-105 px-6"
         >
-          <Download className="h-4 w-4 mr-2" /> Export to Excel
+          <Download className="h-4 w-4 mr-2" /> {t("m.exportExcel")}
         </Button>
       </div>
 
@@ -270,7 +271,7 @@ export const LogsTab = () => {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                  <Bar dataKey="count" name="Total Events" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                  <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -289,7 +290,7 @@ export const LogsTab = () => {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                  <Bar dataKey="count" name="Total Events" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+                  <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -302,7 +303,7 @@ export const LogsTab = () => {
         <div className="p-6 border-b border-foreground/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40">
           <h3 className="font-display text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
             <FileText className="h-5 w-5 text-accent" />
-            Audit Trail
+            {t("m.auditTrail")}
           </h3>
           
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -311,7 +312,7 @@ export const LogsTab = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 group-focus-within:text-primary transition-colors" />
               <input
                 type="text"
-                placeholder="Search archives..."
+                placeholder={t("m.searchArchives")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-10 pl-10 pr-4 rounded-full border-none bg-white shadow-sm text-sm outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all text-foreground/80 placeholder:text-foreground/40"
@@ -328,8 +329,8 @@ export const LogsTab = () => {
               >
                 <option value="all">{t("m.allTime")}</option>
                 <option value="24h">{t("m.last24h")}</option>
-                <option value="7d">Last 7 Days</option>
-                <option value="30d">Last 30 Days</option>
+                <option value="7d">{t("m.last7Days")}</option>
+                <option value="30d">{t("m.last30Days")}</option>
               </select>
             </div>
 
@@ -339,11 +340,11 @@ export const LogsTab = () => {
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
-              <option value="">All Categories</option>
-              <option value="EMPLOYEE">Employees</option>
-              <option value="INVENTORY">Inventory</option>
-              <option value="ORDER">Orders</option>
-              <option value="SYSTEM">System</option>
+              <option value="">{t("m.allCategories")}</option>
+              <option value="EMPLOYEE">{t("m.logCatEmployees")}</option>
+              <option value="INVENTORY">{t("m.logCatInventory")}</option>
+              <option value="ORDER">{t("m.logCatOrders")}</option>
+              <option value="SYSTEM">{t("m.logCatSystem")}</option>
             </select>
           </div>
         </div>
@@ -352,18 +353,18 @@ export const LogsTab = () => {
           <table className="w-full text-sm text-left border-collapse">
             <thead className="text-[0.65rem] font-bold tracking-widest uppercase text-foreground/40 bg-foreground/[0.02]">
               <tr>
-                <th className="px-6 py-4 rounded-tl-2xl">Timestamp</th>
-                <th className="px-6 py-4">Category</th>
+                <th className="px-6 py-4 rounded-tl-2xl">{t("m.timestamp")}</th>
+                <th className="px-6 py-4">{t("m.category")}</th>
                 <th className="px-6 py-4">{t("m.action")}</th>
                 <th className="px-6 py-4">{t("m.actor")}</th>
                 <th className="px-6 py-4">{t("m.target")}</th>
-                <th className="px-6 py-4 rounded-tr-2xl">Details</th>
+                <th className="px-6 py-4 rounded-tr-2xl">{t("m.details")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-foreground/40 font-medium">No records found matching your filters.</td>
+                  <td colSpan={6} className="px-6 py-16 text-center text-foreground/40 font-medium">{t("m.noRecords")}</td>
                 </tr>
               ) : (
                 filteredLogs.map((log, i) => (
@@ -387,7 +388,7 @@ export const LogsTab = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 font-bold" style={{ color: "hsl(140, 20%, 30%)" }}>{formatAction(log.action)}</td>
-                    <td className="px-6 py-4 font-medium text-foreground/70">{log.actor_name || "System"}</td>
+                    <td className="px-6 py-4 font-medium text-foreground/70">{log.actor_name || t("m.systemActor")}</td>
                     <td className="px-6 py-4 font-medium text-foreground/90">{log.target_name || log.target_id || "—"}</td>
                     <td className="px-6 py-4 text-foreground/60 max-w-xs truncate italic" title={formatDetails(log.details)}>
                       {formatDetails(log.details)}
@@ -405,7 +406,7 @@ export const LogsTab = () => {
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-foreground/5 bg-foreground/[0.02]">
             <DialogTitle className="flex items-center gap-3 text-2xl font-display" style={{ color: "hsl(140, 30%, 20%)" }}>
               <FileText className="h-6 w-6 text-primary" />
-              Archive Record
+              {t("m.archiveRecord")}
             </DialogTitle>
             <DialogDescription className="font-medium text-foreground/50">
               {selectedLog && new Date(selectedLog.timestamp).toLocaleString('en-MY', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -416,7 +417,7 @@ export const LogsTab = () => {
             <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
-                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Category</p>
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.category")}</p>
                   <p className={`inline-flex px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase shadow-sm ${
                         selectedLog.category === 'INVENTORY' ? 'bg-orange-100 text-orange-700' :
                         selectedLog.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-700' :
@@ -435,16 +436,16 @@ export const LogsTab = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
                   <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.actor")}</p>
-                  <p className="font-bold text-foreground/70">{selectedLog.actor_name || "System Automated"}</p>
+                  <p className="font-bold text-foreground/70">{selectedLog.actor_name || t("m.systemAutomated")}</p>
                 </div>
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
-                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">Target Resource</p>
-                  <p className="font-bold text-foreground/90">{selectedLog.target_name || selectedLog.target_id || "System Global"}</p>
+                  <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.targetResource")}</p>
+                  <p className="font-bold text-foreground/90">{selectedLog.target_name || selectedLog.target_id || t("m.systemGlobal")}</p>
                 </div>
               </div>
 
               <div className="bg-foreground/[0.02] p-5 rounded-2xl border border-foreground/5">
-                <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-2">Detailed Payload</p>
+                <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-2">{t("m.detailedPayload")}</p>
                 <div className="bg-white/60 p-4 rounded-xl border border-foreground/5">
                   {selectedLog.details ? (
                     (() => {
@@ -470,7 +471,7 @@ export const LogsTab = () => {
                       return <p className="font-mono text-sm text-foreground/70 break-words">{selectedLog.details}</p>;
                     })()
                   ) : (
-                    <p className="text-sm italic text-foreground/40">No additional details recorded.</p>
+                    <p className="text-sm italic text-foreground/40">{t("m.noAdditionalDetails")}</p>
                   )}
                 </div>
               </div>

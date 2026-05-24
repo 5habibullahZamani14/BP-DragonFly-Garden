@@ -6,9 +6,10 @@
  * tables, and the accepted payment methods. Every insert is idempotent —
  * I check whether the record already exists before inserting, so running
  * the seeder multiple times (which happens on every server restart) does
- * not create duplicates. It will, however, update prices and descriptions
- * to match whatever is defined here, which is intentional — this file is
- * the single source of truth for the menu data.
+ * not create duplicates. It will update prices and descriptions to match
+ * whatever is defined here. image_url is only set on first insert — manager
+ * uploads in the dashboard permanently replace the default and are never
+ * overwritten by a restart.
  */
 
 const db = require("./db");
@@ -165,8 +166,9 @@ const seedDatabase = async () => {
 
   /*
    * Seed menu items. For each item, I look up its category first, then check
-   * if an item with that name already exists. If it does, I update all its
-   * fields to match the definition above. If it does not, I insert it fresh.
+   * if an item with that name already exists. If it does, I update metadata
+   * (not image_url — custom photos from management must persist). If it does
+   * not, I insert it fresh including the default image.
    * The canonicalId logic handles the rare case where duplicate rows exist
    * from an earlier development phase — it keeps the first row and disables
    * any others.
@@ -202,7 +204,10 @@ const seedDatabase = async () => {
       await run(
         `
           UPDATE menu_items
-          SET description = ?, price = ?, category_id = ?, image_url = ?, is_popular = ?, is_promo = ?, promo_label = ?, is_available = CASE WHEN id = ? THEN ? ELSE 0 END
+          SET description = ?, price = ?, category_id = ?,
+              image_url = CASE WHEN image_url IS NULL OR TRIM(image_url) = '' THEN ? ELSE image_url END,
+              is_popular = ?, is_promo = ?, promo_label = ?,
+              is_available = CASE WHEN id = ? THEN ? ELSE 0 END
           WHERE name = ?
         `,
         [description, price, category.id, imageUrl, isPopular, isPromo, promoLabel, canonicalId, isAvailable, name]

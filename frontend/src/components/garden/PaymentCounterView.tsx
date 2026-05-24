@@ -193,7 +193,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
           
           if (currentTimeStr < start || currentTimeStr > end) {
-            notify("error", `System locked. Current time is outside working hours (${start} - ${end}).`);
+            notify("error", t("payment.systemLockedHours", { start, end }));
             handleLogout();
           }
         }
@@ -287,7 +287,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       );
       setActiveAssistanceRequest((current) => current?.id === updated.id ? null : current);
     } catch (error) {
-      notify("error", "Failed to acknowledge assistance request.");
+      notify("error", t("payment.failedAcknowledge"));
     }
   };
 
@@ -383,7 +383,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
-          <HelpModal title="Payment Counter" sections={getPaymentHelpSections(t)} />
+          <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
           <Card className="w-full max-w-md shadow-xl">
@@ -398,7 +398,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 id="login-id"
                 value={loginInputId}
                 onChange={(e) => setLoginInputId(e.target.value)}
-                placeholder="e.g. 111"
+                placeholder={t("payment.loginPlaceholderId")}
               />
             </div>
             <div>
@@ -407,7 +407,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 id="login-name"
                 value={loginInputName}
                 onChange={(e) => setLoginInputName(e.target.value)}
-                placeholder="e.g. epm1"
+                placeholder={t("payment.loginPlaceholderName")}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               />
             </div>
@@ -431,13 +431,13 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               <Bell className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-gray-900">{activeAssistanceRequest.table_number} requested assistance</p>
+              <p className="font-semibold text-gray-900">{t("payment.assistanceRequested", { table: activeAssistanceRequest.table_number })}</p>
               <p className="mt-1 text-sm text-gray-500">{formatAssistanceTime(activeAssistanceRequest.requested_at)}</p>
             </div>
             <button
               onClick={() => acknowledgeAssistance(activeAssistanceRequest)}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-green-600 text-white shadow-sm transition hover:bg-green-700 active:scale-95"
-              aria-label="Acknowledge assistance request"
+              aria-label={t("payment.ariaAcknowledge")}
             >
               <CheckCircle2 className="h-5 w-5" />
             </button>
@@ -471,7 +471,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             <div className="flex items-center gap-2 shrink-0">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title="Staff assistance requests">
+                  <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title={t("payment.staffAssistance")}>
                     <Bell className="h-5 w-5 text-gray-600" />
                     {unacknowledgedAssistanceCount > 0 && (
                       <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500 shadow-sm" />
@@ -481,23 +481,23 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 <PopoverContent align="end" className="w-80 overflow-hidden rounded-xl border-green-100 p-0 shadow-lg">
                   <div className="border-b bg-gray-50/80 px-4 py-3">
                     <h3 className="flex items-center gap-2 font-semibold text-gray-800">
-                      <Bell className="h-4 w-4 text-green-600" /> Staff Assistance
+                      <Bell className="h-4 w-4 text-green-600" /> {t("payment.staffAssistance")}
                     </h3>
                   </div>
                   <div className="max-h-[320px] overflow-y-auto">
                     {assistanceRequests.length === 0 ? (
-                      <div className="p-6 text-center text-sm text-gray-500">No assistance requests today.</div>
+                      <div className="p-6 text-center text-sm text-gray-500">{t("payment.noAssistanceToday")}</div>
                     ) : (
                       <div className="flex flex-col">
                         {assistanceRequests.map((request) => (
                           <div key={request.id} className="flex items-start gap-3 border-b px-4 py-3 last:border-0">
                             <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${request.acknowledged_at ? "bg-green-500" : "bg-red-500"}`} />
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-800">{request.table_number} requested assistance</p>
+                              <p className="text-sm font-medium text-gray-800">{t("payment.assistanceRequested", { table: request.table_number })}</p>
                               <p className="mt-1 text-xs text-gray-500">{formatAssistanceTime(request.requested_at)}</p>
                               {request.acknowledged_at && (
                                 <p className="mt-1 text-xs text-green-700">
-                                  Acknowledged {formatAssistanceTime(request.acknowledged_at)}
+                                  {t("payment.acknowledgedAt", { time: formatAssistanceTime(request.acknowledged_at) })}
                                 </p>
                               )}
                             </div>
@@ -505,7 +505,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                               <button
                                 onClick={() => acknowledgeAssistance(request)}
                                 className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-green-600 text-white transition hover:bg-green-700 active:scale-95"
-                                aria-label="Acknowledge assistance request"
+                                aria-label={t("payment.ariaAcknowledge")}
                               >
                                 <CheckCircle2 className="h-4 w-4" />
                               </button>
@@ -620,7 +620,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 <Label htmlFor="payment-method">{t("payment.method")}</Label>
                                 <Select value={selectedPaymentMethod} onValueChange={setSelectedPaymentMethod}>
                                   <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select method" />
+                                    <SelectValue placeholder={t("payment.selectMethodPlaceholder")} />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {paymentMethods.map((method) => (
@@ -636,7 +636,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 <div className="flex justify-between items-center">
                                   <Label className="text-md font-semibold flex items-center gap-2">
                                     <SplitSquareHorizontal className="h-4 w-4" />
-                                    Split Bill Calculator
+                                    {t("payment.splitBill")}
                                   </Label>
                                   <Button 
                                     variant={isSplitMode ? "default" : "outline"}
@@ -650,7 +650,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                       }
                                     }}
                                   >
-                                    {isSplitMode ? "Disable Split" : "Enable Split"}
+                                    {isSplitMode ? t("payment.disableSplit") : t("payment.enableSplit")}
                                   </Button>
                                 </div>
                                 
@@ -690,12 +690,12 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                       handleProcessPayment();
                                     }
                                   }}
-                                  placeholder="e.g. 50.00"
+                                  placeholder={t("payment.tenderedPlaceholder")}
                                   className="text-lg"
                                 />
                                 {parseFloat(paymentAmount) > order.remaining && (
                                   <p className="text-sm text-green-600 font-medium mt-1">
-                                    Change due: RM {(parseFloat(paymentAmount) - order.remaining).toFixed(2)}
+                                    {t("payment.changeDue", { amount: `RM ${(parseFloat(paymentAmount) - order.remaining).toFixed(2)}` })}
                                   </p>
                                 )}
                               </div>
@@ -703,7 +703,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div className="flex flex-col sm:flex-row gap-3 pt-4">
                               <Button onClick={handleProcessPayment} disabled={isProcessing} className="flex-1" size="lg">
-                                {isProcessing ? "Processing..." : "Process Payment"}
+                                {isProcessing ? t("payment.processing") : t("payment.processPaymentBtn")}
                               </Button>
                               <Button variant="outline" onClick={() => setAddingItem(true)} size="lg" className="sm:flex-none">
                                 {t("payment.addItem")}
@@ -761,7 +761,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               <DialogHeader>
                   <DialogTitle>{t("payment.addLastMinute")}</DialogTitle>
                   <DialogDescription>
-                    Append an item to the order before final payment.
+                    {t("payment.appendItem")}
                   </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 mt-4">
@@ -769,7 +769,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <Label htmlFor="menu-item">{t("payment.menuItem")}</Label>
                       <Select value={newItemId} onValueChange={setNewItemId}>
                           <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select an item" />
+                              <SelectValue placeholder={t("payment.selectItemPlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
                               {menuItems.map(item => (
@@ -808,73 +808,14 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   );
 };
 
+const helpHtml = (t: TFunction, key: string) => (
+  <div className="space-y-2" dangerouslySetInnerHTML={{ __html: t(key) }} />
+);
+
 const getPaymentHelpSections = (t: TFunction): HelpSection[] => [
-  {
-    id: "login",
-    title: "1. Login & Session",
-    content: (
-      <div className="space-y-2">
-        <p>Before you can process payments, log in using your <strong>{t("payment.empId")}</strong> and <strong>Name</strong>. This ensures every transaction is tracked under your name.</p>
-        <p><strong>Your session is remembered for 7 days.</strong> You will not need to log in again until the week ends or you manually click Logout.</p>
-        <p>The ⚙️ Settings icon (top-left) and the ℹ️ Info icon (top-right) are always accessible, even before you log in.</p>
-        <p><strong>Note:</strong> The system automatically monitors restaurant working hours. If the restaurant closes, it will automatically end your shift and log you out.</p>
-      </div>
-    )
-  },
-  {
-    id: "process-payment",
-    title: "2. How to Process a Payment",
-    content: (
-      <div className="space-y-2">
-        <p>When a customer is ready to pay, find their order in the <strong>Unpaid Orders</strong> list on the left side of your screen.</p>
-        <ol className="list-decimal pl-5 space-y-2">
-          <li>Verify the Table number and the items listed on the ticket.</li>
-          <li>Click the blue <strong>Process Payment</strong> button.</li>
-          <li>A window will appear showing the total cost (including VAT and Service Charge) and the <strong>Remaining</strong> amount due.</li>
-          <li>Select the <strong>{t("payment.method")}</strong> (e.g., Cash, Card).</li>
-          <li>Enter the <strong>Tendered Amount</strong> (the amount the customer handed to you). If they gave more than the total, the system will automatically calculate the <strong>Change due</strong>.</li>
-          <li>Click <strong>Process</strong>. The system will record the payment and move the order to the Paid list if the balance is fully settled.</li>
-        </ol>
-      </div>
-    )
-  },
-  {
-    id: "add-items",
-    title: "3. Adding Last-Minute Items",
-    content: (
-      <div className="space-y-2">
-        <p>Sometimes a customer will want to add an item right as they are paying (like a last-minute drink or dessert).</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Click <strong>Process Payment</strong> on their order.</li>
-          <li>Instead of entering payment, click the <strong>{t("payment.addItem")}</strong> button.</li>
-          <li>Select the item from the dropdown list and enter the quantity.</li>
-          <li>Click <strong>{t("payment.addToOrderBtn")}</strong>. The item will be instantly added to their bill, the total will update, and inventory will be automatically deducted.</li>
-        </ol>
-      </div>
-    )
-  },
-  {
-    id: "paid-orders",
-    title: "4. Viewing Paid Orders",
-    content: (
-      <div className="space-y-2">
-        <p>The right side of your screen contains the <strong>Paid Orders</strong> list. By default, it is hidden to keep your screen clean.</p>
-        <p>Click the <strong>Show</strong> button to reveal all fully paid orders from today. You can use this to verify past transactions or confirm a payment went through successfully.</p>
-      </div>
-    )
-  },
-  {
-    id: "display-settings",
-    title: "5. Display Settings",
-    content: (
-      <div className="space-y-2">
-        <p>Tap the <strong>⚙️ Settings icon</strong> in the top-left corner at any time (even before logging in) to open Display Settings. From there you can:</p>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>Switch between three font styles (Clarity, Classic, Elegance).</li>
-          <li>Adjust the Interface Size and Text Size using sliders or +/− buttons.</li>
-        </ul>
-        <p>All settings are saved automatically and remembered across visits.</p>
-      </div>
-    )
-  },
+  { id: "login", title: t("payment.help.login.title"), content: helpHtml(t, "payment.help.login.body") },
+  { id: "process-payment", title: t("payment.help.process.title"), content: helpHtml(t, "payment.help.process.body") },
+  { id: "add-items", title: t("payment.help.addItems.title"), content: helpHtml(t, "payment.help.addItems.body") },
+  { id: "paid-orders", title: t("payment.help.paid.title"), content: helpHtml(t, "payment.help.paid.body") },
+  { id: "display-settings", title: t("payment.help.display.title"), content: helpHtml(t, "payment.help.display.body") },
 ];
