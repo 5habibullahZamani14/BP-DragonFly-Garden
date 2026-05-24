@@ -501,7 +501,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       </aside>
 
       <div className="min-w-0 flex-1 h-full relative flex flex-col bg-background/50">
-        <main id="main-scroll" className="min-w-0 flex-1 overflow-y-auto relative pb-8 no-scrollbar">
+        <main id="main-scroll" className={`min-w-0 flex-1 overflow-y-auto relative no-scrollbar ${cart.length > 0 && !cartOpen && tab !== "orders" ? "pb-32" : "pb-8"}`}>
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
 
@@ -1176,23 +1176,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
       )}
 
-      {/* Floating cart summary */}
-      {cart.length > 0 && !cartOpen && tab !== "orders" && (
-        <button
-          onClick={() => setCartOpen(true)}
-          className="absolute bottom-6 left-4 right-4 z-40 mx-auto flex max-w-sm animate-bounce-soft items-center justify-between rounded-full px-5 py-3.5 text-primary-foreground shadow-[var(--shadow-deep)]"
-          style={{ background: "var(--gradient-hero)" }}
-        >
-          <span className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-xs font-bold shadow-sm">
-              {cart.reduce((a, b) => a + b.quantity, 0)}
-            </span>
-            <span className="text-sm font-medium tracking-wide text-primary-foreground/90">{t("customer.viewCart")}</span>
-          </span>
-          <span className="font-display text-lg font-semibold">{formatRM(total)}</span>
-        </button>
-      )}
-
       {/* ============ CART SHEET ============ */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
@@ -1294,6 +1277,22 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
       )}
         </main>
+        {/* Floating cart summary */}
+        {cart.length > 0 && !cartOpen && tab !== "orders" && (
+          <button
+            onClick={() => setCartOpen(true)}
+            className="absolute bottom-[max(1rem,var(--safe-bottom))] left-4 right-4 z-40 mx-auto flex max-w-sm animate-bounce-soft items-center justify-between rounded-full border-2 border-white/80 px-5 py-3.5 text-white shadow-[0_2px_0_0_rgba(255,255,255,0.55)_inset,0_-4px_0_0_rgba(67,35,0,0.22)_inset,0_18px_36px_-12px_rgba(0,0,0,0.55),0_0_0_6px_rgba(255,255,255,0.25)] transition hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_0_rgba(255,255,255,0.5)_inset,0_-2px_0_0_rgba(67,35,0,0.25)_inset,0_10px_20px_-10px_rgba(0,0,0,0.55),0_0_0_5px_rgba(255,255,255,0.22)]"
+            style={{ background: "linear-gradient(135deg, hsl(152 72% 10%) 0%, hsl(158 68% 18%) 42%, hsl(39 96% 48%) 100%)" }}
+          >
+            <span className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-black text-primary shadow-[0_4px_10px_rgba(0,0,0,0.25)] ring-1 ring-white/80">
+                {cart.reduce((a, b) => a + b.quantity, 0)}
+              </span>
+              <span className="text-sm font-extrabold tracking-wide drop-shadow-sm">{t("customer.viewCart")}</span>
+            </span>
+            <span className="font-display text-lg font-black drop-shadow-sm">{formatRM(total)}</span>
+          </button>
+        )}
       </div>
     </div>
   );
