@@ -1,37 +1,24 @@
-/*
- * aiFeedbackAnalyzer.js - AI-powered feedback analysis using Google Gemini.
- * Provides intelligent, context-aware business insights with proper security measures.
- */
+const Groq = require("groq-sdk");
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Initialize Gemini AI client
-let genAI = null;
-let model = null;
+let groqClient = null;
 
 const initializeAI = () => {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn("GEMINI_API_KEY not set. AI analysis will fall back to rule-based.");
+  if (!process.env.GROQ_API_KEY) {
+    console.warn("GROQ_API_KEY not set. AI analysis will fall back to rule-based.");
     return false;
   }
   try {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
     return true;
   } catch (error) {
-    console.error("Failed to initialize Gemini AI:", error.message);
+    console.error("Failed to initialize Groq AI:", error.message);
     return false;
   }
 };
 
-/**
- * Anonymize feedback data before sending to AI
- * Removes personally identifiable information while preserving analysis-relevant content
- */
 const anonymizeFeedback = (feedbacks) => {
   return feedbacks.map((fb) => {
     const anonymized = { ...fb };
-    // Remove sensitive fields
     delete anonymized.sender_name;
     delete anonymized.sender_email;
     delete anonymized.table_id;
@@ -48,13 +35,9 @@ const anonymizeFeedback = (feedbacks) => {
   });
 };
 
-/**
- * Generate AI-powered comprehensive analysis
- * No length limit - analysis can be as detailed as needed
- */
 const generateAIAnalysis = async (currentFeedbacks, previousFeedbacks, periodFrom, periodTo) => {
   const aiEnabled = initializeAI();
-  if (!aiEnabled || !model) {
+  if (!aiEnabled || !groqClient) {
     return { success: false, reason: "AI not available" };
   }
 
@@ -84,10 +67,12 @@ Format your response as a structured analysis with clear sections. Be specific a
 
 The analysis should be as detailed as needed to provide valuable insights. There is no length limit.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const result = await groqClient.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages: [{ role: "user", content: prompt }],
+    });
 
+    const text = result.choices[0]?.message?.content || "";
     return { success: true, analysis: text };
   } catch (error) {
     console.error("AI analysis failed:", error.message);
@@ -95,12 +80,9 @@ The analysis should be as detailed as needed to provide valuable insights. There
   }
 };
 
-/**
- * Generate AI-powered actionable findings
- */
 const generateAIFindings = async (currentFeedbacks, previousFeedbacks) => {
   const aiEnabled = initializeAI();
-  if (!aiEnabled || !model) {
+  if (!aiEnabled || !groqClient) {
     return { success: false, reason: "AI not available" };
   }
 
@@ -123,13 +105,15 @@ Focus on:
 - Operational efficiency
 - Specific issues mentioned in feedback
 
-Format as JSON array with structure: [{title, description, priority}]. Do not include markdown formatting.`;
+Format as JSON array with structure: [{title, description, priority}]. Do not include markdown formatting. Return only the JSON array.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const result = await groqClient.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages: [{ role: "user", content: prompt }],
+    });
 
-    // Parse JSON response
+    const text = result.choices[0]?.message?.content || "";
+
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       return { success: false, reason: "Invalid AI response format" };
