@@ -63,7 +63,7 @@ Please provide a detailed analysis covering:
 5. Specific issues that need immediate attention
 6. Positive trends to continue and build upon
 
-Format your response using clean markdown for visual structure. Use ### for section headings, **bold** for key metrics/numbers, and bullet lists for items. Keep paragraphs clear and scannable. Be specific and practical in your recommendations. Focus on business impact and customer satisfaction.
+Format your response using clean markdown for visual structure. Use ### for section headings, **bold** for key metrics/numbers, and bullet lists for items. Keep paragraphs clear and scannable. Be specific and practical in your recommendations. Focus on business impact and customer satisfaction. Do not include images or diagrams.
 
 The analysis should be as detailed as needed to provide valuable insights. There is no length limit.`;
 
@@ -144,7 +144,8 @@ Guidelines:
 - Use markdown formatting for readable responses: **bold** for key numbers, bullet lists, short paragraphs.
 - Never reveal manager passwords, API keys, QR codes, or view tokens.
 - Be concise but thorough. Think step by step.
-- If asked about trends or analysis, note that your data is a snapshot of the current state.`;
+- If asked about trends or analysis, note that your data is a snapshot of the current state.
+- Do NOT include images, diagrams, or visual elements in your response. Text and tables only.`;
 
     const result = await groqClient.chat.completions.create({
       model: "llama-3.3-70b-versatile",

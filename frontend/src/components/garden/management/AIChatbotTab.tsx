@@ -193,7 +193,7 @@ export const AIChatbotTab = () => {
                 }`}>
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-strong:text-gray-900">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
                     msg.content

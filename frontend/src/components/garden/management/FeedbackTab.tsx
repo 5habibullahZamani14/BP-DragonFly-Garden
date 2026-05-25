@@ -73,7 +73,7 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
             <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">AI Generated</span>
           </div>
           <div className="prose prose-sm prose-blue max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-700 prose-strong:text-gray-900 prose-ul:list-disc prose-li:text-gray-700">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>
               {summary.ai_analysis}
             </ReactMarkdown>
           </div>
