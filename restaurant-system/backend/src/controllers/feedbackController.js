@@ -506,7 +506,7 @@ exports.aiChat = async (req, res) => {
 
   try {
     const contextData = {
-      menu: await all("SELECT id, name, price, category_name, is_available, is_popular, is_sold_out FROM menu_items ORDER BY category_name, name"),
+      menu: await all("SELECT mi.id, mi.name, mi.price, c.name as category_name, mi.is_available, mi.is_popular FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"),
       orders_today: await all("SELECT id, status, payment_status, total_price FROM orders WHERE date(created_at) = date('now','localtime')"),
       orders_recent: await all("SELECT id, status, payment_status, total_price, created_at FROM orders WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50"),
       feedback_summary: await all("SELECT id, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, status, created_at FROM customer_feedback ORDER BY created_at DESC LIMIT 30"),
