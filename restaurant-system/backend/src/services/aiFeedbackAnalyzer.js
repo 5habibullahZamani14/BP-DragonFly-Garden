@@ -45,7 +45,7 @@ const generateAIAnalysis = async (currentFeedbacks, previousFeedbacks, periodFro
     const anonymizedCurrent = anonymizeFeedback(currentFeedbacks);
     const anonymizedPrevious = anonymizeFeedback(previousFeedbacks);
 
-    const prompt = `You are an expert restaurant business analyst. Analyze the following customer feedback data and provide a comprehensive, actionable business report.
+    const prompt = `You are a restaurant business analyst. Analyze the feedback data below and write a concise, scannable report.
 
 PERIOD: ${periodFrom || "All time"} to ${periodTo || "Present"}
 
@@ -55,17 +55,23 @@ ${JSON.stringify(anonymizedCurrent, null, 2)}
 PREVIOUS FEEDBACK (${anonymizedPrevious.length} entries):
 ${JSON.stringify(anonymizedPrevious, null, 2)}
 
-Please provide a detailed analysis covering:
-1. Overall customer sentiment and satisfaction trends
-2. Specific areas of strength and weakness (staff, food, atmosphere, cleanliness, app experience, value)
-3. Recurring themes and patterns in customer comments
-4. Actionable business recommendations to improve customer satisfaction and profitability
-5. Specific issues that need immediate attention
-6. Positive trends to continue and build upon
+Cover these points (keep each very short):
+1. Overall sentiment — one sentence
+2. Top strength — one bullet
+3. Top weakness — one bullet
+4. 2-3 key themes from comments — bullets
+5. 1-2 immediate actions — bullets
+6. 1-2 positive trends — bullets
 
-Format your response using clean markdown for visual structure. Use ### for section headings, **bold** for key metrics/numbers, and bullet lists for items. Keep paragraphs clear and scannable. Be specific and practical in your recommendations. Focus on business impact and customer satisfaction. Do not include images or diagrams.
-
-The analysis should be as detailed as needed to provide valuable insights. There is no length limit.`;
+FORMATTING RULES:
+- Start with a one-line summary in **bold**
+- Use short bullet lists (not paragraphs)
+- Each bullet = maximum 1-2 lines
+- Use **bold** only for numbers and scores
+- Use ### for section headings
+- No images, no tables, no long paragraphs
+- Total length: 15-25 lines maximum
+- Think: executive dashboard, not a report`;
 
     const result = await groqClient.chat.completions.create({
       model: "llama-3.3-70b-versatile",
