@@ -68,7 +68,7 @@ Format your response as a structured analysis with clear sections. Be specific a
 The analysis should be as detailed as needed to provide valuable insights. There is no length limit.`;
 
     const result = await groqClient.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
     });
 
@@ -108,7 +108,7 @@ Focus on:
 Format as JSON array with structure: [{title, description, priority}]. Do not include markdown formatting. Return only the JSON array.`;
 
     const result = await groqClient.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
     });
 
