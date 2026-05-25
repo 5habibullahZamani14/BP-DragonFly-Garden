@@ -7,6 +7,7 @@ const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const { validateFeedbackText } = require("../utils/profanityFilter");
 const { analyzeFeedback, RATING_DIMS } = require("../services/feedbackAnalyzer");
+const { generateAIAnalysis, generateAIFindings } = require("../services/aiFeedbackAnalyzer");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -31,6 +32,11 @@ const all = (sql, params = []) =>
       else resolve(rows);
     });
   });
+
+// Broadcast function for WebSocket events
+let broadcastFn = null;
+const setBroadcast = (fn) => { broadcastFn = fn; };
+const getBroadcast = () => broadcastFn;
 
 const clampRating = (v) => {
   if (v == null || v === "") return null;
@@ -166,6 +172,12 @@ exports.submitFeedback = async (req, res) => {
   const row = await mapFeedbackRow(
     await get("SELECT * FROM customer_feedback WHERE id = ?", [result.id]),
   );
+
+  // Emit WebSocket event for new feedback
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "NEW_FEEDBACK", payload: { id: result.id } });
+  }
 
   res.status(201).json({
     id: row.id,
@@ -314,6 +326,7 @@ const fetchFeedbackInRange = async (from, to) => {
 exports.runAnalysis = async (req, res) => {
   const periodFrom = req.body?.from || req.query?.from || null;
   const periodTo = req.body?.to || req.query?.to || null;
+  const useAI = req.body?.use_ai !== false; // Default to true unless explicitly disabled
 
   const current = await fetchFeedbackInRange(periodFrom, periodTo);
 
@@ -338,11 +351,52 @@ exports.runAnalysis = async (req, res) => {
     );
   }
 
-  const { summary, findings } = analyzeFeedback(current, previous, periodFrom, periodTo);
+  let summary, findings;
+  let analysisMethod = "rule_based";
+
+  // Try AI analysis first if enabled
+  if (useAI) {
+    const aiAnalysisResult = await generateAIAnalysis(current, previous, periodFrom, periodTo);
+    const aiFindingsResult = await generateAIFindings(current, previous);
+
+    if (aiAnalysisResult.success && aiFindingsResult.success) {
+      // Use AI-generated analysis
+      summary = {
+        period_from: periodFrom || null,
+        period_to: periodTo || null,
+        feedback_count: current.length,
+        previous_period_count: previous.length,
+        ai_analysis: aiAnalysisResult.analysis,
+        overall_sentiment: "ai_generated",
+      };
+
+      findings = aiFindingsResult.findings.map((f, i) => ({
+        id: i + 1, // Temporary ID, will be replaced by database ID
+        category: "ai_generated",
+        title: f.title,
+        description: f.description,
+        priority: f.priority,
+        evidence: { method: "ai" },
+      }));
+
+      analysisMethod = "ai";
+    } else {
+      // Fall back to rule-based analysis
+      console.log("AI analysis failed, falling back to rule-based:", aiAnalysisResult.reason);
+      const ruleBased = analyzeFeedback(current, previous, periodFrom, periodTo);
+      summary = ruleBased.summary;
+      findings = ruleBased.findings;
+    }
+  } else {
+    // Use rule-based analysis explicitly
+    const ruleBased = analyzeFeedback(current, previous, periodFrom, periodTo);
+    summary = ruleBased.summary;
+    findings = ruleBased.findings;
+  }
 
   const runResult = await run(
-    `INSERT INTO feedback_analysis_runs (period_from, period_to, feedback_count, report_json) VALUES (?, ?, ?, ?)`,
-    [periodFrom, periodTo, current.length, JSON.stringify(summary)],
+    `INSERT INTO feedback_analysis_runs (period_from, period_to, feedback_count, report_json, analysis_method) VALUES (?, ?, ?, ?, ?)`,
+    [periodFrom, periodTo, current.length, JSON.stringify(summary), analysisMethod],
   );
 
   const insertedFindings = [];
@@ -372,7 +426,14 @@ exports.runAnalysis = async (req, res) => {
     summary,
     findings: insertedFindings,
     rating_dimensions: RATING_DIMS,
+    analysis_method: analysisMethod,
   });
+
+  // Emit WebSocket event for feedback analysis update
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "FEEDBACK_ANALYSIS_UPDATE", payload: { run_id: runResult.id } });
+  }
 };
 
 exports.getLatestAnalysis = async (req, res) => {
@@ -430,3 +491,11 @@ exports.updateFindingStatus = async (req, res) => {
   if (!row) throw createHttpError(404, "Finding not found.");
   res.json(row);
 };
+
+exports.deleteFinding = async (req, res) => {
+  const id = Number(req.params.id);
+  await run(`DELETE FROM feedback_analysis_findings WHERE id = ?`, [id]);
+  res.json({ success: true });
+};
+
+exports.setBroadcast = setBroadcast;

@@ -527,6 +527,7 @@ export type FeedbackAnalysisResponse = {
     period_to: string | null;
     feedback_count: number;
     created_at: string;
+    analysis_method?: string;
   } | null;
   summary: {
     feedback_count?: number;
@@ -534,8 +535,10 @@ export type FeedbackAnalysisResponse = {
     dimension_averages?: Record<string, { label: string; average: number | null; count: number }>;
     top_keywords?: { word: string; count: number }[];
     negative_count?: number;
+    ai_analysis?: string;
   } | null;
   findings: FeedbackAnalysisFinding[];
+  analysis_method?: string;
 };
 
 export const submitFeedback = async (qr: string, formData: FormData): Promise<FeedbackSubmitResult> => {
@@ -597,13 +600,13 @@ export const archiveManagerFeedback = async (id: number): Promise<CustomerFeedba
 export const deleteManagerFeedback = async (id: number): Promise<{ success: boolean }> =>
   safeFetch<{ success: boolean }>(`/management/feedback/${id}`, { method: "DELETE" });
 
-export const runFeedbackAnalysis = async (from?: string, to?: string) =>
+export const runFeedbackAnalysis = async (from?: string, to?: string, useAI?: boolean) =>
   safeFetch<FeedbackAnalysisResponse & { run_id: number; findings: FeedbackAnalysisFinding[] }>(
     "/management/feedback/analyze",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ from: from || null, to: to || null }),
+      body: JSON.stringify({ from: from || null, to: to || null, use_ai: useAI }),
     },
   );
 
@@ -619,6 +622,9 @@ export const updateFeedbackFindingStatus = async (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
+
+export const deleteFeedbackFinding = async (id: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/feedback/analysis/findings/${id}`, { method: "DELETE" });
 
 export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
   safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);

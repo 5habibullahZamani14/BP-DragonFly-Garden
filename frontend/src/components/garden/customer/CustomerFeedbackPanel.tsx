@@ -24,6 +24,7 @@ type Props = {
   tableId: number | null;
   orders: Order[];
   notify: Notify;
+  onSuccess?: () => void;
 };
 
 type RatingKey = keyof CustomerFeedback["ratings"];
@@ -95,7 +96,7 @@ const RatingPicker = ({
   </div>
 );
 
-export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify }: Props) => {
+export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSuccess }: Props) => {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -216,6 +217,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify }: Props
         value: null,
       });
       await loadMine();
+      onSuccess?.();
     } catch (e: unknown) {
       const err = e as Error & { error?: string; words?: string[] };
       if (err.error === "profanity" && err.words?.length) {

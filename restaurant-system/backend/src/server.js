@@ -107,6 +107,14 @@ app.use("/tables", tableRoutes);
 app.use("/payments", paymentRoutes(broadcast));
 app.use("/management", managementRoutes);
 
+// Set up broadcast function for management routes
+managementRoutes.setupFeedbackBroadcast(broadcast);
+managementRoutes.setupMenuBroadcast(broadcast);
+managementRoutes.setupManagementBroadcast(broadcast);
+
+// Set up broadcast function for table routes
+tableRoutes.setBroadcast(broadcast);
+
 /*
  * Static file serving for the compiled frontend. If the dist folder exists,
  * Express serves its contents. This is only active in production — during

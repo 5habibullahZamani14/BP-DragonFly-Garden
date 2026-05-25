@@ -645,9 +645,21 @@ export default {
     "manager.feedback.archive": "Archive",
     "manager.feedback.archived": "Feedback archived.",
     "manager.feedback.archiveFailed": "Could not archive.",
+    "manager.feedback.cancel": "Cancel",
     "manager.feedback.delete": "Delete",
     "manager.feedback.deleteConfirm": "Permanently delete this feedback?",
     "manager.feedback.deleted": "Feedback deleted.",
-    "manager.feedback.deleteFailed": "Could not delete."
+    "manager.feedback.deleteFailed": "Could not delete.",
+    "manager.feedback.findingDeleted": "Finding deleted.",
+    "manager.feedback.findingDeleteFailed": "Could not delete finding.",
+    "manager.feedback.comprehensiveAnalysis": "Comprehensive Analysis",
+    "manager.feedback.deleteFindingConfirm": "Are you sure you want to delete this suggestion? This action cannot be undone.",
+    "manager.feedback.aiPowered": "AI-Powered Analysis",
+    "manager.feedback.aiGenerated": "AI Generated",
+    "manager.feedback.ruleBased": "Rule-Based Analysis",
+    "manager.feedback.analysisMethod": "Analysis Method",
+    "manager.feedback.aiUnavailable": "AI analysis unavailable. Using rule-based analysis instead.",
+    "manager.feedback.useAI": "Use AI Analysis",
+    "manager.feedback.useRuleBased": "Use Rule-Based Analysis"
   }
 };

@@ -33,6 +33,7 @@ import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 export const EmployeesTab = () => {
   const { t } = useTranslation();
@@ -55,6 +56,11 @@ export const EmployeesTab = () => {
   useEffect(() => {
     loadEmployees();
   }, []);
+
+  // WebSocket listener for real-time employee updates
+  useWebSocket(["EMPLOYEE_UPDATE"], (event) => {
+    loadEmployees();
+  });
 
   const loadEmployees = async () => {
     try {

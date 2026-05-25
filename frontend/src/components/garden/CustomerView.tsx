@@ -714,16 +714,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           }`}
           aria-hidden={!headerCollapsed}
         >
-          <div
-            className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full border border-border/50 bg-white/80 shadow-sm"
-            aria-hidden
-          >
-            <img
-              src={butterflyHero}
-              alt=""
-              className="h-[1.65rem] w-[1.65rem] animate-wing-flap object-contain object-[46%_52%]"
-            />
-          </div>
+          <img
+            src={bpDragonflyGardenLogo}
+            alt=""
+            className="h-8 w-8 shrink-0 object-contain"
+          />
           <div className="min-w-0 leading-tight">
             <p className="text-[0.55rem] font-bold uppercase tracking-[0.24em] text-foreground/55">
               {t("customer.welcome")}
@@ -887,9 +882,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <span className="eyebrow">{t("customer.thisWeek")}</span>
               <h2 className="mt-1">{t("customer.chefsFav")}</h2>
             </div>
-            <button onClick={() => addToCart(spotlight)}>
-              {t("customer.add")} <Plus className="h-3 w-3" />
-            </button>
           </div>
           <section className="relative mx-5 mb-7 rounded-[28px] text-primary-foreground animate-fade-up"
             style={{ background: "var(--gradient-spotlight)", boxShadow: "var(--shadow-deep)" }}>
@@ -899,8 +891,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 style={{ animation: "shimmer-sweep 3.4s ease-in-out infinite" }} />
             </span>
 
-            <div className="relative grid grid-cols-[1fr_auto] gap-4 p-5">
-              <div className="min-w-0">
+            <div className="flex items-start gap-4 p-5">
+              {spotlight.image_url && (
+                <div className="relative h-28 w-28 shrink-0 rounded-2xl ring-2 ring-accent/60 shadow-2xl">
+                  <img src={spotlight.image_url} alt={spotlight.name} className="h-full w-full object-cover rounded-2xl" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
                 <span className="inline-flex items-center gap-1 rounded-full bg-accent/95 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-accent-foreground">
                   <Flame className="h-3 w-3" /> {t("customer.popular")}
                 </span>
@@ -908,16 +905,20 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <p className="mt-1.5 line-clamp-2 text-[0.78rem] text-primary-foreground/75">
                   {spotlight.description}
                 </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="font-display text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
-                  <span className="text-[0.65rem] text-primary-foreground/50 line-through">RM {(spotlight.price * 1.2).toFixed(2)}</span>
+                <div className="mt-3 flex items-end justify-between">
+                  <div>
+                    <span className="font-display text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
+                    <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
+                  </div>
+                  <button
+                    onClick={() => addToCart(spotlight)}
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white text-berry shadow-lg active:scale-90"
+                    aria-label={t("customer.add")}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
-              {spotlight.image_url && (
-                <div className="relative h-28 w-28 shrink-0 self-center overflow-hidden rounded-2xl ring-2 ring-accent/60 shadow-2xl">
-                  <img src={spotlight.image_url} alt={spotlight.name} className="h-full w-full object-cover" />
-                </div>
-              )}
             </div>
           </section>
         </>
@@ -1319,6 +1320,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           tableId={tableInfo?.id ?? null}
           orders={orders}
           notify={notify}
+          onSuccess={() => setTab("home")}
         />
       )}
 

@@ -84,6 +84,11 @@ const get = (sql, params = []) =>
     });
   });
 
+// Broadcast function for WebSocket events
+let broadcastFn = null;
+const setBroadcast = (fn) => { broadcastFn = fn; };
+const getBroadcast = () => broadcastFn;
+
 /*
  * generateEmployeeId creates a unique 4-character alphanumeric ID for a new
  * employee. The loop retries until a unique value is found, which in practice
@@ -212,6 +217,13 @@ const updateSetting = async (req, res, next) => {
       [key, stringValue]
     );
     await createLog("SYSTEM", "UPDATE_SETTING", req.user?.id, req.user?.name, key, key, { value });
+    
+    // Emit WebSocket event for settings update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "SETTINGS_UPDATE", payload: { key } });
+    }
+    
     res.json({ success: true, key, value });
   } catch (error) { next(error); }
 };
@@ -244,6 +256,13 @@ const createEmployee = async (req, res, next) => {
 
     const employee = await get("SELECT * FROM employees WHERE id = ?", [result.lastID]);
     await createLog("EMPLOYEE", "CREATE", req.user?.id, req.user?.name, employee.employee_id, employee.name, employee);
+    
+    // Emit WebSocket event for employee update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "EMPLOYEE_UPDATE", payload: { id: result.lastID } });
+    }
+    
     res.status(201).json(employee);
   } catch (error) { next(error); }
 };
@@ -273,6 +292,13 @@ const updateEmployee = async (req, res, next) => {
     );
     const employee = await get("SELECT * FROM employees WHERE id = ?", [id]);
     await createLog("EMPLOYEE", "UPDATE", req.user?.id, req.user?.name, employee.employee_id, employee.name, employee);
+    
+    // Emit WebSocket event for employee update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "EMPLOYEE_UPDATE", payload: { id } });
+    }
+    
     res.json(employee);
   } catch (error) { next(error); }
 };
@@ -624,4 +650,5 @@ module.exports = {
   getBackups,
   createBackup,
   restoreBackup,
+  setBroadcast,
 };

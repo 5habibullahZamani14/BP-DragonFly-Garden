@@ -22,6 +22,7 @@ import { Grid3X3, Plus, QrCode, Edit2, Trash2, Printer, Download } from "lucide-
 import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 export const TablesTab = () => {
   const { t } = useTranslation();
@@ -58,6 +59,11 @@ export const TablesTab = () => {
   useEffect(() => {
     loadTables();
   }, []);
+
+  // WebSocket listener for real-time table updates
+  useWebSocket(["TABLE_UPDATE"], (event) => {
+    loadTables();
+  });
 
   const loadTables = async () => {
     try {
@@ -207,7 +213,7 @@ export const TablesTab = () => {
               {/* The QR Code Container */}
               <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md mt-4">
                 <QRCode 
-                  value={`${window.location.protocol}//${window.location.hostname}:5000/?qr=${viewQRCodeTable.qr_code}`} 
+                  value={`${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
                   size={190} 
                   ecLevel="H"
                   fgColor="#444444"

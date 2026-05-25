@@ -79,23 +79,78 @@ const buildFindings = (current, previous, keywords, periodLabel) => {
   const findings = [];
   const curAvg = dimAverages(current);
 
+  // Specific issue patterns in comments
+  const issuePatterns = [
+    { pattern: /\b(loud|noise|music|volume)\b/i, category: "atmosphere", action: "Consider adjusting music volume or ambiance to create a more comfortable dining experience." },
+    { pattern: /\b(slow|wait|time|delay)\b/i, category: "service", action: "Review service speed and kitchen processes. Faster service could improve customer satisfaction and table turnover." },
+    { pattern: /\b(cold|warm|temperature)\b/i, category: "food", action: "Check food temperature control. Serving food at proper temperature is critical for customer satisfaction." },
+    { pattern: /\b(dirty|clean|mess|hygiene)\b/i, category: "cleanliness", action: "Increase cleaning frequency and staff attention to cleanliness. This directly impacts customer comfort and repeat business." },
+    { pattern: /\b(rude|staff|attitude|friend|help)\b/i, category: "staff", action: "Provide staff training on customer service and hospitality. Better staff interactions increase customer loyalty." },
+    { pattern: /\b(price|expensive|cost|value|worth)\b/i, category: "value", action: "Review pricing strategy and portion sizes. Customers who feel they received good value are more likely to return." },
+    { pattern: /\b(app|slow|crash|bug|difficult)\b/i, category: "app", action: "Improve app performance and user experience. A smoother ordering process increases order frequency and customer satisfaction." },
+  ];
+
+  // Analyze comments for specific issues
+  const commentIssues = {};
+  current.forEach(row => {
+    const comment = row.comment || "";
+    issuePatterns.forEach(({ pattern, category }) => {
+      if (pattern.test(comment)) {
+        commentIssues[category] = (commentIssues[category] || 0) + 1;
+      }
+    });
+  });
+
+  // Generate specific findings based on comment patterns
+  Object.entries(commentIssues).forEach(([category, count]) => {
+    if (count >= 2) {
+      const pattern = issuePatterns.find(p => p.category === category);
+      if (pattern) {
+        findings.push({
+          category: "specific_issue",
+          title: `${category.charAt(0).toUpperCase() + category.slice(1)} concerns mentioned in ${count} feedbacks`,
+          description: pattern.action,
+          priority: "high",
+          evidence: { category, count, pattern: pattern.pattern.toString() },
+        });
+      }
+    }
+  });
+
+  // Rating-based findings with more specific actions
   for (const { key, label } of RATING_DIMS) {
     const cur = curAvg[key];
     if (cur.count < 2 || cur.average == null) continue;
 
     if (cur.average <= -1.5) {
+      const specificActions = {
+        "rating_staff": "Provide immediate staff training on customer service. Consider implementing a service quality checklist and regular performance reviews.",
+        "rating_app": "Fix critical app issues immediately. Technical problems directly impact order volume and customer retention.",
+        "rating_cleanliness": "Implement stricter cleaning protocols and increase staff accountability. Cleanliness is a top factor in customer return decisions.",
+        "rating_food": "Review kitchen processes and food quality control. Consider menu adjustments or supplier changes if needed.",
+        "rating_atmosphere": "Evaluate the dining environment - lighting, music, seating comfort. Small improvements here significantly impact customer experience.",
+        "rating_value": "Review your pricing strategy against competitors. Consider adjusting portions or prices to better match customer expectations.",
+      };
       findings.push({
         category: "ratings",
-        title: `${label} needs urgent attention`,
-        description: `Average score for ${label.toLowerCase()} is ${cur.average.toFixed(1)} (scale −5 to +5) across ${cur.count} ratings in ${periodLabel}. Guests are consistently unhappy in this area.`,
+        title: `${label} requires immediate action`,
+        description: specificActions[key] || `Average score for ${label.toLowerCase()} is ${cur.average.toFixed(1)} across ${cur.count} ratings. Addressing this will improve customer satisfaction and repeat business.`,
         priority: "high",
         evidence: { dimension: key, average: cur.average, count: cur.count },
       });
     } else if (cur.average <= -0.5) {
+      const improvementActions = {
+        "rating_staff": "Schedule additional staff training sessions focused on areas receiving negative feedback.",
+        "rating_app": "Identify and fix app usability issues. Small improvements can significantly increase order frequency.",
+        "rating_cleanliness": "Increase cleaning frequency and add spot checks during peak hours.",
+        "rating_food": "Monitor food quality closely and gather specific customer feedback on dishes receiving low ratings.",
+        "rating_atmosphere": "Make small adjustments to ambiance based on customer comments to enhance the dining experience.",
+        "rating_value": "Consider promotional offers or value-added items to improve perceived value.",
+      };
       findings.push({
         category: "ratings",
-        title: `${label} could be improved`,
-        description: `Average ${label.toLowerCase()} score is ${cur.average.toFixed(1)} in ${periodLabel}. Consider staff training, process checks, or menu adjustments related to this theme.`,
+        title: `${label} needs improvement`,
+        description: improvementActions[key] || `Average ${label.toLowerCase()} score is ${cur.average.toFixed(1)}. Improving this area will increase customer satisfaction and loyalty.`,
         priority: "medium",
         evidence: { dimension: key, average: cur.average, count: cur.count },
       });
@@ -108,16 +163,16 @@ const buildFindings = (current, previous, keywords, periodLabel) => {
         if (delta >= 1) {
           findings.push({
             category: "improvement",
-            title: `${label} improved after your changes`,
-            description: `${label} rose from ${prevAvg.average.toFixed(1)} to ${cur.average.toFixed(1)} (+${delta.toFixed(1)}). This suggests recent changes may be working for guests.`,
+            title: `${label} improved — continue current approach`,
+            description: `${label} rose from ${prevAvg.average.toFixed(1)} to ${cur.average.toFixed(1)} (+${delta.toFixed(1)}). Maintain the changes that led to this improvement to sustain customer satisfaction gains.`,
             priority: "low",
             evidence: { dimension: key, before: prevAvg.average, after: cur.average, delta },
           });
         } else if (delta <= -1) {
           findings.push({
             category: "regression",
-            title: `${label} declined — review recent changes`,
-            description: `${label} dropped from ${prevAvg.average.toFixed(1)} to ${cur.average.toFixed(1)} (${delta.toFixed(1)}). Compare this period with operational changes made around the same time.`,
+            title: `${label} declined — investigate recent changes`,
+            description: `${label} dropped from ${prevAvg.average.toFixed(1)} to ${cur.average.toFixed(1)} (${delta.toFixed(1)}). Review any recent operational changes, menu updates, or staff changes that may have caused this decline.`,
             priority: "high",
             evidence: { dimension: key, before: prevAvg.average, after: cur.average, delta },
           });
@@ -126,25 +181,45 @@ const buildFindings = (current, previous, keywords, periodLabel) => {
     }
   }
 
+  // Keyword-based specific suggestions
+  if (keywords.length >= 2) {
+    const keywordActions = {
+      "slow": "Optimize kitchen workflow and staff scheduling during peak hours to reduce wait times.",
+      "wait": "Implement a table management system to better estimate and communicate wait times to customers.",
+      "cold": "Review food holding procedures and implement temperature checks before serving.",
+      "loud": "Adjust music volume or soundproofing to create a more comfortable dining environment.",
+      "music": "Consider changing music selection or volume based on customer feedback and time of day.",
+      "dirty": "Increase cleaning frequency and implement regular cleanliness audits.",
+      "price": "Review pricing strategy and consider value-added promotions to improve perceived value.",
+      "expensive": "Consider portion adjustments or value bundles to better align with customer expectations.",
+      "staff": "Provide additional training on customer service and hospitality skills.",
+      "rude": "Address staff behavior immediately through coaching and clear service standards.",
+      "service": "Review service protocols and ensure staff are following best practices.",
+    };
+
+    keywords.slice(0, 5).forEach(({ word, count }) => {
+      const lowerWord = word.toLowerCase();
+      const action = keywordActions[lowerWord];
+      if (action && count >= 2) {
+        findings.push({
+          category: "keyword_action",
+          title: `Action needed: "${word}" mentioned ${count} times`,
+          description: action,
+          priority: "medium",
+          evidence: { keyword: word, count },
+        });
+      }
+    });
+  }
+
   const neg = negativeComments(current);
   if (neg.length >= 2) {
     findings.push({
       category: "sentiment",
-      title: "Multiple dissatisfied guest comments",
-      description: `${neg.length} of ${current.length} feedback entries in ${periodLabel} mention serious issues or very low ratings. Read individual tickets for specifics.`,
+      title: `${neg.length} customers expressed serious dissatisfaction`,
+      description: "Review these specific feedback entries to understand the exact issues. Addressing these concerns directly can prevent negative word-of-mouth and improve retention.",
       priority: neg.length >= 4 ? "high" : "medium",
       evidence: { negative_count: neg.length, total: current.length, sample_ids: neg.slice(0, 5).map((r) => r.id) },
-    });
-  }
-
-  if (keywords.length >= 3) {
-    const top = keywords.slice(0, 5).map((k) => `"${k.word}" (${k.count})`).join(", ");
-    findings.push({
-      category: "themes",
-      title: "Recurring topics in guest comments",
-      description: `Guests often mention: ${top}. These themes appear across free-text feedback and quick suggestions.`,
-      priority: "medium",
-      evidence: { keywords: keywords.slice(0, 8) },
     });
   }
 
@@ -153,8 +228,8 @@ const buildFindings = (current, previous, keywords, periodLabel) => {
   if (unanswered >= 3) {
     findings.push({
       category: "operations",
-      title: "Unanswered feedback waiting for manager",
-      description: `${unanswered} feedback item(s) in ${periodLabel} have no manager response yet. Responding shows guests you are listening.`,
+      title: `Respond to ${unanswered} customer feedbacks`,
+      description: "Responding to feedback shows customers you value their input and increases the likelihood they'll return. Set aside time daily to address recent feedback.",
       priority: "medium",
       evidence: { unanswered_count: unanswered },
     });
@@ -163,8 +238,8 @@ const buildFindings = (current, previous, keywords, periodLabel) => {
   if (!current.length) {
     findings.push({
       category: "data",
-      title: "No feedback in selected period",
-      description: "There are no guest feedback entries in this date range. Try widening the timeframe or encouraging guests to use the Feedback tab after their meal.",
+      title: "No feedback data available",
+      description: "Encourage customers to provide feedback through the app. More feedback helps identify improvement opportunities and measure customer satisfaction trends.",
       priority: "low",
       evidence: {},
     });

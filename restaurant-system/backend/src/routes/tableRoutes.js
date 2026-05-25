@@ -12,10 +12,13 @@
  */
 
 const express = require("express");
-const { getTables, getTableByQrCode, createTable, updateTable, deleteTable } = require("../controllers/tableController");
+const { getTables, getTableByQrCode, createTable, updateTable, deleteTable, setBroadcast } = require("../controllers/tableController");
 const { asyncHandler, validateQrCodeParam } = require("../middleware/validation");
 
 const router = express.Router();
+
+// Set up broadcast function
+router.setBroadcast = setBroadcast;
 
 /*
  * GET /tables

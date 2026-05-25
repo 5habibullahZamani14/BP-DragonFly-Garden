@@ -386,6 +386,7 @@ const initializeDatabase = async () => {
       period_to TEXT,
       feedback_count INTEGER NOT NULL DEFAULT 0,
       report_json TEXT NOT NULL,
+      analysis_method TEXT NOT NULL DEFAULT 'rule_based',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -408,6 +409,9 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_customer_feedback_created", "customer_feedback", "created_at DESC");
   await ensureIndex("idx_customer_feedback_status", "customer_feedback", "status, created_at DESC");
   await ensureIndex("idx_feedback_findings_run", "feedback_analysis_findings", "run_id, status");
+  
+  // Add analysis_method column for AI vs rule-based tracking
+  await ensureColumn("feedback_analysis_runs", "analysis_method", "TEXT NOT NULL DEFAULT 'rule_based'");
 
   /*
    * restaurant_settings stores configuration values as key-value pairs.

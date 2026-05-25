@@ -38,6 +38,11 @@ const run = (sql, params = []) =>
 const fs = require("fs");
 const path = require("path");
 
+// Broadcast function for WebSocket events
+let broadcastFn = null;
+const setBroadcast = (fn) => { broadcastFn = fn; };
+const getBroadcast = () => broadcastFn;
+
 /** Remove a menu image file only when no other menu item still references it. */
 const deleteMenuImageIfUnused = async (imageUrl, excludeItemId = null) => {
   if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
@@ -276,6 +281,13 @@ const createMenuItem = async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [name, description || '', price, category_id, image_url || '', is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '']
     );
+    
+    // Emit WebSocket event for menu update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id: result.lastID } });
+    }
+    
     res.json({ id: result.lastID, success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -292,6 +304,13 @@ const updateMenuItem = async (req, res) => {
        WHERE id = ?`,
       [name, description, price, category_id, image_url, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, id]
     );
+    
+    // Emit WebSocket event for menu update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
+    }
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -307,6 +326,13 @@ const deleteMenuItem = async (req, res) => {
     if (oldImageUrl) {
       await deleteMenuImageIfUnused(oldImageUrl);
     }
+    
+    // Emit WebSocket event for menu update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
+    }
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -330,10 +356,16 @@ const uploadMenuItemImage = async (req, res) => {
       await deleteMenuImageIfUnused(oldImageUrl, id);
     }
 
+    // Emit WebSocket event for menu update
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
+    }
+
     res.json({ success: true, image_url: newImageUrl });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage };
+module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage, setBroadcast };

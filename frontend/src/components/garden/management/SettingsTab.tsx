@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, BackupFile } from "@/lib/api";
 import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle } from "lucide-react";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 export const SettingsTab = () => {
   const { t } = useTranslation();
@@ -53,6 +54,11 @@ export const SettingsTab = () => {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // WebSocket listener for real-time settings updates
+  useWebSocket(["SETTINGS_UPDATE"], (event) => {
+    loadAll();
+  });
 
   const loadAll = async () => {
     try {

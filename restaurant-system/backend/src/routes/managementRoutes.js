@@ -250,5 +250,24 @@ router.patch("/feedback/:id/respond", feedbackController.respondToFeedback);
 router.patch("/feedback/:id/archive", feedbackController.archiveFeedback);
 router.delete("/feedback/:id", feedbackController.deleteFeedback);
 router.patch("/feedback/analysis/findings/:id", feedbackController.updateFindingStatus);
+router.delete("/feedback/analysis/findings/:id", feedbackController.deleteFinding);
+
+// Set up broadcast function for feedback controller
+const setupFeedbackBroadcast = (broadcastFn) => {
+  feedbackController.setBroadcast(broadcastFn);
+};
+
+// Set up broadcast function for menu controller
+const setupMenuBroadcast = (broadcastFn) => {
+  menuController.setBroadcast(broadcastFn);
+};
+
+// Set up broadcast function for management controller
+const setupManagementBroadcast = (broadcastFn) => {
+  managementController.setBroadcast(broadcastFn);
+};
 
 module.exports = router;
+module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;
+module.exports.setupMenuBroadcast = setupMenuBroadcast;
+module.exports.setupManagementBroadcast = setupManagementBroadcast;

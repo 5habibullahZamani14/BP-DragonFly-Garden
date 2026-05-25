@@ -44,6 +44,11 @@ const get = (sql, params = []) =>
     });
   });
 
+// Broadcast function for WebSocket events
+let broadcastFn = null;
+const setBroadcast = (fn) => { broadcastFn = fn; };
+const getBroadcast = () => broadcastFn;
+
 /*
  * getBaseUrl resolves the correct origin for ordering links. In production
  * FRONTEND_BASE_URL is set to the Raspberry Pi's LAN address. In development
@@ -111,6 +116,12 @@ const createTable = async (req, res) => {
     ["SYSTEM", "CREATE_TABLE", "Manager", result.lastID.toString(), table_number]
   );
 
+  // Emit WebSocket event for table update
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "TABLE_UPDATE", payload: { id: result.lastID } });
+  }
+
   return res.status(201).json(await withQrCode(req, table));
 };
 
@@ -130,6 +141,12 @@ const updateTable = async (req, res) => {
     ["SYSTEM", "UPDATE_TABLE", "Manager", id.toString(), table_number]
   );
 
+  // Emit WebSocket event for table update
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "TABLE_UPDATE", payload: { id } });
+  }
+
   return res.json(await withQrCode(req, table));
 };
 
@@ -144,7 +161,13 @@ const deleteTable = async (req, res) => {
     ["SYSTEM", "DELETE_TABLE", "Manager", id.toString(), table.table_number]
   );
 
+  // Emit WebSocket event for table update
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "TABLE_UPDATE", payload: { id } });
+  }
+
   return res.json({ success: true, message: "Table deleted successfully" });
 };
 
-module.exports = { getTables, getTableByQrCode, createTable, updateTable, deleteTable };
+module.exports = { getTables, getTableByQrCode, createTable, updateTable, deleteTable, setBroadcast };

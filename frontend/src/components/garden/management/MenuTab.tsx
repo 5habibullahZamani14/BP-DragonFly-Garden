@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import Cropper, { ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { useRef } from "react";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 export function MenuTab() {
   const { t, i18n } = useTranslation();
@@ -29,6 +30,11 @@ export function MenuTab() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // WebSocket listener for real-time menu updates
+  useWebSocket(["MENU_UPDATE"], (event) => {
+    loadData();
+  });
 
   const loadData = async () => {
     try {
