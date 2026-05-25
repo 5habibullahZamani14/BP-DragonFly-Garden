@@ -23,7 +23,7 @@ const buildPuffyStarPath = (
     verts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
   }
   const n = verts.length;
-  const smooth = 0.26;
+  const smooth = 0.25;
   let d = `M ${verts[0].x.toFixed(2)} ${verts[0].y.toFixed(2)}`;
   for (let i = 0; i < n; i++) {
     const p0 = verts[(i - 1 + n) % n];

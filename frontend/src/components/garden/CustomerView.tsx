@@ -40,7 +40,7 @@ import { CustomerFeedbackPanel } from "./customer/CustomerFeedbackPanel";
 import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
-import butterflyHero from "@/assets/butterfly-hero.png";
+import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
 import {
   fetchMenu,
   fetchTable,
@@ -680,7 +680,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           <SettingsModal />
         </div>
 
-        {/* Expanded crest — butterfly beside welcome (pl clears settings button) */}
+        {/* Expanded crest — logo beside welcome (pl clears settings button) */}
         <div
           className={`flex items-center justify-start gap-3 overflow-hidden ps-[3.25rem] transition-all duration-300 ${
             headerCollapsed
@@ -689,16 +689,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           }`}
           aria-hidden={headerCollapsed}
         >
-          <div
-            className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border border-border/50 bg-white/80 shadow-sm"
-            aria-hidden
-          >
-            <img
-              src={butterflyHero}
-              alt=""
-              className="h-[2.35rem] w-[2.35rem] animate-wing-flap object-contain object-[46%_52%] drop-shadow-[0_4px_8px_rgba(120,80,20,0.18)]"
-            />
-          </div>
+          <img
+            src={bpDragonflyGardenLogo}
+            alt=""
+            className="h-11 w-11 shrink-0 object-contain"
+          />
           <div className="min-w-0 text-start">
             <p className="text-[0.6rem] font-bold uppercase tracking-[0.28em] text-foreground/55">
               {t("customer.welcome")}
