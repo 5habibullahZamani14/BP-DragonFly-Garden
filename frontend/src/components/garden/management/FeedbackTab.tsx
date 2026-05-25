@@ -4,6 +4,7 @@ import {
   MessageSquare, Loader2, Sparkles, Archive, Trash2, Reply,
   Check, X, Calendar, Brain, ChevronRight,
 } from "lucide-react";
+import { SelectedRatingStars } from "../customer/FeedbackRatingStars";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -348,10 +349,12 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
                   {RATING_LABELS.map(({ key, labelKey }) => {
                     const v = selected.ratings?.[key as keyof typeof selected.ratings] ?? selected[`rating_${key}` as keyof CustomerFeedback];
                     if (v == null) return null;
+                    const num = Number(v);
                     return (
-                      <div key={key} className="rounded-lg bg-gray-50 px-2 py-1">
+                      <div key={key} className="rounded-lg bg-gray-50 px-2 py-2">
                         <span className="text-xs text-gray-500">{t(labelKey)}</span>
-                        <p className="font-bold">{Number(v) > 0 ? `+${v}` : v}</p>
+                        <p className="font-bold text-sm">{num > 0 ? `+${num}` : num}</p>
+                        <SelectedRatingStars value={num} />
                       </div>
                     );
                   })}

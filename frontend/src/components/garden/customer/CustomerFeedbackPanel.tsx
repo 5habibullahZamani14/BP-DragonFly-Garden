@@ -4,6 +4,7 @@ import {
   MessageSquare, Star, ImagePlus, X, Send, Loader2, Mail, User,
   Sparkles, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { FeedbackRatingScale } from "./FeedbackRatingStars";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,26 +89,9 @@ const RatingPicker = ({
   value: number | null;
   onChange: (v: number | null) => void;
 }) => (
-  <div className="rounded-2xl border border-border/60 bg-card/80 px-3 py-2.5">
-    <p className="text-[0.65rem] font-semibold text-foreground/70 mb-2">{label}</p>
-    <div className="flex flex-wrap gap-1">
-      {Array.from({ length: 11 }, (_, i) => i - 5).map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(value === n ? null : n)}
-          className={`min-w-[1.65rem] rounded-lg px-1 py-0.5 text-[0.65rem] font-bold transition ${
-            value === n
-              ? n >= 0
-                ? "bg-primary text-primary-foreground"
-                : "bg-berry text-berry-foreground"
-              : "bg-muted/60 text-foreground/50 hover:bg-muted"
-          }`}
-        >
-          {n > 0 ? `+${n}` : n}
-        </button>
-      ))}
-    </div>
+  <div className="rounded-2xl border border-border/60 bg-card/80 px-2 py-2.5 sm:px-3">
+    <p className="text-[0.65rem] font-semibold text-foreground/70 mb-2 px-0.5">{label}</p>
+    <FeedbackRatingScale value={value} onChange={onChange} />
   </div>
 );
 
