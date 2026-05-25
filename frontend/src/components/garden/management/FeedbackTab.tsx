@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   MessageSquare, Loader2, Sparkles, Archive, Trash2, Reply,
-  Check, X, Calendar, Brain, ChevronRight, AlertTriangle, Star, Hash,
+  Check, X, Calendar, Brain, ChevronRight, AlertTriangle, Star, Hash, Bot, Send,
 } from "lucide-react";
 import { SelectedRatingStars } from "../customer/FeedbackRatingStars";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,6 +28,7 @@ import {
   deleteManagerFeedback,
   updateFeedbackFindingStatus,
   deleteFeedbackFinding,
+  aiChat,
   type CustomerFeedback,
   type FeedbackAnalysisFinding,
   type FeedbackAnalysisResponse,
@@ -70,8 +73,10 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
             <h3 className="font-bold text-gray-900">AI-Powered Analysis</h3>
             <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">AI Generated</span>
           </div>
-          <div className="text-gray-700 whitespace-pre-line leading-relaxed text-sm">
-            {summary.ai_analysis}
+          <div className="prose prose-sm prose-blue max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-700 prose-strong:text-gray-900 prose-ul:list-disc prose-li:text-gray-700">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {summary.ai_analysis}
+            </ReactMarkdown>
           </div>
         </div>
       </div>
@@ -263,6 +268,36 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
   const [deleteFindingId, setDeleteFindingId] = useState<number | null>(null);
   const [useAI, setUseAI] = useState(true);
   const [findingPriorityFilter, setFindingPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([
+    { role: "assistant", content: "Hi! I'm DragonBot. Ask me anything about the restaurant — menu items, orders, feedback, employees, inventory, or any other data in the system." },
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  const handleChatSend = async () => {
+    const msg = chatInput.trim();
+    if (!msg || chatLoading) return;
+    setChatInput("");
+    setChatMessages((prev) => [...prev, { role: "user", content: msg }]);
+    setChatLoading(true);
+    try {
+      const result = await aiChat(msg);
+      if (result.success && result.response) {
+        setChatMessages((prev) => [...prev, { role: "assistant", content: result.response! }]);
+      } else {
+        setChatMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I couldn't process that. Please try again." }]);
+      }
+    } catch {
+      setChatMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I encountered an error. Please try again." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   const calculateAverageRating = useCallback((fb: CustomerFeedback): number => {
     const ratings = [
@@ -577,6 +612,59 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
               {analysis.run.period_from && ` · ${analysis.run.period_from} → ${analysis.run.period_to || "now"}`}
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* AI Chatbot */}
+      <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-emerald-900">
+            <Bot className="h-6 w-6" />
+            DragonBot — AI Assistant
+          </CardTitle>
+          <CardDescription>Ask anything about the restaurant — menu, orders, feedback, inventory, employees, finance, and more.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-white rounded-xl border max-h-[400px] overflow-y-auto p-4 space-y-3 mb-3">
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${
+                  msg.role === "user"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-gray-100 text-gray-800"
+                }`}>
+                  {msg.role === "assistant" ? (
+                    <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-strong:text-gray-900">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-500 flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking...
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask about the restaurant..."
+              onKeyDown={(e) => e.key === "Enter" && handleChatSend()}
+              disabled={chatLoading}
+              className="flex-1"
+            />
+            <Button onClick={handleChatSend} disabled={chatLoading} className="bg-emerald-700 hover:bg-emerald-800">
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

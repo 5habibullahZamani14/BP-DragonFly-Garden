@@ -7,7 +7,7 @@ const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const { validateFeedbackText } = require("../utils/profanityFilter");
 const { analyzeFeedback, RATING_DIMS } = require("../services/feedbackAnalyzer");
-const { generateAIAnalysis, generateAIFindings } = require("../services/aiFeedbackAnalyzer");
+const { generateAIAnalysis, generateAIFindings, generateChatResponse } = require("../services/aiFeedbackAnalyzer");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -496,6 +496,38 @@ exports.deleteFinding = async (req, res) => {
   const id = Number(req.params.id);
   await run(`DELETE FROM feedback_analysis_findings WHERE id = ?`, [id]);
   res.json({ success: true });
+};
+
+exports.aiChat = async (req, res) => {
+  const { message } = req.body;
+  if (!message || !message.trim()) {
+    return res.status(400).json({ success: false, error: "Message is required" });
+  }
+
+  try {
+    const contextData = {
+      menu: await all("SELECT id, name, price, category_name, is_available, is_popular, is_sold_out FROM menu_items ORDER BY category_name, name"),
+      orders_today: await all("SELECT id, status, payment_status, total_price FROM orders WHERE date(created_at) = date('now','localtime')"),
+      orders_recent: await all("SELECT id, status, payment_status, total_price, created_at FROM orders WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50"),
+      feedback_summary: await all("SELECT id, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, status, created_at FROM customer_feedback ORDER BY created_at DESC LIMIT 30"),
+      employees: await all("SELECT id, employee_id, name, department, employment_type FROM employees WHERE is_archived = 0"),
+      inventory: await all("SELECT id, name, category, unit, current_stock, max_stock, low_stock_threshold_percent FROM inventory_items WHERE is_archived = 0"),
+      tables: await all("SELECT id, table_number FROM tables"),
+      settings: await get("SELECT value FROM restaurant_settings WHERE key = 'work_hours'"),
+    };
+
+    const messages = [{ role: "user", content: message }];
+    const result = await generateChatResponse(messages, contextData);
+
+    if (!result.success) {
+      return res.status(503).json({ success: false, error: result.reason });
+    }
+
+    res.json({ success: true, response: result.response });
+  } catch (error) {
+    console.error("AI chat error:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
 };
 
 exports.setBroadcast = setBroadcast;

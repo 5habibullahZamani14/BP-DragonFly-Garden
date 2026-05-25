@@ -252,6 +252,8 @@ router.delete("/feedback/:id", feedbackController.deleteFeedback);
 router.patch("/feedback/analysis/findings/:id", feedbackController.updateFindingStatus);
 router.delete("/feedback/analysis/findings/:id", feedbackController.deleteFinding);
 
+router.post("/feedback/ai-chat", feedbackController.aiChat);
+
 // Set up broadcast function for feedback controller
 const setupFeedbackBroadcast = (broadcastFn) => {
   feedbackController.setBroadcast(broadcastFn);

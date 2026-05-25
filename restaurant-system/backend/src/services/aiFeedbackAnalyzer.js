@@ -63,7 +63,7 @@ Please provide a detailed analysis covering:
 5. Specific issues that need immediate attention
 6. Positive trends to continue and build upon
 
-Format your response as a structured analysis with clear sections. Be specific and practical in your recommendations. Focus on business impact and customer satisfaction. Do not use markdown formatting - use plain text with clear section breaks.
+Format your response using clean markdown for visual structure. Use ### for section headings, **bold** for key metrics/numbers, and bullet lists for items. Keep paragraphs clear and scannable. Be specific and practical in your recommendations. Focus on business impact and customer satisfaction.
 
 The analysis should be as detailed as needed to provide valuable insights. There is no length limit.`;
 
@@ -105,7 +105,7 @@ Focus on:
 - Operational efficiency
 - Specific issues mentioned in feedback
 
-Format as JSON array with structure: [{title, description, priority}]. Do not include markdown formatting. Return only the JSON array.`;
+Format as JSON array with structure: [{title, description, priority}]. Return only the JSON array.`;
 
     const result = await groqClient.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -127,8 +127,44 @@ Format as JSON array with structure: [{title, description, priority}]. Do not in
   }
 };
 
+const generateChatResponse = async (messages, contextData) => {
+  const aiEnabled = initializeAI();
+  if (!aiEnabled || !groqClient) {
+    return { success: false, reason: "AI not available" };
+  }
+
+  try {
+    const systemPrompt = `You are DragonBot, an AI assistant for BP DragonFly Garden restaurant management system. You have access to the restaurant's live data below. Answer questions helpfully based on this data.
+
+RESTAURANT CONTEXT (current state):
+${JSON.stringify(contextData, null, 2)}
+
+Guidelines:
+- Answer based on the provided data only. If the data doesn't contain what you need, say so.
+- Use markdown formatting for readable responses: **bold** for key numbers, bullet lists, short paragraphs.
+- Never reveal manager passwords, API keys, QR codes, or view tokens.
+- Be concise but thorough. Think step by step.
+- If asked about trends or analysis, note that your data is a snapshot of the current state.`;
+
+    const result = await groqClient.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages,
+      ],
+    });
+
+    const text = result.choices[0]?.message?.content || "";
+    return { success: true, response: text };
+  } catch (error) {
+    console.error("AI chat failed:", error.message);
+    return { success: false, reason: error.message };
+  }
+};
+
 module.exports = {
   generateAIAnalysis,
   generateAIFindings,
+  generateChatResponse,
   initializeAI,
 };

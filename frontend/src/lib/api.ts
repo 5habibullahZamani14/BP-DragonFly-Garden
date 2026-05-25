@@ -626,6 +626,13 @@ export const updateFeedbackFindingStatus = async (
 export const deleteFeedbackFinding = async (id: number): Promise<{ success: boolean }> =>
   safeFetch<{ success: boolean }>(`/management/feedback/analysis/findings/${id}`, { method: "DELETE" });
 
+export const aiChat = async (message: string): Promise<{ success: boolean; response?: string; error?: string }> =>
+  safeFetch("/management/feedback/ai-chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+
 export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
   safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);
 
