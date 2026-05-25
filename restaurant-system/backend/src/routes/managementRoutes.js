@@ -20,6 +20,7 @@
 const express = require("express");
 const managementController = require("../controllers/managementController");
 const menuController = require("../controllers/menuController");
+const feedbackController = require("../controllers/feedbackController");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
@@ -238,5 +239,16 @@ router.post("/backups", managementController.createBackup);
  * Restores the system from a specified backup file. Body must contain { filename }.
  */
 router.post("/backups/restore", managementController.restoreBackup);
+
+// ── Customer feedback (manager only) ─────────────────────────────────────────
+
+router.get("/feedback", feedbackController.listFeedbackForManager);
+router.get("/feedback/analysis/latest", feedbackController.getLatestAnalysis);
+router.post("/feedback/analyze", feedbackController.runAnalysis);
+router.get("/feedback/:id", feedbackController.getFeedbackDetailForManager);
+router.patch("/feedback/:id/respond", feedbackController.respondToFeedback);
+router.patch("/feedback/:id/archive", feedbackController.archiveFeedback);
+router.delete("/feedback/:id", feedbackController.deleteFeedback);
+router.patch("/feedback/analysis/findings/:id", feedbackController.updateFindingStatus);
 
 module.exports = router;

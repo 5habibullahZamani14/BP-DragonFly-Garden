@@ -14,7 +14,11 @@
  */
 
 const express = require("express");
+const path = require("path");
+const multer = require("multer");
+const fs = require("fs");
 const db = require("../database/db");
+const feedbackController = require("../controllers/feedbackController");
 const {
   createOrder,
   getOrder,
@@ -75,6 +79,26 @@ const logArchive = async (action, targetId, targetName, details = {}, actor = {}
  * This pattern lets me close over the broadcast function so every route
  * handler in this file can call it without needing to import it separately.
  */
+const feedbackImagesDir = path.join(__dirname, "../../../../frontend/public/feedback-images");
+if (!fs.existsSync(feedbackImagesDir)) {
+  fs.mkdirSync(feedbackImagesDir, { recursive: true });
+}
+
+const feedbackUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, feedbackImagesDir),
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `fb-${unique}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, WebP, or GIF images are allowed."));
+  },
+});
+
 const orderRoutes = (broadcast) => {
   const router = express.Router();
 
@@ -146,6 +170,14 @@ const orderRoutes = (broadcast) => {
     );
     res.json(requests);
   }));
+
+  router.post(
+    "/feedback",
+    feedbackUpload.array("images", 5),
+    asyncHandler(feedbackController.submitFeedback),
+  );
+  router.post("/feedback/mine", asyncHandler(feedbackController.fetchMyFeedback));
+  router.get("/feedback/:id", asyncHandler(feedbackController.getFeedbackByToken));
 
   router.patch("/call-waiter/:requestId/acknowledge", requirePaymentCounter, asyncHandler(async (req, res) => {
     const requestId = Number(req.params.requestId);

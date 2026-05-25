@@ -465,6 +465,161 @@ export const callStaff = async (table_id: number) => {
   });
 };
 
+// ── Customer feedback ───────────────────────────────────────────────────────
+
+export type FeedbackRatings = {
+  staff: number | null;
+  app: number | null;
+  cleanliness: number | null;
+  food: number | null;
+  atmosphere: number | null;
+  value: number | null;
+};
+
+export type CustomerFeedback = {
+  id: number;
+  view_token?: string;
+  table_id: number | null;
+  table_number: string | null;
+  order_id: number | null;
+  sender_name: string;
+  sender_email: string | null;
+  comment: string;
+  ratings: FeedbackRatings;
+  rating_staff: number | null;
+  rating_app: number | null;
+  rating_cleanliness: number | null;
+  rating_food: number | null;
+  rating_atmosphere: number | null;
+  rating_value: number | null;
+  suggestion_tags: string[];
+  status: "active" | "archived";
+  manager_response: string | null;
+  responded_at: string | null;
+  created_at: string;
+  archived_at: string | null;
+  images: { id: number; image_url: string; display_order: number }[];
+};
+
+export type FeedbackSubmitResult = {
+  id: number;
+  view_token: string;
+  feedback: CustomerFeedback;
+};
+
+export type FeedbackAnalysisFinding = {
+  id: number;
+  run_id: number;
+  category: string;
+  title: string;
+  description: string;
+  priority: string;
+  evidence_json?: string;
+  evidence?: Record<string, unknown>;
+  status: "pending" | "accepted" | "declined";
+  decided_at?: string | null;
+};
+
+export type FeedbackAnalysisResponse = {
+  run: {
+    id: number;
+    period_from: string | null;
+    period_to: string | null;
+    feedback_count: number;
+    created_at: string;
+  } | null;
+  summary: {
+    feedback_count?: number;
+    overall_sentiment?: string;
+    dimension_averages?: Record<string, { label: string; average: number | null; count: number }>;
+    top_keywords?: { word: string; count: number }[];
+    negative_count?: number;
+  } | null;
+  findings: FeedbackAnalysisFinding[];
+};
+
+export const submitFeedback = async (qr: string, formData: FormData): Promise<FeedbackSubmitResult> => {
+  const url = apiUrl("/orders/feedback", qr);
+  const res = await fetch(url, { method: "POST", body: formData });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || `API Error: ${res.status}`) as Error & {
+      error?: string;
+      words?: string[];
+    };
+    err.error = data.error;
+    (err as Error & { words?: string[] }).words = data.words;
+    throw err;
+  }
+  return data as FeedbackSubmitResult;
+};
+
+export const fetchMyFeedback = async (
+  qr: string,
+  entries: { id: number; view_token: string }[],
+): Promise<CustomerFeedback[]> =>
+  safeFetch<CustomerFeedback[]>(
+    "/orders/feedback/mine",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries }),
+    },
+    qr,
+  );
+
+export const fetchManagerFeedback = async (params?: {
+  status?: string;
+  from?: string;
+  to?: string;
+}): Promise<CustomerFeedback[]> => {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  const qs = q.toString();
+  return safeFetch<CustomerFeedback[]>(`/management/feedback${qs ? `?${qs}` : ""}`);
+};
+
+export const fetchManagerFeedbackDetail = async (id: number): Promise<CustomerFeedback> =>
+  safeFetch<CustomerFeedback>(`/management/feedback/${id}`);
+
+export const respondToFeedback = async (id: number, response: string): Promise<CustomerFeedback> =>
+  safeFetch<CustomerFeedback>(`/management/feedback/${id}/respond`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ response }),
+  });
+
+export const archiveManagerFeedback = async (id: number): Promise<CustomerFeedback> =>
+  safeFetch<CustomerFeedback>(`/management/feedback/${id}/archive`, { method: "PATCH" });
+
+export const deleteManagerFeedback = async (id: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/feedback/${id}`, { method: "DELETE" });
+
+export const runFeedbackAnalysis = async (from?: string, to?: string) =>
+  safeFetch<FeedbackAnalysisResponse & { run_id: number; findings: FeedbackAnalysisFinding[] }>(
+    "/management/feedback/analyze",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from: from || null, to: to || null }),
+    },
+  );
+
+export const fetchLatestFeedbackAnalysis = async (): Promise<FeedbackAnalysisResponse> =>
+  safeFetch<FeedbackAnalysisResponse>("/management/feedback/analysis/latest");
+
+export const updateFeedbackFindingStatus = async (
+  id: number,
+  status: "accepted" | "declined" | "pending",
+): Promise<FeedbackAnalysisFinding> =>
+  safeFetch<FeedbackAnalysisFinding>(`/management/feedback/analysis/findings/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+
 export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
   safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);
 

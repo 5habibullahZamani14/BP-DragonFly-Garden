@@ -342,6 +342,74 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_staff_assistance_today", "staff_assistance_requests", "requested_at DESC, archived_at, acknowledged_at");
 
   /*
+   * Customer feedback — private to sender (view_token) and manager dashboard.
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS customer_feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      view_token TEXT NOT NULL UNIQUE,
+      table_id INTEGER,
+      table_number TEXT,
+      order_id INTEGER,
+      sender_name TEXT NOT NULL,
+      sender_email TEXT,
+      comment TEXT NOT NULL,
+      rating_staff INTEGER,
+      rating_app INTEGER,
+      rating_cleanliness INTEGER,
+      rating_food INTEGER,
+      rating_atmosphere INTEGER,
+      rating_value INTEGER,
+      suggestion_tags TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      manager_response TEXT,
+      responded_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      archived_at DATETIME
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS customer_feedback_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      feedback_id INTEGER NOT NULL,
+      image_url TEXT NOT NULL,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (feedback_id) REFERENCES customer_feedback(id) ON DELETE CASCADE
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS feedback_analysis_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_from TEXT,
+      period_to TEXT,
+      feedback_count INTEGER NOT NULL DEFAULT 0,
+      report_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS feedback_analysis_findings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      evidence_json TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      decided_at DATETIME,
+      FOREIGN KEY (run_id) REFERENCES feedback_analysis_runs(id) ON DELETE CASCADE
+    )
+  `);
+
+  await ensureIndex("idx_customer_feedback_created", "customer_feedback", "created_at DESC");
+  await ensureIndex("idx_customer_feedback_status", "customer_feedback", "status, created_at DESC");
+  await ensureIndex("idx_feedback_findings_run", "feedback_analysis_findings", "run_id, status");
+
+  /*
    * restaurant_settings stores configuration values as key-value pairs.
    * Currently used for work_hours (when the payment counter is active)
    * and the manager's credentials. Using a key-value table means adding

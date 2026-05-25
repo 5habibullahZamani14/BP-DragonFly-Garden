@@ -265,29 +265,29 @@ export function MenuTab() {
             <div className="bg-gray-50 p-4 rounded-xl space-y-4 border border-gray-100 mt-2 text-start">
               <h4 className="font-semibold text-sm text-gray-900 border-b pb-2">{t("m.manualOverrides")}</h4>
               
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-0.5 min-w-0">
+              <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                <div className="min-w-0 flex-1 space-y-0.5">
                   <Label>{t("m.available")}</Label>
                   <p className="text-xs text-gray-500">{t("m.availableDesc")}</p>
                 </div>
-                <Switch checked={editingItem?.is_available || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_available: c}))} />
+                <Switch className="shrink-0" checked={editingItem?.is_available || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_available: c}))} />
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-0.5 min-w-0">
+              <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                <div className="min-w-0 flex-1 space-y-0.5">
                   <Label>{t("m.markPopular")}</Label>
                   <p className="text-xs text-gray-500">{t("m.markPopularDesc")}</p>
                 </div>
-                <Switch checked={editingItem?.is_popular || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_popular: c}))} />
+                <Switch className="shrink-0" checked={editingItem?.is_popular || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_popular: c}))} />
               </div>
 
               <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5 min-w-0">
+                <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <Label>{t("m.activePromo")}</Label>
                     <p className="text-xs text-gray-500">{t("m.activePromoDesc")}</p>
                   </div>
-                  <Switch checked={editingItem?.is_promo || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_promo: c}))} />
+                  <Switch className="shrink-0" checked={editingItem?.is_promo || false} onCheckedChange={c => setEditingItem(prev => ({...prev, is_promo: c}))} />
                 </div>
                 {editingItem?.is_promo && (
                   <div className="grid gap-2 pt-2 animate-in fade-in slide-in-from-top-2">

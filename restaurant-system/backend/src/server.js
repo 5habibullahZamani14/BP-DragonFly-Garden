@@ -82,6 +82,7 @@ app.use(express.json({ limit: "100kb" }));
 
 /* Serve dynamic menu images directly from the backend to bypass Vite caching issues. */
 app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
+app.use("/feedback-images", express.static(path.resolve(__dirname, "../../../frontend/public/feedback-images")));
 
 /*
  * The role-detection middleware runs on every request before any route handler.
@@ -125,7 +126,7 @@ app.use((req, res, next) => {
  * The regex below matches everything EXCEPT the five API prefixes.
  * If no frontend build is found, a simple JSON message is returned instead.
  */
-app.get(/^(?!\/(?:menu|orders|tables|payments|management)\b).*/, (req, res) => {
+app.get(/^(?!\/(?:menu|orders|tables|payments|management|menu-images|feedback-images)\b).*/, (req, res) => {
   if (fs.existsSync(frontendDistPath)) {
     res.sendFile(path.join(frontendDistPath, "index.html"));
   } else {

@@ -34,8 +34,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, Leaf, Star, Plus, Minus, ShoppingBag, Check, Flame, X,
-  Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight, Bell, Smile
+  Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight, Bell, Smile, MessageSquare
 } from "lucide-react";
+import { CustomerFeedbackPanel } from "./customer/CustomerFeedbackPanel";
 import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
@@ -62,7 +63,7 @@ const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
 const STAGE_LABEL: Record<string, string> = { queue: "customer.received", preparing: "customer.cooking", ready: "customer.ready" };
 const orderStageIndex = (status: string) => ORDER_STAGES.findIndex((stage) => stage === status);
-const TABS = ["home", "menu", "orders"] as const;
+const TABS = ["home", "menu", "orders", "feedback"] as const;
 type CustomerTab = typeof TABS[number];
 
 type Notify = (kind: "success" | "error", text: string) => void;
@@ -115,9 +116,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       return TABS.includes(s as CustomerTab) ? s as CustomerTab : "home";
     } catch { return "home"; }
   });
-  // Direction of the last tab change — for swoosh-in animation
+  // Direction of the last tab change — for swoosh-in animation (nav clicks only)
   const [tabDir, setTabDir] = useState<"right" | "left">("right");
-  const tabOrder: Record<string, number> = { home: 0, menu: 1, orders: 2 };
+  const [swoosh, setSwoosh] = useState<"right" | "left" | null>(null);
+  const tabOrder: Record<string, number> = { home: 0, menu: 1, feedback: 2, orders: 3 };
+  const tabRef = useRef<CustomerTab>(tab);
+  tabRef.current = tab;
+  /** Blocks scroll-spy from overriding tab during explicit Menu navigation (e.g. from Orders). */
+  const scrollSyncSuppressedRef = useRef(false);
 
   const heroRef = useRef<HTMLDivElement | null>(null);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
@@ -246,11 +252,44 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     });
   });
 
-  const switchTab = (next: "home" | "menu" | "orders") => {
-    setTabDir(tabOrder[next] >= tabOrder[tab] ? "right" : "left");
+  const switchTab = (next: CustomerTab, animate = true) => {
+    const prev = tabRef.current;
+    if (prev === next) return;
+    const dir = tabOrder[next] >= tabOrder[prev] ? "right" : "left";
+    setTabDir(dir);
     setTab(next);
+    tabRef.current = next;
     sessionStorage.setItem(`dfg_tab_${qrCode}`, next);
+    if (animate) {
+      setSwoosh(dir);
+      window.setTimeout(() => setSwoosh(null), 450);
+    }
   };
+
+  // Keep sidebar tab in sync with scroll position (home + menu share one scroll area)
+  useEffect(() => {
+    if (tab === "orders" || tab === "feedback") return;
+
+    const scrollEl = document.getElementById("main-scroll");
+    if (!scrollEl) return;
+
+    const syncTabFromScroll = () => {
+      if (tabRef.current === "orders" || tabRef.current === "feedback" || scrollSyncSuppressedRef.current) return;
+
+      const menuEl = document.getElementById("menu-anchor");
+      if (!menuEl) return;
+
+      const viewportTop = scrollEl.getBoundingClientRect().top;
+      const menuTop = menuEl.getBoundingClientRect().top;
+      const threshold = viewportTop + scrollEl.clientHeight * 0.32;
+      const nextTab: CustomerTab = menuTop <= threshold ? "menu" : "home";
+      switchTab(nextTab, false);
+    };
+
+    scrollEl.addEventListener("scroll", syncTabFromScroll, { passive: true });
+    syncTabFromScroll();
+    return () => scrollEl.removeEventListener("scroll", syncTabFromScroll);
+  }, [qrCode, tab]);
 
   // Subtle parallax on hero — translate only, never fade out (full opacity always)
   useEffect(() => {
@@ -273,7 +312,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     onScroll();
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [tab]);
+  }, []);
 
   const tableGreeting = useMemo(() => {
     if (!tableInfo) {
@@ -427,9 +466,32 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
 
 
-  const scrollToMenu = () => {
-    switchTab("menu");
-    document.getElementById("menu-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToMenu = (opts?: { skipTabSwitch?: boolean }) => {
+    scrollSyncSuppressedRef.current = true;
+    if (!opts?.skipTabSwitch) switchTab("menu");
+
+    let attempts = 0;
+    const runScroll = () => {
+      const scrollEl = document.getElementById("main-scroll");
+      const menuEl = document.getElementById("menu-anchor");
+      const stickyHeader = document.getElementById("customer-sticky-header");
+      if (!scrollEl || !menuEl) {
+        if (attempts++ < 24) requestAnimationFrame(runScroll);
+        else scrollSyncSuppressedRef.current = false;
+        return;
+      }
+
+      const containerTop = scrollEl.getBoundingClientRect().top;
+      const menuTop = menuEl.getBoundingClientRect().top;
+      const headerOffset = (stickyHeader?.offsetHeight ?? 0) + 12;
+      const targetTop = scrollEl.scrollTop + (menuTop - containerTop) - headerOffset;
+      scrollEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    };
+
+    requestAnimationFrame(() => requestAnimationFrame(runScroll));
+    window.setTimeout(() => {
+      scrollSyncSuppressedRef.current = false;
+    }, 700);
   };
 
   const searchResults = useMemo(() => {
@@ -452,6 +514,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             { id: "home", label: t("customer.home"), icon: Home },
             { id: "menu", label: t("customer.menu"), icon: UtensilsCrossed },
             { id: "orders", label: t("customer.orders"), icon: Receipt },
+            { id: "feedback", label: t("customer.feedback.tab"), icon: MessageSquare },
           ] as const).map(({ id, label, icon: Icon }) => {
             const active = tab === id;
             const badge = id === "orders" ? orders.filter(o => o.status === "ready" && !celebratedIds.has(o.id)).length : 0;
@@ -464,7 +527,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     return;
                   }
                   switchTab(id);
-                  if (id === "home" || id === "orders") document.getElementById("main-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
+                  if (id === "home" || id === "orders" || id === "feedback") document.getElementById("main-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[0.55rem] font-semibold transition-all sm:gap-1.5 sm:rounded-2xl sm:py-2 sm:text-[0.6rem] md:py-2.5 md:text-[0.65rem] ${
                   active ? "bg-primary text-primary-foreground shadow-md scale-[1.02]" : "text-foreground/50 hover:bg-muted/50 hover:text-foreground/80"
@@ -478,7 +541,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </span>
                   )}
                 </span>
-                <span className="leading-tight tracking-wide text-center">{label}</span>
+                <span className="w-full min-w-0 px-0.5 text-center leading-snug break-words hyphens-auto">{label}</span>
               </button>
             );
           })}
@@ -498,7 +561,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <span className="relative grid place-items-center bg-accent text-accent-foreground p-1 rounded-lg shadow-sm sm:p-1.5 sm:rounded-xl">
               <Smile className="relative h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.4} />
             </span>
-            <span className="leading-tight tracking-wide text-center">{t("customer.callStaff")}</span>
+            <span className="w-full min-w-0 px-0.5 text-center leading-snug break-words hyphens-auto">{t("customer.callStaff")}</span>
           </button>
         </nav>
 
@@ -522,7 +585,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <div className={`grid place-items-center rounded-lg p-1 sm:rounded-xl sm:p-1.5 ${active ? 'bg-accent text-accent-foreground shadow-sm scale-110 transition-transform' : 'bg-muted/50 text-foreground/50'}`}>
                   <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-[1.1rem] md:w-[1.1rem]" strokeWidth={active ? 2.5 : 2} />
                 </div>
-                <span className="leading-tight text-center truncate w-full px-1">{categoryLabel(c)}</span>
+                <span className="w-full min-w-0 px-0.5 text-center leading-snug break-words hyphens-auto">{categoryLabel(c)}</span>
               </button>
             );
           })}
@@ -530,7 +593,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       </aside>
 
       <div className="min-w-0 flex-1 h-full relative flex flex-col bg-background/50">
-        <main id="main-scroll" className={`min-w-0 flex-1 overflow-y-auto relative no-scrollbar ${cart.length > 0 && !cartOpen && tab !== "orders" ? "pb-40" : "pb-8"}`}>
+        <main id="main-scroll" className={`min-w-0 flex-1 overflow-y-auto relative no-scrollbar ${cart.length > 0 && !cartOpen && tab !== "orders" && tab !== "feedback" ? "pb-40" : "pb-8"}`}>
 
       {/* ══ 8-SECOND CONFIRMATION OVERLAY ═════════════════════════════════ */}
 
@@ -606,8 +669,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       )}
 
       {/* ============ TOP BAR (sticky, app-like) ============ */}
-
+      {tab !== "orders" && tab !== "feedback" && (
       <div
+        id="customer-sticky-header"
         className={`sticky top-0 z-30 px-5 cream-frost transition-[padding] duration-300 ${
           headerCollapsed ? "pt-2 pb-2" : "pt-4 pb-3"
         }`}
@@ -769,10 +833,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           )}
         </div>
       </div>
+      )}
 
       {/* ============ HOME / MENU SCREEN ============ */}
-      {tab !== "orders" && (
-      <div key={`home-${tab}`} className={tabDir === "right" ? "animate-swoosh-in-right" : "animate-swoosh-in-left"}>
+      {tab !== "orders" && tab !== "feedback" && (
+      <div className={swoosh === "right" ? "animate-swoosh-in-right" : swoosh === "left" ? "animate-swoosh-in-left" : undefined}>
       {/* ============ HERO (app banner) ============ */}
       <header
         ref={heroRef}
@@ -956,7 +1021,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       )}
 
       {/* ============ FULL MENU ============ */}
-      <div id="menu-anchor" className="px-5">
+      <div id="menu-anchor" className="scroll-mt-40 px-5">
         <div className="mb-3 flex items-end justify-between">
           <div>
             <span className="eyebrow">{t("customer.farmMenu")}</span>
@@ -1082,7 +1147,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 {t("customer.onceYouSend")}
               </p>
               <button
-                onClick={() => { switchTab("menu"); requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("menu-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" }))); }}
+                onClick={scrollToMenu}
                 className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-95"
               >
                 {t("customer.browseMenu")} <ArrowRight className="h-4 w-4" />
@@ -1253,6 +1318,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </div>
       )}
 
+      {tab === "feedback" && (
+        <CustomerFeedbackPanel
+          qrCode={qrCode}
+          tableId={tableInfo?.id ?? null}
+          orders={orders}
+          notify={notify}
+        />
+      )}
+
       {/* ============ CART SHEET ============ */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
@@ -1355,7 +1429,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       )}
         </main>
         {/* Floating cart summary */}
-        {cart.length > 0 && !cartOpen && tab !== "orders" && (
+        {cart.length > 0 && !cartOpen && tab !== "orders" && tab !== "feedback" && (
           <div className="absolute bottom-[max(1rem,var(--safe-bottom))] left-3 right-3 z-50 mx-auto max-w-sm pointer-events-none">
             <div
               className="absolute -inset-1 rounded-[1.4rem] opacity-90 blur-lg animate-pulse"

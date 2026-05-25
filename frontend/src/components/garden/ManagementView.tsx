@@ -36,7 +36,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils } from "lucide-react";
+import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare } from "lucide-react";
+import { FeedbackTab } from "./management/FeedbackTab";
 import { SettingsTab } from "./management/SettingsTab";
 import { MenuTab } from "./management/MenuTab";
 import { EmployeesTab } from "./management/EmployeesTab";
@@ -57,7 +58,7 @@ interface ManagementViewProps {
   notify: (kind: "success" | "error", text: string) => void;
 }
 
-const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu"] as const;
+const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
 type ManagerNotification = {
   id: string;
@@ -415,6 +416,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 <CardDescription>{t("manager.financeDesc")}</CardDescription>
               </CardContent>
             </Card>
+
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-teal-500 cursor-pointer" onClick={() => goToTab("feedback")}>
+              <CardContent className="pt-6">
+                <MessageSquare className="h-10 w-10 text-teal-500 mb-4" />
+                <CardTitle className="mb-2">{t("manager.feedback.title")}</CardTitle>
+                <CardDescription>{t("manager.feedback.desc")}</CardDescription>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -425,6 +434,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "logs" && <LogsTab />}
         {activeTab === "finance" && <FinanceTab />}
         {activeTab === "menu" && <MenuTab />}
+        {activeTab === "feedback" && <FeedbackTab notify={notify} />}
         
       </div>
     </div>
