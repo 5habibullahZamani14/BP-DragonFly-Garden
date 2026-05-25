@@ -8,6 +8,7 @@ const { createHttpError } = require("../middleware/validation");
 const { validateFeedbackText } = require("../utils/profanityFilter");
 const { analyzeFeedback, RATING_DIMS } = require("../services/feedbackAnalyzer");
 const { generateAIAnalysis, generateAIFindings, generateChatResponse } = require("../services/aiFeedbackAnalyzer");
+const { trackRequest, getUsage } = require("../services/usageTracker");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -505,16 +506,87 @@ exports.aiChat = async (req, res) => {
   }
 
   try {
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+
     const contextData = {
-      menu: await all("SELECT mi.id, mi.name, mi.price, c.name as category_name, mi.is_available, mi.is_popular FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"),
-      orders_today: await all("SELECT id, status, payment_status, total_price FROM orders WHERE date(created_at) = date('now','localtime')"),
-      orders_recent: await all("SELECT id, status, payment_status, total_price, created_at FROM orders WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC LIMIT 50"),
-      feedback_summary: await all("SELECT id, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, status, created_at FROM customer_feedback ORDER BY created_at DESC LIMIT 30"),
-      employees: await all("SELECT id, employee_id, name, department, employment_type FROM employees WHERE is_archived = 0"),
-      inventory: await all("SELECT id, name, category, unit, current_stock, max_stock, low_stock_threshold_percent FROM inventory_items WHERE is_archived = 0"),
-      tables: await all("SELECT id, table_number FROM tables"),
-      settings: await get("SELECT value FROM restaurant_settings WHERE key = 'work_hours'"),
+      // ── Menu ──────────────────────────────────────────────────
+      menu: await all(
+        "SELECT mi.id, mi.name, mi.description, mi.price, c.name as category_name, mi.is_available, mi.is_popular, mi.is_promo, mi.promo_label FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"
+      ),
+      categories: await all("SELECT id, name, display_order FROM categories ORDER BY display_order"),
+
+      // ── Orders ─────────────────────────────────────────────────
+      orders_today: await all(
+        "SELECT id, status, payment_status, total_price, order_type, customer_name, created_at FROM orders WHERE date(created_at) = date('now','localtime') ORDER BY created_at DESC"
+      ),
+      orders_this_week: await all(
+        "SELECT id, status, payment_status, total_price, order_type, created_at FROM orders WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC"
+      ),
+      top_sold_items: await all(
+        "SELECT mi.name, SUM(oi.quantity) as total_sold FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id JOIN orders o ON oi.order_id = o.id WHERE o.created_at >= datetime('now', '-30 days') GROUP BY mi.id, mi.name ORDER BY total_sold DESC LIMIT 15"
+      ),
+
+      // ── Revenue ────────────────────────────────────────────────
+      revenue_today: await get(
+        "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE date(created_at) = date('now','localtime') AND (payment_status = 'paid' OR status = 'archived')"
+      ),
+      revenue_this_week: await get(
+        "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= datetime('now', '-7 days') AND (payment_status = 'paid' OR status = 'archived')"
+      ),
+      revenue_this_month: await get(
+        "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= datetime('now', '-30 days') AND (payment_status = 'paid' OR status = 'archived')"
+      ),
+
+      // ── Feedback (no view_tokens) ─────────────────────────────
+      feedback_recent: await all(
+        "SELECT id, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, status, created_at FROM customer_feedback ORDER BY created_at DESC LIMIT 50"
+      ),
+      feedback_stats: await get(
+        "SELECT COUNT(*) as total, AVG(rating_staff) as avg_staff, AVG(rating_food) as avg_food, AVG(rating_atmosphere) as avg_atmosphere, AVG(rating_cleanliness) as avg_cleanliness, AVG(rating_app) as avg_app, AVG(rating_value) as avg_value FROM customer_feedback WHERE status = 'active'"
+      ),
+
+      // ── Employees (no contact_info) ───────────────────────────
+      employees: await all(
+        "SELECT id, employee_id, name, department, employment_type, salary, hire_date FROM employees WHERE is_archived = 0 ORDER BY department, name"
+      ),
+      employee_counts: await get(
+        "SELECT department, COUNT(*) as count FROM employees WHERE is_archived = 0 GROUP BY department"
+      ),
+
+      // ── Inventory ─────────────────────────────────────────────
+      inventory: await all(
+        "SELECT id, name, category, unit, current_stock, max_stock, low_stock_threshold_percent FROM inventory_items WHERE is_archived = 0 ORDER BY category, name"
+      ),
+      low_stock: await all(
+        "SELECT id, name, category, current_stock, max_stock FROM inventory_items WHERE is_archived = 0 AND (CAST(current_stock AS REAL) / CAST(max_stock AS REAL) * 100) <= low_stock_threshold_percent ORDER BY (CAST(current_stock AS REAL) / CAST(max_stock AS REAL)) ASC"
+      ),
+      recipes: await all(
+        "SELECT m.name as menu_item, i.name as ingredient, mi.quantity_required, i.unit FROM menu_item_ingredients mi JOIN menu_items m ON mi.menu_item_id = m.id JOIN inventory_items i ON mi.inventory_item_id = i.id ORDER BY m.name, i.name"
+      ),
+
+      // ── Tables (no qr_codes) ──────────────────────────────────
+      tables: await all("SELECT id, table_number FROM tables ORDER BY table_number"),
+
+      // ── Settings ──────────────────────────────────────────────
+      work_hours: await get("SELECT value FROM restaurant_settings WHERE key = 'work_hours'"),
+
+      // ── Activity ──────────────────────────────────────────────
+      recent_logs: await all(
+        "SELECT category, action, actor_name, target_name, timestamp FROM grand_archive_logs ORDER BY timestamp DESC LIMIT 20"
+      ),
+      assistance_today: await all(
+        "SELECT id, table_number, requested_at, acknowledged_at FROM staff_assistance_requests WHERE date(requested_at) = date('now','localtime') ORDER BY requested_at DESC"
+      ),
+
+      // ── Finance ───────────────────────────────────────────────
+      payment_methods: await all("SELECT id, name FROM payment_methods"),
+      archived_orders_count: await get(
+        "SELECT COUNT(*) as count FROM archived_orders WHERE date(archived_at) >= date('now', '-30 days')"
+      ),
     };
+
+    trackRequest();
 
     const messages = [{ role: "user", content: message }];
     const result = await generateChatResponse(messages, contextData);
@@ -523,11 +595,15 @@ exports.aiChat = async (req, res) => {
       return res.status(503).json({ success: false, error: result.reason });
     }
 
-    res.json({ success: true, response: result.response });
+    res.json({ success: true, response: result.response, usage: getUsage() });
   } catch (error) {
     console.error("AI chat error:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
+};
+
+exports.getChatUsage = async (req, res) => {
+  res.json(getUsage());
 };
 
 exports.setBroadcast = setBroadcast;
