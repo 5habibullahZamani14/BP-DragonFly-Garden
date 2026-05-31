@@ -206,7 +206,7 @@ export const InventoryTab = ({
     setSelectedMenuItem(menuItemId);
     const existingRecipe = recipes.find(r => r.id === menuItemId);
     if (existingRecipe) {
-        setEditingRecipe([...(existingRecipe.ingredients || [])]);
+      setEditingRecipe([...(existingRecipe.ingredients || [])]);
     } else {
       setEditingRecipe([]);
     }
