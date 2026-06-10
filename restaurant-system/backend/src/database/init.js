@@ -87,6 +87,10 @@ const ensureIndex = async (indexName, tableName, columns) => {
 };
 
 const initializeDatabase = async () => {
+  // ==========================================
+  // PHASE 1: CREATE BASE TABLES
+  // ==========================================
+
   /* Categories group menu items into sections like Mains, Beverages, etc. */
   await run(`
     CREATE TABLE IF NOT EXISTS categories (
@@ -163,93 +167,6 @@ const initializeDatabase = async () => {
     )
   `);
 
-  /*
-   * The ensureColumn calls below handle backwards compatibility. As the
-   * schema evolved during development, new columns were added to existing
-   * tables. These calls check for each column and add it if it is missing,
-   * so older database files are automatically brought up to date.
-   */
-  await ensureColumn("categories", "display_order", "INTEGER NOT NULL DEFAULT 0");
-  await ensureColumn("menu_items", "description", "TEXT");
-  await ensureColumn("menu_items", "is_available", "INTEGER NOT NULL DEFAULT 1");
-  await ensureColumn("menu_items", "image_url", "TEXT");
-  await ensureColumn("menu_items", "is_popular", "INTEGER NOT NULL DEFAULT 0");
-  await ensureColumn("menu_items", "is_promo", "INTEGER NOT NULL DEFAULT 0");
-  await ensureColumn("menu_items", "promo_label", "TEXT");
-  await ensureColumn("tables", "table_number", "TEXT");
-  await ensureColumn("tables", "qr_code", "TEXT");
-  await ensureColumn("orders", "status", "TEXT NOT NULL DEFAULT 'pending'");
-  await ensureColumn("orders", "total_price", "REAL NOT NULL DEFAULT 0");
-  await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
-  await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
-  await ensureColumn("orders", "daily_ticket_number", "INTEGER");
-  
-  /* External POS Order metadata fields */
-  await ensureColumn("orders", "order_type", "TEXT NOT NULL DEFAULT 'DINE_IN'");
-  await ensureColumn("orders", "customer_name", "TEXT");
-  await ensureColumn("orders", "customer_phone", "TEXT");
-  await ensureColumn("orders", "collection_time", "TEXT");
-  await ensureColumn("orders", "delivery_address", "TEXT");
-
-  /* Inventory unit conversion metadata fields */
-  await ensureColumn("inventory_items", "usage_unit", "TEXT");
-  await ensureColumn("inventory_items", "usage_conversion", "REAL DEFAULT 1.0");
-
-  await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
-  await ensureColumn("order_items", "notes", "TEXT");
-  /* item_status tracks individual dish readiness within an order. */
-  await ensureColumn("order_items", "item_status", "TEXT NOT NULL DEFAULT 'queue'");
-  /* These two columns track when customers and kitchen staff dismiss an order. */
-  await ensureColumn("orders", "customer_archived_at", "DATETIME");
-  await ensureColumn("orders", "kitchen_archived_at", "DATETIME");
-  await ensureColumn("order_status_history", "order_id", "INTEGER NOT NULL");
-  await ensureColumn("order_status_history", "status", "TEXT NOT NULL");
-  await ensureColumn("order_status_history", "changed_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
-  await ensureColumn("order_status_history", "changed_by", "TEXT");
-
-  /*
-   * Legacy migration: early versions used a column called "name" on the tables
-   * table. If that column still exists, copy its value into table_number before
-   * the rest of the app tries to use table_number exclusively.
-   */
-  const tableColumns = await all(`PRAGMA table_info(tables)`);
-  const hasLegacyNameColumn = tableColumns.some((column) => column.name === "name");
-
-  if (hasLegacyNameColumn) {
-    await run(`
-      UPDATE tables
-      SET table_number = COALESCE(table_number, name, 'Table ' || id)
-      WHERE table_number IS NULL OR TRIM(table_number) = ''
-    `);
-  } else {
-    await run(`
-      UPDATE tables
-      SET table_number = 'Table ' || id
-      WHERE table_number IS NULL OR TRIM(table_number) = ''
-    `);
-  }
-
-  /* Make sure every table row has a valid QR code. */
-  await run(`
-    UPDATE tables
-    SET qr_code = 'table-' || id
-    WHERE qr_code IS NULL OR TRIM(qr_code) = ''
-  `);
-
-  /* Ensure the virtual 'Counter Orders' table exists for POS takeaway/pickup/delivery. */
-  await run(`
-    INSERT OR IGNORE INTO tables (id, table_number, qr_code)
-    VALUES (999, 'Counter Order', 'counter-orders')
-  `);
-
-  /* Indexes to speed up the most common queries across the application. */
-  await ensureIndex("idx_menu_items_category_available", "menu_items", "category_id, is_available");
-  await ensureIndex("idx_orders_table_status_created", "orders", "table_id, status, created_at");
-  await ensureIndex("idx_orders_status_created", "orders", "status, created_at");
-  await ensureIndex("idx_order_items_order", "order_items", "order_id");
-  await ensureIndex("idx_order_items_menu_item", "order_items", "menu_item_id");
-  await ensureIndex("idx_tables_qr_code", "tables", "qr_code");
-
   /* Payment methods are the accepted ways to pay (Cash, Card, eWallet, etc.). */
   await run(`
     CREATE TABLE IF NOT EXISTS payment_methods (
@@ -310,18 +227,6 @@ const initializeDatabase = async () => {
     )
   `);
 
-  /* VAT and service charge columns on orders, added in a later development phase. */
-  await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
-  await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
-  await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
-  await ensureColumn("archived_orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
-  await ensureColumn("archived_orders", "daily_ticket_number", "INTEGER");
-
-  await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
-  await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");
-  await ensureIndex("idx_archived_orders_date", "archived_orders", "archived_at DESC");
-  await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
-
   /*
    * Staff assistance requests are created when customers press Call Staff.
    * Current-day requests stay visible to the payment counter; older requests
@@ -339,7 +244,6 @@ const initializeDatabase = async () => {
       archived_at DATETIME
     )
   `);
-  await ensureIndex("idx_staff_assistance_today", "staff_assistance_requests", "requested_at DESC, archived_at, acknowledged_at");
 
   /*
    * Customer feedback — private to sender (view_token) and manager dashboard.
@@ -406,13 +310,6 @@ const initializeDatabase = async () => {
     )
   `);
 
-  await ensureIndex("idx_customer_feedback_created", "customer_feedback", "created_at DESC");
-  await ensureIndex("idx_customer_feedback_status", "customer_feedback", "status, created_at DESC");
-  await ensureIndex("idx_feedback_findings_run", "feedback_analysis_findings", "run_id, status");
-  
-  // Add analysis_method column for AI vs rule-based tracking
-  await ensureColumn("feedback_analysis_runs", "analysis_method", "TEXT NOT NULL DEFAULT 'rule_based'");
-
   /*
    * restaurant_settings stores configuration values as key-value pairs.
    * Currently used for work_hours (when the payment counter is active)
@@ -457,7 +354,6 @@ const initializeDatabase = async () => {
       is_archived INTEGER NOT NULL DEFAULT 0
     )
   `);
-  await ensureColumn("inventory_items", "unit_cost", "REAL DEFAULT 0");
 
   /*
    * menu_item_ingredients links menu items to the inventory items they consume.
@@ -495,8 +391,114 @@ const initializeDatabase = async () => {
     )
   `);
 
+  // ==========================================
+  // PHASE 2: COLUMN MIGRATIONS (ensureColumn)
+  // ==========================================
+
+  await ensureColumn("categories", "display_order", "INTEGER NOT NULL DEFAULT 0");
+
+  await ensureColumn("menu_items", "description", "TEXT");
+  await ensureColumn("menu_items", "is_available", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn("menu_items", "image_url", "TEXT");
+  await ensureColumn("menu_items", "is_popular", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("menu_items", "is_promo", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("menu_items", "promo_label", "TEXT");
+
+  await ensureColumn("tables", "table_number", "TEXT");
+  await ensureColumn("tables", "qr_code", "TEXT");
+
+  await ensureColumn("orders", "status", "TEXT NOT NULL DEFAULT 'pending'");
+  await ensureColumn("orders", "total_price", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn("orders", "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumn("orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
+  await ensureColumn("orders", "daily_ticket_number", "INTEGER");
+  await ensureColumn("orders", "order_type", "TEXT NOT NULL DEFAULT 'DINE_IN'");
+  await ensureColumn("orders", "customer_name", "TEXT");
+  await ensureColumn("orders", "customer_phone", "TEXT");
+  await ensureColumn("orders", "collection_time", "TEXT");
+  await ensureColumn("orders", "delivery_address", "TEXT");
+  await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
+  await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
+  await ensureColumn("orders", "customer_archived_at", "DATETIME");
+  await ensureColumn("orders", "kitchen_archived_at", "DATETIME");
+
+  await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn("order_items", "notes", "TEXT");
+  await ensureColumn("order_items", "item_status", "TEXT NOT NULL DEFAULT 'queue'");
+
+  await ensureColumn("order_status_history", "order_id", "INTEGER NOT NULL");
+  await ensureColumn("order_status_history", "status", "TEXT NOT NULL");
+  await ensureColumn("order_status_history", "changed_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumn("order_status_history", "changed_by", "TEXT");
+
+  await ensureColumn("archived_orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
+  await ensureColumn("archived_orders", "daily_ticket_number", "INTEGER");
+
+  await ensureColumn("feedback_analysis_runs", "analysis_method", "TEXT NOT NULL DEFAULT 'rule_based'");
+
+  await ensureColumn("inventory_items", "unit_cost", "REAL DEFAULT 0");
+  await ensureColumn("inventory_items", "usage_unit", "TEXT");
+  await ensureColumn("inventory_items", "usage_conversion", "REAL DEFAULT 1.0");
+
+  // ==========================================
+  // PHASE 3: INDEX CREATION
+  // ==========================================
+
+  await ensureIndex("idx_menu_items_category_available", "menu_items", "category_id, is_available");
+  await ensureIndex("idx_orders_table_status_created", "orders", "table_id, status, created_at");
+  await ensureIndex("idx_orders_status_created", "orders", "status, created_at");
+  await ensureIndex("idx_order_items_order", "order_items", "order_id");
+  await ensureIndex("idx_order_items_menu_item", "order_items", "menu_item_id");
+  await ensureIndex("idx_tables_qr_code", "tables", "qr_code");
+  await ensureIndex("idx_payments_order", "payments", "order_id, payment_date DESC");
+  await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");
+  await ensureIndex("idx_archived_orders_date", "archived_orders", "archived_at DESC");
+  await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
+  await ensureIndex("idx_staff_assistance_today", "staff_assistance_requests", "requested_at DESC, archived_at, acknowledged_at");
+  await ensureIndex("idx_customer_feedback_created", "customer_feedback", "created_at DESC");
+  await ensureIndex("idx_customer_feedback_status", "customer_feedback", "status, created_at DESC");
+  await ensureIndex("idx_feedback_findings_run", "feedback_analysis_findings", "run_id, status");
   await ensureIndex("idx_grand_archive_logs_category", "grand_archive_logs", "category, timestamp DESC");
   await ensureIndex("idx_employees_id", "employees", "employee_id");
+
+  // ==========================================
+  // PHASE 4: LEGACY DATA MIGRATIONS & SEED PREPARATION
+  // ==========================================
+
+  /*
+   * Legacy migration: early versions used a column called "name" on the tables
+   * table. If that column still exists, copy its value into table_number before
+   * the rest of the app tries to use table_number exclusively.
+   */
+  const tableColumns = await all(`PRAGMA table_info(tables)`);
+  const hasLegacyNameColumn = tableColumns.some((column) => column.name === "name");
+
+  if (hasLegacyNameColumn) {
+    await run(`
+      UPDATE tables
+      SET table_number = COALESCE(table_number, name, 'Table ' || id)
+      WHERE table_number IS NULL OR TRIM(table_number) = ''
+    `);
+  } else {
+    await run(`
+      UPDATE tables
+      SET table_number = 'Table ' || id
+      WHERE table_number IS NULL OR TRIM(table_number) = ''
+    `);
+  }
+
+  /* Make sure every table row has a valid QR code. */
+  await run(`
+    UPDATE tables
+    SET qr_code = 'table-' || id
+    WHERE qr_code IS NULL OR TRIM(qr_code) = ''
+  `);
+
+  /* Ensure the virtual 'Counter Orders' table exists for POS takeaway/pickup/delivery. */
+  await run(`
+    INSERT OR IGNORE INTO tables (id, table_number, qr_code)
+    VALUES (999, 'Counter Order', 'counter-orders')
+  `);
 
   /* Insert the default work hours setting if it has not been configured yet. */
   await run(`
