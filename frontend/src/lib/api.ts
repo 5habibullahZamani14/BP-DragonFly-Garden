@@ -33,7 +33,7 @@ export type Order = BaseOrder & {
  * defaults to http://localhost:5000, matching the Express dev server port.
  * In production on the Raspberry Pi it is set to the device's LAN address.
  */
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 /*
  * apiUrl builds the full request URL. When a qrCode is provided it appends
