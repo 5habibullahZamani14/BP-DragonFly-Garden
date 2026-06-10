@@ -54,7 +54,7 @@ const uploadToCloud = async (filePath) => {
 };
 
 const executeNightlyCloudBackup = async () => {
-  const dbPath = path.join(__dirname, "../../database/database.sqlite");
+  const dbPath = path.join(__dirname, "../database/database.sqlite");
   const backupDir = path.join(__dirname, "../../../backups");
 
   if (!fs.existsSync(backupDir)) {
