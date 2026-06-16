@@ -1,0 +1,17 @@
+{
+  "name": "DragonFly Garden",
+  "short_name": "DragonFly",
+  "description": "DragonFly Garden Management & Ordering",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/bp-dragonfly-garden-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

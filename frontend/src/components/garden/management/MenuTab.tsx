@@ -561,6 +561,7 @@ export function MenuTab() {
   const [variationsTab, setVariationsTab] = useState(false);
   const cropperRef = useRef<ReactCropperElement>(null);
   const patternInputRef = useRef<HTMLInputElement | null>(null);
+  const [patterns, setPatterns] = useState<Pattern[]>([]);
 
   const selectedPatternImage = editingItem?.pattern_image_url
     || patterns.find(p => p.id === editingItem?.pattern_id)?.image_url
@@ -575,7 +576,6 @@ export function MenuTab() {
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [assignDraft, setAssignDraft] = useState<Record<number, Set<number>>>({});
   const [assignSaving, setAssignSaving] = useState<number | null>(null);
-  const [patterns, setPatterns] = useState<Pattern[]>([]);
 
   // ── DnD sensors
   const sensors = useSensors(

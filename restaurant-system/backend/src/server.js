@@ -84,6 +84,16 @@ app.use(express.json({ limit: "100kb" }));
 app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
 app.use("/feedback-images", express.static(path.resolve(__dirname, "../../../frontend/public/feedback-images")));
 
+app.use((req, res, next) => {
+  const noStorePaths = new Set(["/", "/index.html", "/sw.js", "/registerSW.js", "/manifest.webmanifest"]);
+  if (noStorePaths.has(req.path)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
 /*
  * The role-detection middleware runs on every request before any route handler.
  * It inspects the qr_code query parameter, figures out what role the caller
