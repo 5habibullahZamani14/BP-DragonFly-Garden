@@ -22,10 +22,12 @@ const managementController = require("../controllers/managementController");
 const menuController = require("../controllers/menuController");
 const { createCategory, updateCategory, deleteCategory, reorderCategories } = menuController;
 const {
-  getAllModifierGroups, getItemModifiers,
+  getAllModifierGroups, getItemModifiers, getItemOptions,
   createModifierGroup, updateModifierGroup, deleteModifierGroup,
   createModifierOption, updateModifierOption, deleteModifierOption,
   assignModifierGroup, unassignModifierGroup, setDefaultOption,
+  createOptionGroup, updateOptionGroup, deleteOptionGroup,
+  createOption, updateOption, deleteOption,
 } = menuController;
 
 
