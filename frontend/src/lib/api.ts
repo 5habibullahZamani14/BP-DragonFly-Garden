@@ -322,8 +322,39 @@ export const uploadMenuItemImage = async (id: number, file: Blob) => {
   });
 };
 
-export const fetchCategories = async () =>
-  safeFetch<{id: number; name: string}[]>("/menu/categories");
+export interface Category {
+  id: number;
+  name: string;
+  display_order: number;
+}
+
+export const fetchCategories = async (): Promise<Category[]> =>
+  safeFetch<Category[]>("/menu/categories");
+
+export const createCategory = async (name: string): Promise<Category> =>
+  safeFetch<Category>("/management/categories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+
+export const updateCategory = async (id: number, data: { name?: string; display_order?: number }): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/categories/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteCategory = async (id: number): Promise<{ success: boolean; fallback_category_id: number }> =>
+  safeFetch<{ success: boolean; fallback_category_id: number }>(`/management/categories/${id}`, { method: "DELETE" });
+
+export const reorderCategories = async (order: { id: number; display_order: number }[]): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>("/management/categories/reorder", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order }),
+  });
+
 
 /*
  * fetchTable looks up a table by QR code. If the server returns nothing

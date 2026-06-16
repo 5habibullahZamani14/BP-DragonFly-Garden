@@ -368,4 +368,117 @@ const uploadMenuItemImage = async (req, res) => {
   }
 };
 
-module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage, setBroadcast };
+/*
+ * createCategory — Adds a new menu section. display_order is assigned as the
+ * current maximum + 1 so new sections always appear at the bottom of the list.
+ */
+const createCategory = async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Category name is required." });
+  }
+  try {
+    const maxRow = await all(`SELECT MAX(display_order) as maxOrder FROM categories`);
+    const nextOrder = (maxRow[0]?.maxOrder ?? 0) + 1;
+    const result = await run(
+      `INSERT INTO categories (name, display_order) VALUES (?, ?)`,
+      [name.trim(), nextOrder]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "category_created" } });
+    res.json({ id: result.lastID, name: name.trim(), display_order: nextOrder });
+  } catch (error) {
+    if (error.message.includes("UNIQUE")) {
+      return res.status(409).json({ error: "A section with that name already exists." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/*
+ * updateCategory — Renames a category and/or changes its display_order.
+ * At least one of name or display_order must be provided.
+ */
+const updateCategory = async (req, res) => {
+  const { id } = req.params;
+  const { name, display_order } = req.body;
+  try {
+    if (name !== undefined) {
+      await run(`UPDATE categories SET name = ? WHERE id = ?`, [name.trim(), id]);
+    }
+    if (display_order !== undefined) {
+      await run(`UPDATE categories SET display_order = ? WHERE id = ?`, [display_order, id]);
+    }
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "category_updated", id } });
+    res.json({ success: true });
+  } catch (error) {
+    if (error.message.includes("UNIQUE")) {
+      return res.status(409).json({ error: "A section with that name already exists." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/*
+ * deleteCategory — Deletes a category. Before deleting, any items that belong
+ * to this category are moved to a special "Uncategorised" fallback category,
+ * which is created automatically if it does not yet exist. This ensures no
+ * menu items are ever lost when a section is removed.
+ */
+const deleteCategory = async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Ensure the fallback "Uncategorised" category exists
+    let fallback = await all(`SELECT id FROM categories WHERE name = 'Uncategorised' LIMIT 1`);
+    let fallbackId;
+    if (fallback.length === 0) {
+      const maxRow = await all(`SELECT MAX(display_order) as maxOrder FROM categories`);
+      const nextOrder = (maxRow[0]?.maxOrder ?? 0) + 1;
+      const ins = await run(
+        `INSERT INTO categories (name, display_order) VALUES ('Uncategorised', ?)`,
+        [nextOrder]
+      );
+      fallbackId = ins.lastID;
+    } else {
+      fallbackId = fallback[0].id;
+    }
+
+    // Move orphaned items to the fallback category
+    await run(`UPDATE menu_items SET category_id = ? WHERE category_id = ?`, [fallbackId, id]);
+
+    // Delete the category
+    await run(`DELETE FROM categories WHERE id = ?`, [id]);
+
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "category_deleted", id } });
+    res.json({ success: true, fallback_category_id: fallbackId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/*
+ * reorderCategories — Accepts an array of { id, display_order } objects and
+ * updates each category's display_order in a single transaction. This is called
+ * when the manager drags or uses arrow buttons to change section ordering.
+ */
+const reorderCategories = async (req, res) => {
+  const { order } = req.body; // [{ id, display_order }, ...]
+  if (!Array.isArray(order) || order.length === 0) {
+    return res.status(400).json({ error: "order array is required." });
+  }
+  try {
+    for (const item of order) {
+      await run(`UPDATE categories SET display_order = ? WHERE id = ?`, [item.display_order, item.id]);
+    }
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "categories_reordered" } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage, setBroadcast, createCategory, updateCategory, deleteCategory, reorderCategories };
+

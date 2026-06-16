@@ -20,6 +20,7 @@
 const express = require("express");
 const managementController = require("../controllers/managementController");
 const menuController = require("../controllers/menuController");
+const { createCategory, updateCategory, deleteCategory, reorderCategories } = menuController;
 const feedbackController = require("../controllers/feedbackController");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
@@ -137,6 +138,13 @@ router.post("/menu", menuController.createMenuItem);
 router.put("/menu/:id", menuController.updateMenuItem);
 router.delete("/menu/:id", menuController.deleteMenuItem);
 router.post("/menu/:id/image", upload.single("image"), menuController.uploadMenuItemImage);
+
+// ── Category (Section) Management ────────────────────────────────────────────
+
+router.post("/categories", createCategory);
+router.put("/categories/reorder", reorderCategories);   // must be before /:id
+router.put("/categories/:id", updateCategory);
+router.delete("/categories/:id", deleteCategory);
 
 /*
  * GET /management/finance

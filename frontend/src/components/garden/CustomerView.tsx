@@ -45,6 +45,7 @@ import {
   fetchMenu,
   fetchTable,
   fetchSettings,
+  fetchCategories,
   placeOrder,
   refreshOrder,
   fetchActiveOrdersForTable,
@@ -55,6 +56,7 @@ import {
   type MenuItem,
   type Order,
   type Recommendation,
+  type Category,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
@@ -156,6 +158,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Tax settings from backend
   const [taxSettings, setTaxSettings] = useState({ sstEnabled: true, sstRate: 0.06, scEnabled: true, scRate: 0.10 });
 
+  // Categories fetched from API (ordered by display_order)
+  const [categoriesFromApi, setCategoriesFromApi] = useState<Category[]>([]);
+
   useEffect(() => {
     sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
   }, [archivedOrders, qrCode]);
@@ -198,16 +203,17 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     return () => { alive = false; };
   }, [cartOpen, cart.length, qrCode]);
 
-  // Load menu + table + tax settings, then restore any active orders from the DB
+  // Load menu + table + tax settings + categories, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const [m, t, settings] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings()]);
+        const [m, t, settings, cats] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings(), fetchCategories()]);
         if (!alive) return;
         setMenu(m);
         setTableInfo(t);
+        setCategoriesFromApi(cats.sort((a, b) => a.display_order - b.display_order));
         // Load tax settings
         const sstEnabled = settings?.sst_enabled !== false && settings?.sst_enabled !== 'false';
         const scEnabled = settings?.service_charge_enabled !== false && settings?.service_charge_enabled !== 'false';
@@ -350,7 +356,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     };
   }, [tableInfo, t]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(menu.map((i) => i.category_name)))], [menu]);
+  // Categories for the sidebar: from API (already ordered), fallback to deriving from menu
+  const categories = useMemo(() => {
+    if (categoriesFromApi.length > 0) {
+      // Only include categories that actually have visible items
+      const namesWithItems = new Set(menu.map(i => i.category_name));
+      return ["All", ...categoriesFromApi.filter(c => namesWithItems.has(c.name)).map(c => c.name)];
+    }
+    return ["All", ...Array.from(new Set(menu.map(i => i.category_name)))];
+  }, [menu, categoriesFromApi]);
+
   const categoryLabel = (name: string) => {
     const keys: Record<string, string> = {
       All: "customer.catAll",
@@ -1051,8 +1066,85 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <p className="font-display text-lg text-foreground/60">{t("customer.noMatches")}</p>
             <p className="mt-1 text-sm text-foreground/40">{t("customer.tryDifferentSearch")}</p>
           </div>
+        ) : category === "All" ? (
+          /* ── GROUPED VIEW: show section headings when "All" is selected ── */
+          <div className="space-y-8">
+            {(() => {
+              // Build an ordered list of category names that have visible items
+              const orderedCatNames = categoriesFromApi.length > 0
+                ? categoriesFromApi.map(c => c.name).filter(name => filtered.some(i => i.category_name === name))
+                : Array.from(new Set(filtered.map(i => i.category_name)));
+              // Items with no matched category go last under their own name
+              const seenCats = new Set(orderedCatNames);
+              filtered.forEach(i => { if (!seenCats.has(i.category_name)) orderedCatNames.push(i.category_name); });
+
+              return orderedCatNames.map(catName => {
+                const sectionItems = filtered.filter(i => i.category_name === catName);
+                if (sectionItems.length === 0) return null;
+                return (
+                  <div key={catName}>
+                    {/* Section heading */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex flex-col">
+                        <h3 className="font-display text-[1.1rem] font-bold leading-tight">{categoryLabel(catName)}</h3>
+                        <div className="h-0.5 w-10 bg-accent/60 rounded-full mt-1" />
+                      </div>
+                      <span className="text-xs text-foreground/40 font-medium">{sectionItems.length} {t("customer.items")}</span>
+                    </div>
+                    <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {sectionItems.map((item, idx) => (
+                        <li
+                          key={item.id}
+                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''}`}
+                          style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
+                        >
+                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5">
+                            {item.image_url ? (
+                              <img src={item.image_url} alt={item.name} loading="lazy"
+                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center"
+                                style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
+                                <Leaf className="h-7 w-7 text-leaf/60" />
+                              </div>
+                            )}
+                            {item.is_popular && (
+                              <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
+                                <Star className="h-2.5 w-2.5 fill-current" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="font-display text-[1rem] font-semibold leading-tight">
+                                {item.name}
+                                {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
+                              </h3>
+                            </div>
+                            <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
+                              {item.description || t("customer.descriptionFallback")}
+                            </p>
+                            <div className="mt-auto flex items-end justify-between pt-2">
+                              <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
+                              <button
+                                disabled={item.is_sold_out}
+                                onClick={() => addToCart(item)}
+                                className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
+                              >
+                                {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         ) : (
-          /* Refined "row" cards inspired by Foodpanda/KFC menu lists */
+          /* ── FLAT VIEW: a specific category is selected ── */
           <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((item, idx) => (
               <li
@@ -1060,8 +1152,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''}`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
-                {/* winged accent removed per request */}
-                {/* image */}
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5">
                   {item.image_url ? (
                     <img src={item.image_url} alt={item.name} loading="lazy"
@@ -1078,8 +1168,6 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </span>
                   )}
                 </div>
-
-                {/* content */}
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-display text-[1rem] font-semibold leading-tight">
