@@ -148,6 +148,14 @@ router.post("/menu", menuController.createMenuItem);
 router.put("/menu/:id", menuController.updateMenuItem);
 router.delete("/menu/:id", menuController.deleteMenuItem);
 router.post("/menu/:id/image", upload.single("image"), menuController.uploadMenuItemImage);
+router.post("/menu/:id/pattern", upload.single("image"), menuController.uploadMenuItemPatternImage);
+router.put("/menu/:id/pattern", menuController.updateMenuItemPattern);
+router.post("/menu/apply-default-card-size", menuController.applyDefaultCardSize);
+
+// ── Pattern Assets Management ───────────────────────────────────────────────
+router.get("/patterns", menuController.getPatterns);
+router.post("/patterns", upload.single("image"), menuController.createPattern);
+router.delete("/patterns/:id", menuController.deletePattern);
 
 // ── Category (Section) Management ────────────────────────────────────────────
 

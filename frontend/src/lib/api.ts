@@ -263,11 +263,20 @@ export interface MenuItem {
   category_id: number;
   category_name: string;
   image_url: string | null;
+  pattern_id?: number | null;
+  pattern_image_url?: string | null;
+  default_pattern_image_url?: string | null;
   is_available: boolean;
   is_popular: boolean;
   is_promo: boolean;
   promo_label: string | null;
   is_sold_out?: boolean;
+}
+
+export interface Pattern {
+  id: number;
+  name: string;
+  image_url: string;
 }
 
 export interface Recommendation {
@@ -290,10 +299,12 @@ export type MenuItemPayload = {
   price: number;
   category_id: number;
   image_url?: string;
+  pattern_id?: number | null;
   is_available?: boolean;
   is_popular?: boolean;
   is_promo?: boolean;
   promo_label?: string;
+  card_size?: "normal" | "large" | "extra_large";
 };
 
 export const createMenuItem = async (data: MenuItemPayload) =>
@@ -321,6 +332,38 @@ export const uploadMenuItemImage = async (id: number, file: Blob) => {
     body: formData,
   });
 };
+
+export const applyDefaultCardSize = async (card_size: "normal" | "large" | "extra_large") =>
+  safeFetch<{ success: boolean }>(`/management/menu/apply-default-card-size`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ card_size })
+  });
+
+export const fetchPatterns = async (): Promise<Pattern[]> =>
+  safeFetch<Pattern[]>("/management/patterns");
+
+export const uploadMenuItemPatternImage = async (id: number, file: Blob, name?: string) => {
+  const formData = new FormData();
+  formData.append("image", file, name || "pattern.jpg");
+  return safeFetch<{ success: boolean; pattern_id: number; image_url: string }>(`/management/menu/${id}/pattern`, {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const createPattern = async (file: Blob, name?: string) => {
+  const formData = new FormData();
+  formData.append("image", file, name || "pattern.jpg");
+  if (name) formData.append("name", name);
+  return safeFetch<{ success: boolean; pattern: Pattern }>(`/management/patterns`, {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const deletePattern = async (id: number) =>
+  safeFetch<{ success: boolean }>(`/management/patterns/${id}`, { method: "DELETE" });
 
 export interface Category {
   id: number;

@@ -1197,6 +1197,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 <Leaf className="h-7 w-7 text-leaf/60" />
                               </div>
                             )}
+                            {(item.pattern_image_url || item.default_pattern_image_url) && (
+                              <img
+                                src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                                alt="Pattern overlay"
+                                className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none"
+                              />
+                            )}
                             {item.is_popular && (
                               <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
                                 <Star className="h-2.5 w-2.5 fill-current" />

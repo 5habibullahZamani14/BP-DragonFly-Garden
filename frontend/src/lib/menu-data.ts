@@ -41,6 +41,7 @@ export type MenuItem = {
   is_promo?: boolean;
   promo_label?: string;
   is_available?: boolean;
+  card_size?: "normal" | "large" | "extra_large";
   is_sold_out?: boolean;
   option_groups?: ItemOptionGroup[];
 };

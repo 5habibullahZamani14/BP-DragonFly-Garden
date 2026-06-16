@@ -110,7 +110,19 @@ const initializeDatabase = async () => {
       category_id INTEGER NOT NULL,
       is_available INTEGER NOT NULL DEFAULT 1,
       image_url TEXT,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+      pattern_id INTEGER,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+      FOREIGN KEY (pattern_id) REFERENCES patterns(id) ON DELETE SET NULL
+    )
+  `);
+
+  /* Pattern assets represent decorative overlays managers can apply to menu cards. */
+  await run(`
+    CREATE TABLE IF NOT EXISTS patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      image_url TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -432,9 +444,20 @@ const initializeDatabase = async () => {
   await ensureColumn("menu_items", "description", "TEXT");
   await ensureColumn("menu_items", "is_available", "INTEGER NOT NULL DEFAULT 1");
   await ensureColumn("menu_items", "image_url", "TEXT");
+  await ensureColumn("menu_items", "pattern_id", "INTEGER");
   await ensureColumn("menu_items", "is_popular", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("menu_items", "is_promo", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("menu_items", "promo_label", "TEXT");
+  await ensureColumn("menu_items", "card_size", "TEXT NOT NULL DEFAULT 'normal'");
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS patterns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      image_url TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
   await ensureColumn("tables", "table_number", "TEXT");
   await ensureColumn("tables", "qr_code", "TEXT");

@@ -83,9 +83,13 @@ const getMenu = async (req, res) => {
       menu_items.price,
       menu_items.is_available,
       menu_items.image_url,
+      menu_items.pattern_id,
+      patterns.image_url AS pattern_image_url,
+      patterns.name AS pattern_name,
       menu_items.is_popular,
       menu_items.is_promo,
       menu_items.promo_label,
+      menu_items.card_size,
       (
         SELECT CASE WHEN MIN(ii.current_stock - (mii.quantity_required / COALESCE(ii.usage_conversion, 1.0))) < 0 THEN 1 ELSE 0 END
         FROM menu_item_ingredients mii
@@ -96,19 +100,32 @@ const getMenu = async (req, res) => {
       categories.name as category,
       categories.name as category_name
     FROM menu_items
+    LEFT JOIN patterns ON menu_items.pattern_id = patterns.id
     INNER JOIN categories ON menu_items.category_id = categories.id
     WHERE menu_items.is_available = 1
     ORDER BY categories.display_order ASC, menu_items.name ASC
   `;
 
   try {
+    const settingsRows = await all(`SELECT value FROM restaurant_settings WHERE key = ?`, ["default_pattern_id"]);
+    let defaultPatternImage = null;
+    if (settingsRows.length > 0) {
+      const parsedId = parseInt(settingsRows[0].value, 10);
+      if (!Number.isNaN(parsedId)) {
+        const patternRows = await all(`SELECT image_url FROM patterns WHERE id = ?`, [parsedId]);
+        if (patternRows.length > 0) defaultPatternImage = patternRows[0].image_url;
+      }
+    }
+
     const rows = await all(query);
     const normalized = rows.map((row) => ({
       ...row,
       is_available: !!row.is_available,
       is_popular: !!row.is_popular,
       is_promo: !!row.is_promo,
-      is_sold_out: !!row.is_sold_out
+      is_sold_out: !!row.is_sold_out,
+      card_size: row.card_size || 'normal',
+      default_pattern_image_url: defaultPatternImage,
     }));
 
     // Attach global modifier groups (assigned to each item) + their options
@@ -319,12 +336,12 @@ const getRecommendations = async (req, res) => {
 };
 
 const createMenuItem = async (req, res) => {
-  const { name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
   try {
     const result = await run(
-      `INSERT INTO menu_items (name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description || '', price, category_id, image_url || '', is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '']
+      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description || '', price, category_id, image_url || '', pattern_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal']
     );
     
     // Emit WebSocket event for menu update
@@ -341,13 +358,13 @@ const createMenuItem = async (req, res) => {
 
 const updateMenuItem = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, image_url, is_available, is_popular, is_promo, promo_label } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
   try {
     await run(
       `UPDATE menu_items 
-       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label)
+       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size)
        WHERE id = ?`,
-      [name, description, price, category_id, image_url, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, id]
+      [name, description, price, category_id, image_url, pattern_id !== undefined ? pattern_id : null, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, card_size, id]
     );
     
     // Emit WebSocket event for menu update
@@ -384,6 +401,19 @@ const deleteMenuItem = async (req, res) => {
   }
 };
 
+/** applyDefaultCardSize — Bulk update all menu items to a given card size (management action) */
+const applyDefaultCardSize = async (req, res) => {
+  const { card_size } = req.body;
+  const allowed = ["normal", "large", "extra_large"];
+  if (!allowed.includes(card_size)) return res.status(400).json({ error: "Invalid card_size" });
+  try {
+    await run(`UPDATE menu_items SET card_size = ?`, [card_size]);
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "card_size_applied" } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
 const uploadMenuItemImage = async (req, res) => {
   const { id } = req.params;
   if (!req.file) {
@@ -401,13 +431,127 @@ const uploadMenuItemImage = async (req, res) => {
       await deleteMenuImageIfUnused(oldImageUrl, id);
     }
 
-    // Emit WebSocket event for menu update
     const broadcast = getBroadcast();
     if (broadcast) {
       broadcast({ type: "MENU_UPDATE", payload: { id } });
     }
 
     res.json({ success: true, image_url: newImageUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const createPattern = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No pattern image provided." });
+  }
+
+  try {
+    const imageUrl = `/menu-images/${req.file.filename}`;
+    const patternName = req.body.name ? String(req.body.name).trim() : `pattern-${Date.now()}`;
+    const result = await run(
+      `INSERT INTO patterns (name, image_url) VALUES (?, ?)`,
+      [patternName || `pattern-${Date.now()}`, imageUrl]
+    );
+
+    const pattern = { id: result.lastID, name: patternName, image_url: imageUrl };
+    res.json({ success: true, pattern });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getPatterns = async (req, res) => {
+  try {
+    const rows = await all(`SELECT id, name, image_url FROM patterns ORDER BY created_at DESC`);
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deletePatternImageIfUnused = async (imageUrl, excludePatternId = null) => {
+  if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
+
+  const params = [imageUrl];
+  let sql = `SELECT id FROM patterns WHERE image_url = ?`;
+  if (excludePatternId != null) {
+    sql += ` AND id != ?`;
+    params.push(excludePatternId);
+  }
+
+  const stillUsed = await all(sql, params);
+  if (stillUsed.length > 0) return;
+
+  const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
+      console.error("Error deleting pattern image:", e);
+    }
+  }
+};
+
+const deletePattern = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await all(`SELECT image_url FROM patterns WHERE id = ?`, [id]);
+    const oldImageUrl = existing.length > 0 ? existing[0].image_url : null;
+    await run(`UPDATE menu_items SET pattern_id = NULL WHERE pattern_id = ?`, [id]);
+    await run(`DELETE FROM patterns WHERE id = ?`, [id]);
+    if (oldImageUrl) {
+      await deletePatternImageIfUnused(oldImageUrl, id);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const uploadMenuItemPatternImage = async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No pattern image provided." });
+  }
+
+  try {
+    const existing = await all(`SELECT pattern_id FROM menu_items WHERE id = ?`, [id]);
+    const oldPatternId = existing.length > 0 ? existing[0].pattern_id : null;
+    const imageUrl = `/menu-images/${req.file.filename}`;
+
+    const patternResult = await run(
+      `INSERT INTO patterns (name, image_url) VALUES (?, ?)`,
+      [req.body.name || `pattern-${Date.now()}`, imageUrl]
+    );
+
+    await run(`UPDATE menu_items SET pattern_id = ? WHERE id = ?`, [patternResult.lastID, id]);
+
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
+    }
+
+    res.json({ success: true, pattern_id: patternResult.lastID, image_url: imageUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateMenuItemPattern = async (req, res) => {
+  const { id } = req.params;
+  const { pattern_id } = req.body;
+
+  try {
+    await run(`UPDATE menu_items SET pattern_id = ? WHERE id = ?`, [pattern_id || null, id]);
+
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
+    }
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -850,6 +994,8 @@ const getItemOptions = async (req, res) => {
 module.exports = {
   getMenu, getCategories, recomputePopular, getRecommendations,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
+  createPattern, getPatterns, deletePattern,
+  uploadMenuItemPatternImage, updateMenuItemPattern,
   setBroadcast,
   createCategory, updateCategory, deleteCategory, reorderCategories,
   // Global modifier library
@@ -860,6 +1006,7 @@ module.exports = {
   // Legacy item option groups
   createOptionGroup, updateOptionGroup, deleteOptionGroup,
   createOption, updateOption, deleteOption,
+  applyDefaultCardSize,
 };
 
 

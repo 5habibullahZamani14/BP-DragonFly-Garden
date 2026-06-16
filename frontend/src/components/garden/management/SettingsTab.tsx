@@ -17,8 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, BackupFile } from "@/lib/api";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, applyDefaultCardSize, fetchPatterns, BackupFile } from "@/lib/api";
 import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle, Percent } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -59,6 +60,12 @@ export const SettingsTab = () => {
   const [scPercent, setScPercent] = useState("10");
   const [taxSaved, setTaxSaved] = useState(false);
   const [taxSaving, setTaxSaving] = useState(false);
+  const [defaultCardSize, setDefaultCardSize] = useState<"normal"|"large"|"extra_large">("normal");
+  const [cardSizeSaved, setCardSizeSaved] = useState(false);
+  const [applyingCardSize, setApplyingCardSize] = useState(false);
+  const [patterns, setPatterns] = useState<{ id: number; name: string; image_url: string }[]>([]);
+  const [defaultPatternId, setDefaultPatternId] = useState<number | null>(null);
+  const [defaultPatternSaved, setDefaultPatternSaved] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -74,6 +81,7 @@ export const SettingsTab = () => {
       const data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
       if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
+      if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
       // Load tax settings
       setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
       setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
@@ -81,6 +89,16 @@ export const SettingsTab = () => {
       setScPercent(data?.service_charge_rate !== undefined ? String(Math.round(parseFloat(String(data.service_charge_rate)) * 100)) : "10");
     } catch (e) { console.error("Settings load failed", e); }
     finally { setHoursLoading(false); }
+
+    try {
+      const patternsData = await fetchPatterns();
+      setPatterns(patternsData || []);
+      if (data?.default_pattern_id) {
+        setDefaultPatternId(Number(data.default_pattern_id));
+      }
+    } catch (e) {
+      console.error("Failed to load default patterns", e);
+    }
 
     try {
       const p = await fetchManagerProfile();
@@ -115,6 +133,47 @@ export const SettingsTab = () => {
     } finally {
       setTaxSaving(false);
     }
+  };
+
+  const saveDefaultCardSize = async () => {
+    try {
+      await updateSetting("default_card_size", defaultCardSize);
+      setCardSizeSaved(true);
+      setTimeout(() => setCardSizeSaved(false), 2500);
+    } catch (e) { console.error(e); }
+  };
+
+  const saveDefaultPattern = async () => {
+    try {
+      await updateSetting("default_pattern_id", defaultPatternId);
+      setDefaultPatternSaved(true);
+      setTimeout(() => setDefaultPatternSaved(false), 2500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const clearDefaultPattern = async () => {
+    try {
+      await updateSetting("default_pattern_id", null);
+      setDefaultPatternId(null);
+      setDefaultPatternSaved(true);
+      setTimeout(() => setDefaultPatternSaved(false), 2500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleApplyCardSizeToAll = async () => {
+    if (!confirm("Apply this card size to ALL menu items? This cannot be undone.")) return;
+    setApplyingCardSize(true);
+    try {
+      await applyDefaultCardSize(defaultCardSize);
+      await updateSetting("default_card_size", defaultCardSize);
+      setCardSizeSaved(true);
+      setTimeout(() => setCardSizeSaved(false), 2500);
+    } catch (e) { console.error(e); alert("Failed to apply card size"); }
+    finally { setApplyingCardSize(false); }
   };
 
   const saveHours = async () => {
@@ -302,6 +361,37 @@ export const SettingsTab = () => {
                   : taxSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
                   : "Save Tax Settings"}
               </Button>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* ── Card Size Defaults ───────────────────────────────────────────── */}
+      <AccordionItem value="cardsize" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg">Card Size Defaults</h3>
+            <p className="text-sm text-muted-foreground font-normal">Set the default card size for new items and optionally apply to all existing items.</p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label>Default Card Size</Label>
+              <Select value={defaultCardSize} onValueChange={v => setDefaultCardSize(v as any)}>
+                <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="large">Large</SelectItem>
+                  <SelectItem value="extra_large">Extra Large</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">New items will use this size unless overridden per-item.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={saveDefaultCardSize} className="bg-green-700 hover:bg-green-800 text-white">{cardSizeSaved ? "Saved" : "Save Default"}</Button>
+              <Button variant="destructive" onClick={handleApplyCardSizeToAll} disabled={applyingCardSize}>{applyingCardSize ? "Applying…" : "Apply To All Items"}</Button>
             </div>
           </div>
         </AccordionContent>

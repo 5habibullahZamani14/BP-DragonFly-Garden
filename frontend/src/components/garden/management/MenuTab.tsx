@@ -21,12 +21,13 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   fetchMenu, fetchCategories,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
+  fetchPatterns, uploadMenuItemPatternImage,
   createCategory, updateCategory, deleteCategory, reorderCategories,
   fetchAllModifierGroups, fetchItemModifiers,
   createGlobalModifierGroup, updateGlobalModifierGroup, deleteGlobalModifierGroup,
   createGlobalModifierOption, updateGlobalModifierOption, deleteGlobalModifierOption,
   assignModifierToItem, unassignModifierFromItem, setModifierDefault,
-  type MenuItem, type Category, type GlobalModifierGroup, type GlobalModifierOption,
+  type MenuItem, type Category, type Pattern, type GlobalModifierGroup, type GlobalModifierOption,
 } from "@/lib/api";
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
@@ -559,6 +560,11 @@ export function MenuTab() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [variationsTab, setVariationsTab] = useState(false);
   const cropperRef = useRef<ReactCropperElement>(null);
+  const patternInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedPatternImage = editingItem?.pattern_image_url
+    || patterns.find(p => p.id === editingItem?.pattern_id)?.image_url
+    || editingItem?.default_pattern_image_url || null;
 
   // ── Sections state
   const [openSection, setOpenSection] = useState<number | null>(null);
@@ -569,6 +575,7 @@ export function MenuTab() {
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [assignDraft, setAssignDraft] = useState<Record<number, Set<number>>>({});
   const [assignSaving, setAssignSaving] = useState<number | null>(null);
+  const [patterns, setPatterns] = useState<Pattern[]>([]);
 
   // ── DnD sensors
   const sensors = useSensors(
@@ -576,8 +583,17 @@ export function MenuTab() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadPatterns(); }, []);
   useWebSocket(["MENU_UPDATE"], () => { loadData(); });
+
+  const loadPatterns = async () => {
+    try {
+      const data = await fetchPatterns();
+      setPatterns(data || []);
+    } catch {
+      toast.error(t("m.loadPatternsFailed"));
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -683,6 +699,30 @@ export function MenuTab() {
   };
 
   // ── Menu item CRUD
+  const handleUploadPatternFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!editingItem) return;
+
+    try {
+      if (editingItem.id) {
+        const result = await uploadMenuItemPatternImage(editingItem.id, file, file.name);
+        setEditingItem(p => ({ ...p, pattern_id: result.pattern_id, pattern_image_url: result.image_url }));
+      } else {
+        const result = await createPattern(file, file.name);
+        if (result?.pattern) {
+          setPatterns(prev => [result.pattern, ...prev]);
+          setEditingItem(p => ({ ...p, pattern_id: result.pattern.id, pattern_image_url: result.pattern.image_url }));
+        }
+      }
+      toast.success("Pattern uploaded");
+    } catch {
+      toast.error("Failed to upload pattern");
+    } finally {
+      if (patternInputRef.current) patternInputRef.current.value = "";
+    }
+  };
+
   const handleSave = async () => {
     if (!editingItem?.name || !editingItem?.price || !editingItem?.category_id) {
       toast.error(t("m.fillRequired")); return;
@@ -802,7 +842,7 @@ export function MenuTab() {
             <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.menuMgmt")}</h2>
             <p className="text-sm text-gray-500">{t("m.menuMgmtDesc")}</p>
           </div>
-          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0 }); setIsDialogOpen(true); }}>
+          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal' }); setIsDialogOpen(true); }}>
             <Plus className="me-2 h-4 w-4" /> {t("m.addMenuItem")}
           </Button>
         </div>
@@ -813,40 +853,92 @@ export function MenuTab() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredItems.map(item => (
-              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""}`}>
-                <div className="h-32 bg-gray-100 relative">
-                  {item.image_url
-                    ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
-                  <div className="absolute top-2 end-2 flex gap-1">
-                    {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
-                    {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
-                    {item.option_groups && item.option_groups.length > 0 && (
-                      <span className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm" title={`${item.option_groups.length} variation group(s)`}>
-                        <Settings2 className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <CardContent className="p-4 bg-white">
-                  <div className="mb-2">
-                    <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
-                    <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
-                  </div>
-                  <div className="flex justify-between items-center mt-4">
-                    <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
-                        onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDelete(item.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} ${item.card_size === 'extra_large' ? 'col-span-full' : ''}`}>
+                {item.card_size === 'extra_large' ? (
+                  <div className="flex flex-col sm:flex-row">
+                    <div className="w-full sm:w-1/2 h-64 bg-gray-100 relative overflow-hidden">
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-12 w-12 opacity-50" /></div>}
+                      {(item.pattern_image_url || item.default_pattern_image_url) && (
+                        <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                          alt="Pattern overlay"
+                          className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none" />
+                      )}
                     </div>
+                    <CardContent className="p-6 w-full sm:w-1/2">
+                      <div className="mb-2">
+                        <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
+                        <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
+                      </div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                            onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleDelete(item.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
                   </div>
-                </CardContent>
+                ) : (
+                  <>
+                    <div className={`${item.card_size === 'large' ? 'h-64' : 'h-32'} bg-gray-100 relative overflow-hidden`}>
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
+                      {(item.pattern_image_url || item.default_pattern_image_url) && (
+                        <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                          alt="Pattern overlay"
+                          className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none" />
+                      )}
+                      <div className="absolute top-2 end-2 flex gap-1">
+                        {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
+                        {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
+                        {item.option_groups && item.option_groups.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setImageSrc(null);
+                              setEditingItem(item);
+                              setVariationsTab(true);
+                              setIsDialogOpen(true);
+                            }}
+                            className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                            title={`${item.option_groups.length} variation group(s)`}
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <CardContent className="p-4 bg-white">
+                      <div className="mb-2">
+                        <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
+                        <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
+                      </div>
+                      <div className="flex justify-between items-center mt-4">
+                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                            onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleDelete(item.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </>
+                )}
               </Card>
             ))}
           </div>
@@ -1003,6 +1095,60 @@ export function MenuTab() {
                         onChange={e => setEditingItem(p => ({ ...p, promo_label: e.target.value }))} />
                     </div>
                   )}
+                  <div className="grid gap-2 pt-1">
+                    <Label>Pattern overlay</Label>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex-1 min-w-0">
+                          <Select value={editingItem?.pattern_id ? String(editingItem.pattern_id) : ""}
+                            onValueChange={value => setEditingItem(p => ({ ...p, pattern_id: value ? parseInt(value, 10) : null }))}>
+                            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">None</SelectItem>
+                              {patterns.map(pattern => (
+                                <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" onClick={() => patternInputRef.current?.click()}>
+                            <ImageIcon className="h-4 w-4 me-1" /> Upload
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingItem(p => ({ ...p, pattern_id: null }))}>
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+                      <input ref={patternInputRef} type="file" accept="image/*" className="hidden"
+                        onChange={handleUploadPatternFile} />
+                      {selectedPatternImage ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">
+                          <div className="h-20 w-20 overflow-hidden rounded-xl bg-white shadow-sm">
+                            <img src={selectedPatternImage} alt="Selected pattern" className="h-full w-full object-cover" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm">{editingItem?.pattern_id ? "Selected pattern" : "Default pattern fallback"}</p>
+                            <p className="text-xs text-muted-foreground">This overlay will appear on the menu card.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No pattern selected. If a default pattern is configured, it will be used on the card.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid gap-2 pt-1">
+                    <Label>Card size</Label>
+                    <Select value={editingItem?.card_size || "normal"} onValueChange={v => setEditingItem(p => ({ ...p, card_size: v as any }))}>
+                      <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal — compact</SelectItem>
+                        <SelectItem value="large">Large — taller</SelectItem>
+                        <SelectItem value="extra_large">Extra Large — wide advertising</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Choose how this item appears on the customer-facing menu.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1010,7 +1156,7 @@ export function MenuTab() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t("m.cancel")}</Button>
-            {!variationsTab && <Button onClick={handleSave}>{t("m.saveItem")}</Button>}
+            <Button onClick={handleSave}>{t("m.saveItem")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
