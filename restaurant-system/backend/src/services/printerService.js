@@ -146,16 +146,24 @@ const printerService = {
     ticket += `Qty ${totalQty}\n`;
     
     const subtotal = Number(order.total_price || 0);
-    const serviceCharge = subtotal * (order.service_charge_rate || 0.10);
-    const sst = (subtotal + serviceCharge) * (order.vat_rate || 0.06);
+    const serviceChargeRate = order.service_charge_rate || 0;
+    const vatRate = order.vat_rate || 0;
+    const serviceCharge = subtotal * serviceChargeRate;
+    const sst = (subtotal + serviceCharge) * vatRate;
     const rawTotal = subtotal + sst + serviceCharge;
     
     const roundedTotal = Math.round(rawTotal * 20) / 20;
     const rounding = roundedTotal - rawTotal;
     
     ticket += `Subtotal            ${subtotal.toFixed(2).padStart(8, ' ')}\n`;
-    ticket += `SST (6%)            ${sst.toFixed(2).padStart(8, ' ')}\n`;
-    ticket += `SERVICE CHARGE (10%)${serviceCharge.toFixed(2).padStart(8, ' ')}\n`;
+    if (serviceChargeRate > 0) {
+      const scLabel = `SERVICE CHARGE (${Math.round(serviceChargeRate * 100)}%)`;
+      ticket += `${scLabel.padEnd(20, ' ')}${serviceCharge.toFixed(2).padStart(8, ' ')}\n`;
+    }
+    if (vatRate > 0) {
+      const sstLabel = `SST (${Math.round(vatRate * 100)}%)`;
+      ticket += `${sstLabel.padEnd(20, ' ')}${sst.toFixed(2).padStart(8, ' ')}\n`;
+    }
     ticket += `Bill rounding       ${rounding.toFixed(2).padStart(8, ' ')}\n`;
     ticket += "----------------------------\n";
     

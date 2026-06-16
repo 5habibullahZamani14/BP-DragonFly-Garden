@@ -581,8 +581,12 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       </ul>
                       <div className="border-t border-gray-200 pt-4 space-y-1 text-sm text-gray-600">
                         <div className="flex justify-between"><p>{t("customer.subtotal")}:</p><p>RM {order.total_price.toFixed(2)}</p></div>
-                        <div className="flex justify-between"><p>{t("customer.serviceCharge")} ({(order.service_charge_rate || 0.10) * 100}%):</p><p>RM {(order.total_price * (order.service_charge_rate || 0.10)).toFixed(2)}</p></div>
-                        <div className="flex justify-between"><p>{t("customer.sst")} ({order.vat_rate * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0.10)) * order.vat_rate).toFixed(2)}</p></div>
+                        {(order.service_charge_rate || 0) > 0 && (
+                          <div className="flex justify-between"><p>{t("customer.serviceCharge")} ({(order.service_charge_rate || 0) * 100}%):</p><p>RM {(order.total_price * (order.service_charge_rate || 0)).toFixed(2)}</p></div>
+                        )}
+                        {(order.vat_rate || 0) > 0 && (
+                          <div className="flex justify-between"><p>{t("customer.sst")} ({(order.vat_rate || 0) * 100}%):</p><p>RM {(order.total_price * (1 + (order.service_charge_rate || 0)) * order.vat_rate).toFixed(2)}</p></div>
+                        )}
                         <div className="flex justify-between font-bold text-gray-900 text-lg mt-2 pt-2 border-t border-gray-200">
                           <p>{t("customer.total")}:</p><p>RM {order.total_with_vat.toFixed(2)}</p>
                         </div>

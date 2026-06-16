@@ -19,7 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, BackupFile } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle, Percent } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useWebSocket } from "@/lib/useWebSocket";
 
 export const SettingsTab = () => {
@@ -51,6 +52,14 @@ export const SettingsTab = () => {
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
 
+  // Tax & service charge settings
+  const [sstEnabled, setSstEnabled] = useState(true);
+  const [sstPercent, setSstPercent] = useState("6");
+  const [scEnabled, setScEnabled] = useState(true);
+  const [scPercent, setScPercent] = useState("10");
+  const [taxSaved, setTaxSaved] = useState(false);
+  const [taxSaving, setTaxSaving] = useState(false);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -65,6 +74,11 @@ export const SettingsTab = () => {
       const data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
       if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
+      // Load tax settings
+      setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
+      setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
+      setScEnabled(data?.service_charge_enabled !== false && data?.service_charge_enabled !== 'false');
+      setScPercent(data?.service_charge_rate !== undefined ? String(Math.round(parseFloat(String(data.service_charge_rate)) * 100)) : "10");
     } catch (e) { console.error("Settings load failed", e); }
     finally { setHoursLoading(false); }
 
@@ -86,6 +100,20 @@ export const SettingsTab = () => {
       setBackupName(`backup_${dateStr}`);
     } catch (e) {
       console.error("Failed to load backups", e);
+    }
+  };
+
+  const saveTaxSettings = async () => {
+    setTaxSaving(true);
+    try {
+      await updateSetting("sst_enabled", String(sstEnabled));
+      await updateSetting("sst_rate", String(parseFloat(sstPercent) / 100));
+      await updateSetting("service_charge_enabled", String(scEnabled));
+      await updateSetting("service_charge_rate", String(parseFloat(scPercent) / 100));
+      setTaxSaved(true);
+      setTimeout(() => setTaxSaved(false), 2500);
+    } finally {
+      setTaxSaving(false);
     }
   };
 
@@ -192,6 +220,92 @@ export const SettingsTab = () => {
 
   return (
     <Accordion type="single" collapsible className="space-y-6">
+
+      {/* ── Tax & Service Charge ─────────────────────────── */}
+      <AccordionItem value="tax" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg flex items-center gap-2">
+              <Percent className="h-5 w-5 text-green-700" />
+              Tax &amp; Service Charge
+            </h3>
+            <p className="text-sm text-muted-foreground font-normal">
+              Toggle SST and service charge on or off, and set their percentages. Changes apply to new orders only.
+            </p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+          <div className="space-y-5">
+
+            {/* SST row */}
+            <div className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="sst-toggle"
+                  checked={sstEnabled}
+                  onCheckedChange={setSstEnabled}
+                />
+                <div>
+                  <label htmlFor="sst-toggle" className="font-semibold text-sm cursor-pointer">SST (Sales &amp; Service Tax)</label>
+                  <p className="text-xs text-muted-foreground">{sstEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Input
+                  id="sst-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={sstPercent}
+                  onChange={(e) => setSstPercent(e.target.value)}
+                  disabled={!sstEnabled}
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-muted-foreground font-medium">%</span>
+              </div>
+            </div>
+
+            {/* Service Charge row */}
+            <div className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="sc-toggle"
+                  checked={scEnabled}
+                  onCheckedChange={setScEnabled}
+                />
+                <div>
+                  <label htmlFor="sc-toggle" className="font-semibold text-sm cursor-pointer">Service Charge</label>
+                  <p className="text-xs text-muted-foreground">{scEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Input
+                  id="sc-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={scPercent}
+                  onChange={(e) => setScPercent(e.target.value)}
+                  disabled={!scEnabled}
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-muted-foreground font-medium">%</span>
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <p className="text-xs text-amber-600 font-medium mb-3">⚠️ Changes apply to new orders only. Existing open orders keep their original rates.</p>
+              <Button onClick={saveTaxSettings} disabled={taxSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
+                {taxSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                  : taxSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
+                  : "Save Tax Settings"}
+              </Button>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
 
       {/* ── Working Hours ───────────────────────────────────── */}
       <AccordionItem value="hours" className="border rounded-xl bg-card text-card-foreground shadow-sm">

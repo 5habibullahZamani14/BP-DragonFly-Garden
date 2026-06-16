@@ -506,6 +506,12 @@ const initializeDatabase = async () => {
     VALUES ('work_hours', '{"start": "09:00", "end": "22:00"}')
   `);
 
+  /* Insert default SST and service charge settings if not yet configured. */
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('sst_enabled', 'true')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('sst_rate', '0.06')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_enabled', 'true')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_rate', '0.10')`);
+
   console.log("Database schema ready");
 };
 

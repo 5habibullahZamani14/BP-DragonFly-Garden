@@ -202,6 +202,15 @@ const createOrder = async (orderData) => {
       const newTotal = (Math.round(activeOrder.total_price * 100) + additionalPriceCents) / 100;
       await run(`UPDATE orders SET total_price = ?, status = 'queue' WHERE id = ?`, [newTotal, orderId]);
     } else {
+      /* Fetch current tax settings to stamp onto this order at creation time. */
+      const sstEnabledRow = await get(`SELECT value FROM restaurant_settings WHERE key = 'sst_enabled'`);
+      const sstRateRow = await get(`SELECT value FROM restaurant_settings WHERE key = 'sst_rate'`);
+      const scEnabledRow = await get(`SELECT value FROM restaurant_settings WHERE key = 'service_charge_enabled'`);
+      const scRateRow = await get(`SELECT value FROM restaurant_settings WHERE key = 'service_charge_rate'`);
+
+      const effectiveVatRate = (sstEnabledRow?.value === 'true') ? parseFloat(sstRateRow?.value || '0.06') : 0;
+      const effectiveServiceChargeRate = (scEnabledRow?.value === 'true') ? parseFloat(scRateRow?.value || '0.10') : 0;
+
       /* Generate the daily ticket number (resets to 1 each day) */
       const todayMaxRow = await get(`SELECT MAX(daily_ticket_number) as maxTicket FROM orders WHERE date(created_at, 'localtime') = date('now', 'localtime')`);
       const nextTicketNumber = (todayMaxRow && todayMaxRow.maxTicket) ? todayMaxRow.maxTicket + 1 : 1;
@@ -209,10 +218,10 @@ const createOrder = async (orderData) => {
       /* Insert the parent order row with status "queue". */
       const orderInsert = await run(
         `
-          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address, daily_ticket_number)
-          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address, daily_ticket_number, vat_rate, service_charge_rate)
+          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address, nextTicketNumber]
+        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address, nextTicketNumber, effectiveVatRate, effectiveServiceChargeRate]
       );
       orderId = orderInsert.lastID;
     }

@@ -44,6 +44,7 @@ import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
 import {
   fetchMenu,
   fetchTable,
+  fetchSettings,
   placeOrder,
   refreshOrder,
   fetchActiveOrdersForTable,
@@ -151,6 +152,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     catch { return false; }
   });
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+
+  // Tax settings from backend
+  const [taxSettings, setTaxSettings] = useState({ sstEnabled: true, sstRate: 0.06, scEnabled: true, scRate: 0.10 });
+
   useEffect(() => {
     sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
   }, [archivedOrders, qrCode]);
@@ -193,16 +198,22 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     return () => { alive = false; };
   }, [cartOpen, cart.length, qrCode]);
 
-  // Load menu + table, then restore any active orders from the DB
+  // Load menu + table + tax settings, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const [m, t] = await Promise.all([fetchMenu(), fetchTable(qrCode)]);
+        const [m, t, settings] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings()]);
         if (!alive) return;
         setMenu(m);
         setTableInfo(t);
+        // Load tax settings
+        const sstEnabled = settings?.sst_enabled !== false && settings?.sst_enabled !== 'false';
+        const scEnabled = settings?.service_charge_enabled !== false && settings?.service_charge_enabled !== 'false';
+        const sstRate = sstEnabled ? parseFloat(String(settings?.sst_rate ?? 0.06)) : 0;
+        const scRate = scEnabled ? parseFloat(String(settings?.service_charge_rate ?? 0.10)) : 0;
+        if (alive) setTaxSettings({ sstEnabled, sstRate, scEnabled, scRate });
         // Re-hydrate active orders so they survive a refresh
         try {
           const active = await fetchActiveOrdersForTable(t.id, qrCode);
@@ -1220,8 +1231,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         
                         {(() => {
                           const subtotal = Number(o.total_price);
-                          const sc = subtotal * 0.10;
-                          const sst = (subtotal + sc) * 0.06;
+                          // Use rates stamped on the order (from when it was created)
+                          const scRate = Number(o.service_charge_rate ?? taxSettings.scRate);
+                          const sstRate = Number(o.vat_rate ?? taxSettings.sstRate);
+                          const sc = subtotal * scRate;
+                          const sst = (subtotal + sc) * sstRate;
                           const rawTotal = subtotal + sc + sst;
                           const finalTotal = Math.round(rawTotal * 20) / 20;
                           const rounding = finalTotal - rawTotal;
@@ -1229,8 +1243,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           return (
                             <div className="flex flex-col gap-1 mb-2 text-sm" style={{ color:"hsl(140,20%,35%)" }}>
                               <div className="flex justify-between"><span className="opacity-75">{t("customer.subtotal")}</span><span className="font-semibold">{formatRM(subtotal)}</span></div>
-                              <div className="flex justify-between"><span className="opacity-75">{t("customer.sst")} (6%)</span><span className="font-semibold">{formatRM(sst)}</span></div>
-                              <div className="flex justify-between"><span className="opacity-75">{t("customer.serviceCharge")} (10%)</span><span className="font-semibold">{formatRM(sc)}</span></div>
+                              {scRate > 0 && <div className="flex justify-between"><span className="opacity-75">{t("customer.serviceCharge")} ({Math.round(scRate * 100)}%)</span><span className="font-semibold">{formatRM(sc)}</span></div>}
+                              {sstRate > 0 && <div className="flex justify-between"><span className="opacity-75">{t("customer.sst")} ({Math.round(sstRate * 100)}%)</span><span className="font-semibold">{formatRM(sst)}</span></div>}
                               {Math.abs(rounding) > 0.001 && (
                                 <div className="flex justify-between"><span className="opacity-75">{t("customer.rounding")}</span><span className="font-semibold">{formatRM(rounding)}</span></div>
                               )}
