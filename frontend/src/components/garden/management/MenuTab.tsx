@@ -1103,11 +1103,11 @@ export function MenuTab() {
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
                         <div className="flex-1 min-w-0">
-                          <Select value={editingItem?.pattern_id ? String(editingItem.pattern_id) : ""}
-                            onValueChange={value => setEditingItem(p => ({ ...p, pattern_id: value ? parseInt(value, 10) : null }))}>
+                          <Select value={editingItem?.pattern_id ? String(editingItem.pattern_id) : "none"}
+                            onValueChange={value => setEditingItem(p => ({ ...p, pattern_id: value === "none" ? null : parseInt(value, 10) }))}>
                             <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">None</SelectItem>
+                              <SelectItem value="none">None</SelectItem>
                               {patterns.map(pattern => (
                                 <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
                               ))}
