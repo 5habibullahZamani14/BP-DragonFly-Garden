@@ -1096,7 +1096,10 @@ export function MenuTab() {
                     </div>
                   )}
                   <div className="grid gap-2 pt-1">
-                    <Label>Pattern overlay</Label>
+                    <div>
+                      <Label>Pattern overlay</Label>
+                      <p className="text-xs text-muted-foreground mt-1">Optional decorative pattern layer (PNG/JPG, 300×300px recommended). Displays with 40% opacity behind the item name.</p>
+                    </div>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
                         <div className="flex-1 min-w-0">
@@ -1120,7 +1123,7 @@ export function MenuTab() {
                           </Button>
                         </div>
                       </div>
-                      <input ref={patternInputRef} type="file" accept="image/*" className="hidden"
+                      <input ref={patternInputRef} type="file" accept="image/*" className="hidden" title="Upload pattern image"
                         onChange={handleUploadPatternFile} />
                       {selectedPatternImage ? (
                         <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">

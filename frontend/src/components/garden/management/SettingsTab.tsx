@@ -397,6 +397,38 @@ export const SettingsTab = () => {
         </AccordionContent>
       </AccordionItem>
 
+      {/* ── Menu Pattern Defaults ───────────────────────────────────────────── */}
+      <AccordionItem value="patterns" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg">Menu Pattern Defaults</h3>
+            <p className="text-sm text-muted-foreground font-normal">Set a global default pattern overlay for all menu items without a custom pattern.</p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Label>Default Pattern</Label>
+              <Select value={defaultPatternId ? String(defaultPatternId) : ""} onValueChange={value => setDefaultPatternId(value ? parseInt(value, 10) : null)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None — no pattern overlay</SelectItem>
+                  {patterns.map(pattern => (
+                    <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">This pattern will appear on all items that don't have a custom pattern assigned. Display with 40% opacity.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={saveDefaultPattern} className="bg-green-700 hover:bg-green-800 text-white">{defaultPatternSaved ? "Saved" : "Save Default"}</Button>
+              <Button variant="outline" onClick={clearDefaultPattern} disabled={defaultPatternId === null}>Clear Pattern</Button>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
       {/* ── Working Hours ───────────────────────────────────── */}
       <AccordionItem value="hours" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
