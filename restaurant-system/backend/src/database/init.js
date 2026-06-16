@@ -474,6 +474,51 @@ const initializeDatabase = async () => {
   await ensureColumn("inventory_items", "usage_unit", "TEXT");
   await ensureColumn("inventory_items", "usage_conversion", "REAL DEFAULT 1.0");
 
+  // ── Global modifier library tables ────────────────────────────────────────
+  /*
+   * modifier_groups stores reusable modifier groups (e.g. "Size", "Ice Level",
+   * "Add-ons") that are NOT tied to a specific menu item. Once created, they can
+   * be assigned to any number of items via item_modifier_assignments.
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS modifier_groups (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      name              TEXT NOT NULL UNIQUE,
+      is_required       INTEGER NOT NULL DEFAULT 1,
+      is_multi_select   INTEGER NOT NULL DEFAULT 0,
+      created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  /*
+   * modifier_options contains the individual choices within a modifier_group.
+   * price_delta is added to the item base price when this option is selected.
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS modifier_options (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id     INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+      label        TEXT NOT NULL,
+      price_delta  REAL NOT NULL DEFAULT 0,
+      sort_order   INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  /*
+   * item_modifier_assignments is the junction table that links a menu item to
+   * one or more modifier_groups. default_option_id can point to one option in
+   * the group that should be pre-selected for this specific item.
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS item_modifier_assignments (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id     INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+      modifier_group_id INTEGER NOT NULL REFERENCES modifier_groups(id) ON DELETE CASCADE,
+      default_option_id INTEGER REFERENCES modifier_options(id) ON DELETE SET NULL,
+      UNIQUE (menu_item_id, modifier_group_id)
+    )
+  `);
+
   // ==========================================
   // PHASE 3: INDEX CREATION
   // ==========================================
@@ -496,6 +541,10 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_employees_id", "employees", "employee_id");
   await ensureIndex("idx_item_option_groups_item", "item_option_groups", "menu_item_id");
   await ensureIndex("idx_item_options_group", "item_options", "group_id");
+  await ensureIndex("idx_modifier_groups_name", "modifier_groups", "name");
+  await ensureIndex("idx_modifier_options_group", "modifier_options", "group_id, sort_order");
+  await ensureIndex("idx_item_modifier_assignments_item", "item_modifier_assignments", "menu_item_id");
+  await ensureIndex("idx_item_modifier_assignments_group", "item_modifier_assignments", "modifier_group_id");
 
 
   // ==========================================

@@ -429,8 +429,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       addToCart(item);
       return;
     }
-    // Open bottom sheet for option selection
-    setPendingSelections({});
+    // Pre-populate with any manager-set defaults before opening the sheet
+    const initialSelections: Record<number, Set<number>> = {};
+    for (const g of groups) {
+      const defaultId = (g as any).default_option_id;
+      if (defaultId != null && g.options.some(o => o.id === defaultId)) {
+        initialSelections[g.id] = new Set([defaultId]);
+      }
+    }
+    setPendingSelections(initialSelections);
     setOptionSheetItem(item);
   };
 

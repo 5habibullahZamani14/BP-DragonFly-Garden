@@ -930,3 +930,106 @@ export const restoreBackup = async (filename: string): Promise<{ success: boolea
   }
   return res.json();
 };
+
+// ── Global Modifier Library ───────────────────────────────────────────────────
+
+export interface GlobalModifierOption {
+  id: number;
+  group_id: number;
+  label: string;
+  price_delta: number;
+  sort_order: number;
+}
+
+export interface GlobalModifierAssignment {
+  modifier_group_id: number;
+  menu_item_id: number;
+  default_option_id: number | null;
+}
+
+export interface GlobalModifierGroup {
+  id: number;
+  name: string;
+  is_required: boolean;
+  is_multi_select: boolean;
+  options: GlobalModifierOption[];
+  /** Which items this group is currently assigned to */
+  assignments: GlobalModifierAssignment[];
+}
+
+/** Fetch all global modifier groups (with options + item assignments). */
+export const fetchAllModifierGroups = async (): Promise<GlobalModifierGroup[]> =>
+  safeFetch<GlobalModifierGroup[]>("/management/modifier-groups");
+
+/** Fetch modifiers assigned to a specific menu item. */
+export const fetchItemModifiers = async (itemId: number): Promise<GlobalModifierGroup[]> =>
+  safeFetch<GlobalModifierGroup[]>(`/management/menu-items/${itemId}/modifiers`);
+
+/** Create a new global modifier group (not tied to any item). */
+export const createGlobalModifierGroup = async (data: {
+  name: string; is_required?: boolean; is_multi_select?: boolean;
+}): Promise<GlobalModifierGroup> =>
+  safeFetch<GlobalModifierGroup>("/management/modifier-groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+/** Rename / toggle required / toggle multi-select on a global group. */
+export const updateGlobalModifierGroup = async (groupId: number, data: {
+  name?: string; is_required?: boolean; is_multi_select?: boolean;
+}): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/modifier-groups/${groupId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+/** Delete a global modifier group (cascades to its options and all item assignments). */
+export const deleteGlobalModifierGroup = async (groupId: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/modifier-groups/${groupId}`, { method: "DELETE" });
+
+/** Add an option to a global modifier group. */
+export const createGlobalModifierOption = async (groupId: number, data: {
+  label: string; price_delta?: number;
+}): Promise<GlobalModifierOption> =>
+  safeFetch<GlobalModifierOption>(`/management/modifier-groups/${groupId}/options`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+/** Edit a global modifier option's label or price delta. */
+export const updateGlobalModifierOption = async (optionId: number, data: {
+  label?: string; price_delta?: number;
+}): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/modifier-options/${optionId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+/** Delete a global modifier option. */
+export const deleteGlobalModifierOption = async (optionId: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/modifier-options/${optionId}`, { method: "DELETE" });
+
+/** Assign (tag) a global modifier group to a menu item. */
+export const assignModifierToItem = async (itemId: number, groupId: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/menu-items/${itemId}/modifiers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ groupId }),
+  });
+
+/** Remove a modifier group tag from one item (global group is kept). */
+export const unassignModifierFromItem = async (itemId: number, groupId: number): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/menu-items/${itemId}/modifiers/${groupId}`, { method: "DELETE" });
+
+/** Set (or clear) the default option for a modifier group on a specific item. */
+export const setModifierDefault = async (itemId: number, groupId: number, optionId: number | null): Promise<{ success: boolean }> =>
+  safeFetch<{ success: boolean }>(`/management/menu-items/${itemId}/modifiers/${groupId}/default`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ optionId }),
+  });
+

@@ -22,9 +22,11 @@ import {
   fetchMenu, fetchCategories,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
   createCategory, updateCategory, deleteCategory, reorderCategories,
-  fetchItemOptions, createOptionGroup, updateOptionGroup, deleteOptionGroup,
-  createOption, updateOption, deleteOption,
-  type MenuItem, type Category, type ItemOptionGroup,
+  fetchAllModifierGroups, fetchItemModifiers,
+  createGlobalModifierGroup, updateGlobalModifierGroup, deleteGlobalModifierGroup,
+  createGlobalModifierOption, updateGlobalModifierOption, deleteGlobalModifierOption,
+  assignModifierToItem, unassignModifierFromItem, setModifierDefault,
+  type MenuItem, type Category, type GlobalModifierGroup, type GlobalModifierOption,
 } from "@/lib/api";
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
@@ -36,19 +38,26 @@ import Cropper, { ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { useWebSocket } from "@/lib/useWebSocket";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VariationsEditor — embedded inside the item dialog to manage option groups
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
+// VariationsEditor — Global modifier tag library
+// Applied groups show as full editable cards; the rest show as clickable chips.
+// Long-press on any chip reveals a global-delete button for that group.
+// ───────────────────────────────────────────────────────────────────────────────
 
 function VariationsEditor({ itemId }: { itemId: number }) {
-  const [groups, setGroups] = useState<ItemOptionGroup[]>([]);
+  // All global modifier groups (from DB)
+  const [allGroups, setAllGroups] = useState<GlobalModifierGroup[]>([]);
+  // The subset currently assigned to this item (from DB)
+  const [assignedGroupIds, setAssignedGroupIds] = useState<Set<number>>(new Set());
+  // Per-item default option: groupId -> optionId | null
+  const [defaults, setDefaults] = useState<Record<number, number | null>>({});
   const [loading, setLoading] = useState(true);
-  const [addingGroup, setAddingGroup] = useState(false);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupRequired, setNewGroupRequired] = useState(true);
-  const [newGroupMulti, setNewGroupMulti] = useState(false);
-  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
-  const [editGroupName, setEditGroupName] = useState("");
+
+  // Which chip is "long-pressed" (shows delete button)
+  const [longPressedId, setLongPressedId] = useState<number | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Inline editing states for options within an applied group
   const [addingOptionGroupId, setAddingOptionGroupId] = useState<number | null>(null);
   const [newOptionLabel, setNewOptionLabel] = useState("");
   const [newOptionDelta, setNewOptionDelta] = useState("0");
@@ -56,133 +65,207 @@ function VariationsEditor({ itemId }: { itemId: number }) {
   const [editOptionLabel, setEditOptionLabel] = useState("");
   const [editOptionDelta, setEditOptionDelta] = useState("0");
 
-  useEffect(() => { loadGroups(); }, [itemId]);
+  // Inline group rename
+  const [renamingGroupId, setRenamingGroupId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
-  const loadGroups = async () => {
+  // Create-new-group form
+  const [showNewGroupForm, setShowNewGroupForm] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupRequired, setNewGroupRequired] = useState(true);
+  const [newGroupMulti, setNewGroupMulti] = useState(false);
+
+  useEffect(() => { load(); }, [itemId]);
+
+  const load = async () => {
     setLoading(true);
-    try { setGroups(await fetchItemOptions(itemId)); } catch { /* non-critical */ }
+    try {
+      const [all, assigned] = await Promise.all([
+        fetchAllModifierGroups(),
+        fetchItemModifiers(itemId),
+      ]);
+      setAllGroups(all);
+      setAssignedGroupIds(new Set(assigned.map(g => g.id)));
+      const defs: Record<number, number | null> = {};
+      assigned.forEach(g => { defs[g.id] = (g as any).default_option_id ?? null; });
+      setDefaults(defs);
+    } catch { /* non-critical */ }
     finally { setLoading(false); }
   };
 
-  const handleCreateGroup = async () => {
-    if (!newGroupName.trim()) return;
-    try {
-      const g = await createOptionGroup(itemId, { name: newGroupName.trim(), is_required: newGroupRequired, is_multi_select: newGroupMulti });
-      setGroups(p => [...p, g]);
-      setNewGroupName(""); setAddingGroup(false);
-      toast.success("Option group created");
-    } catch { toast.error("Failed to create group"); }
+  // ── Chip long-press handlers ───────────────────────────────────────────────
+  const handleChipPointerDown = (id: number) => {
+    longPressTimer.current = setTimeout(() => setLongPressedId(id), 600);
+  };
+  const handleChipPointerUp = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
-  const handleDeleteGroup = async (groupId: number) => {
-    if (!confirm("Delete this option group and all its options?")) return;
+  // ── Assign / unassign ─────────────────────────────────────────────────────
+  const handleToggleAssignment = async (group: GlobalModifierGroup) => {
+    if (longPressedId === group.id) { setLongPressedId(null); return; } // was long-pressing
+    const isAssigned = assignedGroupIds.has(group.id);
     try {
-      await deleteOptionGroup(groupId);
-      setGroups(p => p.filter(g => g.id !== groupId));
-      toast.success("Group deleted");
-    } catch { toast.error("Failed to delete group"); }
+      if (isAssigned) {
+        await unassignModifierFromItem(itemId, group.id);
+        setAssignedGroupIds(p => { const s = new Set(p); s.delete(group.id); return s; });
+        setDefaults(p => { const d = { ...p }; delete d[group.id]; return d; });
+      } else {
+        await assignModifierToItem(itemId, group.id);
+        setAssignedGroupIds(p => new Set([...p, group.id]));
+        setDefaults(p => ({ ...p, [group.id]: null }));
+      }
+    } catch { toast.error("Failed to update modifier assignment"); }
   };
 
-  const handleUpdateGroup = async (groupId: number) => {
-    if (!editGroupName.trim()) return;
+  // ── Default option ────────────────────────────────────────────────────────
+  const handleSetDefault = async (groupId: number, optionId: number) => {
+    const current = defaults[groupId];
+    const next = current === optionId ? null : optionId; // toggle off if already default
     try {
-      await updateOptionGroup(groupId, { name: editGroupName.trim() });
-      setGroups(p => p.map(g => g.id === groupId ? { ...g, name: editGroupName.trim() } : g));
-      setEditingGroupId(null);
-      toast.success("Group renamed");
+      await setModifierDefault(itemId, groupId, next);
+      setDefaults(p => ({ ...p, [groupId]: next }));
+    } catch { toast.error("Failed to set default"); }
+  };
+
+  // ── Global group toggle flags ──────────────────────────────────────────────
+  const handleToggleRequired = async (group: GlobalModifierGroup) => {
+    const v = !group.is_required;
+    try {
+      await updateGlobalModifierGroup(group.id, { is_required: v });
+      setAllGroups(p => p.map(g => g.id === group.id ? { ...g, is_required: v } : g));
+    } catch { toast.error("Failed to update"); }
+  };
+  const handleToggleMulti = async (group: GlobalModifierGroup) => {
+    const v = !group.is_multi_select;
+    try {
+      await updateGlobalModifierGroup(group.id, { is_multi_select: v });
+      setAllGroups(p => p.map(g => g.id === group.id ? { ...g, is_multi_select: v } : g));
+    } catch { toast.error("Failed to update"); }
+  };
+
+  // ── Rename group ──────────────────────────────────────────────────────────
+  const handleRenameGroup = async (groupId: number) => {
+    if (!renameValue.trim()) return;
+    try {
+      await updateGlobalModifierGroup(groupId, { name: renameValue.trim() });
+      setAllGroups(p => p.map(g => g.id === groupId ? { ...g, name: renameValue.trim() } : g));
+      setRenamingGroupId(null);
     } catch { toast.error("Failed to rename"); }
   };
 
-  const handleToggleRequired = async (group: ItemOptionGroup) => {
-    const v = !group.is_required;
+  // ── Global delete (from chip long-press) ─────────────────────────────────
+  const handleGlobalDelete = async (groupId: number) => {
+    if (!confirm("Delete this modifier globally? It will be removed from ALL menu items.")) return;
     try {
-      await updateOptionGroup(group.id, { is_required: v });
-      setGroups(p => p.map(g => g.id === group.id ? { ...g, is_required: v } : g));
-    } catch { toast.error("Failed to update"); }
+      await deleteGlobalModifierGroup(groupId);
+      setAllGroups(p => p.filter(g => g.id !== groupId));
+      setAssignedGroupIds(p => { const s = new Set(p); s.delete(groupId); return s; });
+      setLongPressedId(null);
+      toast.success("Modifier deleted globally");
+    } catch { toast.error("Failed to delete modifier"); }
   };
 
-  const handleToggleMulti = async (group: ItemOptionGroup) => {
-    const v = !group.is_multi_select;
-    try {
-      await updateOptionGroup(group.id, { is_multi_select: v });
-      setGroups(p => p.map(g => g.id === group.id ? { ...g, is_multi_select: v } : g));
-    } catch { toast.error("Failed to update"); }
-  };
-
+  // ── Options CRUD ──────────────────────────────────────────────────────────
   const handleCreateOption = async (groupId: number) => {
     if (!newOptionLabel.trim()) return;
     try {
-      const opt = await createOption(groupId, { label: newOptionLabel.trim(), price_delta: parseFloat(newOptionDelta) || 0 });
-      setGroups(p => p.map(g => g.id === groupId ? { ...g, options: [...g.options, opt] } : g));
+      const opt = await createGlobalModifierOption(groupId, { label: newOptionLabel.trim(), price_delta: parseFloat(newOptionDelta) || 0 });
+      setAllGroups(p => p.map(g => g.id === groupId ? { ...g, options: [...g.options, opt] } : g));
       setNewOptionLabel(""); setNewOptionDelta("0"); setAddingOptionGroupId(null);
-      toast.success("Option added");
     } catch { toast.error("Failed to add option"); }
   };
-
   const handleUpdateOption = async (optionId: number, groupId: number) => {
     try {
-      await updateOption(optionId, { label: editOptionLabel.trim(), price_delta: parseFloat(editOptionDelta) || 0 });
-      setGroups(p => p.map(g => g.id === groupId ? {
-        ...g,
-        options: g.options.map(o => o.id === optionId
-          ? { ...o, label: editOptionLabel.trim(), price_delta: parseFloat(editOptionDelta) || 0 }
-          : o)
+      await updateGlobalModifierOption(optionId, { label: editOptionLabel.trim(), price_delta: parseFloat(editOptionDelta) || 0 });
+      setAllGroups(p => p.map(g => g.id === groupId ? {
+        ...g, options: g.options.map(o => o.id === optionId ? { ...o, label: editOptionLabel.trim(), price_delta: parseFloat(editOptionDelta) || 0 } : o)
       } : g));
       setEditingOptionId(null);
-      toast.success("Option updated");
     } catch { toast.error("Failed to update option"); }
   };
-
   const handleDeleteOption = async (optionId: number, groupId: number) => {
     try {
-      await deleteOption(optionId);
-      setGroups(p => p.map(g => g.id === groupId ? { ...g, options: g.options.filter(o => o.id !== optionId) } : g));
-      toast.success("Option deleted");
+      await deleteGlobalModifierOption(optionId);
+      setAllGroups(p => p.map(g => g.id === groupId ? { ...g, options: g.options.filter(o => o.id !== optionId) } : g));
+      // Clear default if it was this option
+      if (defaults[groupId] === optionId) {
+        await setModifierDefault(itemId, groupId, null).catch(() => null);
+        setDefaults(p => ({ ...p, [groupId]: null }));
+      }
     } catch { toast.error("Failed to delete option"); }
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground animate-pulse py-2">Loading variations…</p>;
+  // ── Create new global group ───────────────────────────────────────────────
+  const handleCreateGlobalGroup = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      const g = await createGlobalModifierGroup({ name: newGroupName.trim(), is_required: newGroupRequired, is_multi_select: newGroupMulti });
+      // Immediately assign it to this item too
+      await assignModifierToItem(itemId, g.id);
+      setAllGroups(p => [...p, g]);
+      setAssignedGroupIds(p => new Set([...p, g.id]));
+      setDefaults(p => ({ ...p, [g.id]: null }));
+      setNewGroupName(""); setShowNewGroupForm(false);
+      toast.success(`"${g.name}" created and applied to this item`);
+    } catch (e: any) {
+      toast.error(e?.message?.includes('already exists') ? 'A modifier with that name already exists' : "Failed to create modifier");
+    }
+  };
+
+  if (loading) return <p className="text-sm text-muted-foreground animate-pulse py-2">Loading modifiers…</p>;
+
+  const assignedGroups = allGroups.filter(g => assignedGroupIds.has(g.id));
+  const libraryGroups  = allGroups.filter(g => !assignedGroupIds.has(g.id));
 
   return (
-    <div className="space-y-3">
-      {groups.length === 0 && !addingGroup && (
-        <p className="text-sm text-muted-foreground italic py-1">No variations yet. Click "Add Variation Group" to start.</p>
+    <div className="space-y-4" onClick={() => { if (longPressedId !== null) setLongPressedId(null); }}>
+
+      {/* ── Applied groups ─────────────────────────────────────────────── */}
+      {assignedGroups.length === 0 && (
+        <p className="text-sm text-muted-foreground italic py-1">No modifiers applied. Tap a tag below or create a new one.</p>
       )}
 
-      {groups.map(group => (
-        <div key={group.id} className="border rounded-xl overflow-hidden bg-card">
-          {/* Group header */}
+      {assignedGroups.map(group => (
+        <div key={group.id} className="border rounded-xl overflow-hidden bg-card shadow-sm">
+          {/* Header row */}
           <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
-            {editingGroupId === group.id ? (
+            {renamingGroupId === group.id ? (
               <div className="flex flex-1 gap-2 items-center">
-                <Input autoFocus value={editGroupName} onChange={e => setEditGroupName(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") handleUpdateGroup(group.id); if (e.key === "Escape") setEditingGroupId(null); }}
+                <Input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameGroup(group.id); if (e.key === 'Escape') setRenamingGroupId(null); }}
                   className="h-7 text-sm" />
-                <Button size="sm" className="h-7 px-2" onClick={() => handleUpdateGroup(group.id)}><Check className="h-3.5 w-3.5" /></Button>
-                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingGroupId(null)}><X className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" className="h-7 px-2" onClick={() => handleRenameGroup(group.id)}><Check className="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setRenamingGroupId(null)}><X className="h-3.5 w-3.5" /></Button>
               </div>
             ) : (
               <span className="font-semibold text-sm flex-1 truncate">{group.name}</span>
             )}
             <div className="flex items-center gap-1 shrink-0">
+              {/* Required / Optional toggle */}
               <button onClick={() => handleToggleRequired(group)}
                 className={`text-[0.62rem] px-1.5 py-0.5 rounded-full font-medium border transition-colors ${
                   group.is_required ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border"}`}>
                 {group.is_required ? "Required" : "Optional"}
               </button>
+              {/* Multi / Single toggle */}
               <button onClick={() => handleToggleMulti(group)}
                 className={`text-[0.62rem] px-1.5 py-0.5 rounded-full font-medium border transition-colors ${
                   group.is_multi_select ? "bg-accent/20 text-accent-foreground border-accent/40" : "bg-muted text-muted-foreground border-border"}`}>
                 {group.is_multi_select ? "Multi" : "Single"}
               </button>
-              {editingGroupId !== group.id && (
+              {/* Rename */}
+              {renamingGroupId !== group.id && (
                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
-                  onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); }}>
+                  onClick={() => { setRenamingGroupId(group.id); setRenameValue(group.name); }}>
                   <Pencil className="h-3 w-3" />
                 </Button>
               )}
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDeleteGroup(group.id)}>
-                <Trash2 className="h-3 w-3" />
+              {/* Unassign from this item only */}
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                title="Remove from this item (keeps modifier in library)"
+                onClick={() => handleToggleAssignment(group)}>
+                <X className="h-3 w-3" />
               </Button>
             </div>
           </div>
@@ -206,8 +289,15 @@ function VariationsEditor({ itemId }: { itemId: number }) {
                   </>
                 ) : (
                   <>
+                    {/* ★ Default star button */}
+                    <button
+                      title={defaults[group.id] === opt.id ? "Remove as default" : "Set as default for this item"}
+                      onClick={() => handleSetDefault(group.id, opt.id)}
+                      className={`shrink-0 transition-colors ${ defaults[group.id] === opt.id ? "text-amber-400" : "text-muted-foreground/40 hover:text-amber-300" }`}>
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                    </button>
                     <span className="text-sm flex-1 truncate">{opt.label}</span>
-                    <span className={`text-xs font-medium shrink-0 ${opt.price_delta > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                    <span className={`text-xs font-medium shrink-0 ${ opt.price_delta > 0 ? "text-emerald-600" : "text-muted-foreground" }`}>
                       {opt.price_delta > 0 ? `+RM ${opt.price_delta.toFixed(2)}` : "Free"}
                     </span>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
@@ -223,12 +313,12 @@ function VariationsEditor({ itemId }: { itemId: number }) {
               </div>
             ))}
 
-            {/* Inline add-option form */}
+            {/* Add option inline */}
             {addingOptionGroupId === group.id ? (
               <div className="flex gap-2 mt-2 flex-wrap">
                 <Input autoFocus placeholder="Option label (e.g. Large)" value={newOptionLabel}
                   onChange={e => setNewOptionLabel(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") handleCreateOption(group.id); if (e.key === "Escape") setAddingOptionGroupId(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreateOption(group.id); if (e.key === 'Escape') setAddingOptionGroupId(null); }}
                   className="h-7 text-sm flex-1 min-w-[120px]" />
                 <Input type="number" step="0.01" placeholder="+RM" value={newOptionDelta}
                   onChange={e => setNewOptionDelta(e.target.value)}
@@ -246,12 +336,51 @@ function VariationsEditor({ itemId }: { itemId: number }) {
         </div>
       ))}
 
-      {/* Add group form */}
-      {addingGroup ? (
+      {/* ── Library tag strip ──────────────────────────────────────────────── */}
+      {(libraryGroups.length > 0 || showNewGroupForm) && (
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Modifier Library — tap to apply
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {libraryGroups.map(group => (
+              <div key={group.id} className="relative">
+                <button
+                  onPointerDown={() => handleChipPointerDown(group.id)}
+                  onPointerUp={handleChipPointerUp}
+                  onPointerLeave={handleChipPointerUp}
+                  onClick={() => handleToggleAssignment(group)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all select-none ${
+                    longPressedId === group.id
+                      ? "border-destructive bg-destructive/10 text-destructive"
+                      : "border-border bg-muted/60 text-foreground/70 hover:border-primary hover:text-primary"
+                  }`}>
+                  <Plus className="h-3 w-3 shrink-0" />
+                  {group.name}
+                  <span className="text-[0.58rem] text-muted-foreground">{group.options.length} opts</span>
+                </button>
+                {/* Global delete button (shown on long-press) */}
+                {longPressedId === group.id && (
+                  <button
+                    onClick={e => { e.stopPropagation(); handleGlobalDelete(group.id); }}
+                    className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center shadow-md z-10 hover:bg-red-700"
+                    title="Delete globally">
+                    <Trash2 className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Create new global group ────────────────────────────────────────── */}
+      {showNewGroupForm ? (
         <div className="border rounded-xl p-3 space-y-2 bg-accent/5">
+          <p className="text-xs font-semibold text-muted-foreground">New modifier group (added to library + applied here)</p>
           <Input autoFocus placeholder="Group name (e.g. Size, Ice Level, Add-ons)"
             value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleCreateGroup(); if (e.key === "Escape") setAddingGroup(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreateGlobalGroup(); if (e.key === 'Escape') setShowNewGroupForm(false); }}
             className="h-8" />
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
@@ -264,19 +393,20 @@ function VariationsEditor({ itemId }: { itemId: number }) {
             </label>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleCreateGroup} disabled={!newGroupName.trim()}>Create Group</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAddingGroup(false); setNewGroupName(""); }}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateGlobalGroup} disabled={!newGroupName.trim()}>Create &amp; Apply</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowNewGroupForm(false); setNewGroupName(""); }}>Cancel</Button>
           </div>
         </div>
       ) : (
         <Button size="sm" variant="outline" className="gap-1.5 w-full mt-1"
-          onClick={() => setAddingGroup(true)}>
-          <Plus className="h-4 w-4" /> Add Variation Group
+          onClick={() => setShowNewGroupForm(true)}>
+          <Plus className="h-4 w-4" /> Create New Modifier
         </Button>
       )}
     </div>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SortableCategoryRow — each row in the Sections list; the element itself moves

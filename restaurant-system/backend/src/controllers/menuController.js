@@ -111,31 +111,44 @@ const getMenu = async (req, res) => {
       is_sold_out: !!row.is_sold_out
     }));
 
-    // Attach option groups + options to each item
+    // Attach global modifier groups (assigned to each item) + their options
     if (normalized.length > 0) {
       const itemIds = normalized.map(r => r.id);
       const ph = itemIds.map(() => '?').join(',');
-      const groups = await all(
-        `SELECT * FROM item_option_groups WHERE menu_item_id IN (${ph}) ORDER BY menu_item_id, display_order`,
+
+      // Fetch all assignments for these items in one query
+      const assignments = await all(
+        `SELECT ima.menu_item_id, ima.modifier_group_id, ima.default_option_id,
+                mg.name, mg.is_required, mg.is_multi_select
+         FROM item_modifier_assignments ima
+         JOIN modifier_groups mg ON mg.id = ima.modifier_group_id
+         WHERE ima.menu_item_id IN (${ph})
+         ORDER BY ima.menu_item_id, mg.name`,
         itemIds
       );
+
       let options = [];
-      if (groups.length > 0) {
-        const gph = groups.map(() => '?').join(',');
+      if (assignments.length > 0) {
+        const groupIds = [...new Set(assignments.map(a => a.modifier_group_id))];
+        const gph = groupIds.map(() => '?').join(',');
         options = await all(
-          `SELECT * FROM item_options WHERE group_id IN (${gph}) ORDER BY group_id, display_order`,
-          groups.map(g => g.id)
+          `SELECT * FROM modifier_options WHERE group_id IN (${gph}) ORDER BY group_id, sort_order`,
+          groupIds
         );
       }
-      const groupsWithOptions = groups.map(g => ({
-        ...g,
-        is_required: !!g.is_required,
-        is_multi_select: !!g.is_multi_select,
-        options: options.filter(o => o.group_id === g.id)
-      }));
+
       return res.json(normalized.map(item => ({
         ...item,
-        option_groups: groupsWithOptions.filter(g => g.menu_item_id === item.id)
+        option_groups: assignments
+          .filter(a => a.menu_item_id === item.id)
+          .map(a => ({
+            id: a.modifier_group_id,
+            name: a.name,
+            is_required: !!a.is_required,
+            is_multi_select: !!a.is_multi_select,
+            default_option_id: a.default_option_id,
+            options: options.filter(o => o.group_id === a.modifier_group_id)
+          }))
       })));
     }
 
@@ -144,6 +157,8 @@ const getMenu = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
 
 
 /*
@@ -511,112 +526,212 @@ const reorderCategories = async (req, res) => {
   }
 };
 
-// ── Option Groups ─────────────────────────────────────────────────────────────
+// ── Global Modifier Library ───────────────────────────────────────────────────
 
-/** Get all option groups (+ their options) for one menu item. Used by the management UI. */
-const getItemOptions = async (req, res) => {
-  const { id } = req.params;
+/**
+ * getAllModifierGroups — Returns all global modifier groups with their options,
+ * plus a list of menu_item_ids each group is currently assigned to.
+ * Used by the management Variations editor to show the full tag library.
+ */
+const getAllModifierGroups = async (req, res) => {
   try {
     const groups = await all(
-      `SELECT * FROM item_option_groups WHERE menu_item_id = ? ORDER BY display_order`,
+      `SELECT * FROM modifier_groups ORDER BY name ASC`
+    );
+    if (groups.length === 0) return res.json([]);
+
+    const gph = groups.map(() => '?').join(',');
+    const groupIds = groups.map(g => g.id);
+
+    const [options, assignments] = await Promise.all([
+      all(`SELECT * FROM modifier_options WHERE group_id IN (${gph}) ORDER BY group_id, sort_order`, groupIds),
+      all(`SELECT modifier_group_id, menu_item_id, default_option_id FROM item_modifier_assignments WHERE modifier_group_id IN (${gph})`, groupIds),
+    ]);
+
+    res.json(groups.map(g => ({
+      ...g,
+      is_required: !!g.is_required,
+      is_multi_select: !!g.is_multi_select,
+      options: options.filter(o => o.group_id === g.id),
+      assignments: assignments.filter(a => a.modifier_group_id === g.id)
+    })));
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+/** getItemModifiers — Get the assigned modifiers (with defaults) for one item. */
+const getItemModifiers = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const assignments = await all(
+      `SELECT ima.modifier_group_id, ima.default_option_id,
+              mg.name, mg.is_required, mg.is_multi_select
+       FROM item_modifier_assignments ima
+       JOIN modifier_groups mg ON mg.id = ima.modifier_group_id
+       WHERE ima.menu_item_id = ?
+       ORDER BY mg.name`,
       [id]
     );
-    if (groups.length > 0) {
-      const gph = groups.map(() => '?').join(',');
-      const options = await all(
-        `SELECT * FROM item_options WHERE group_id IN (${gph}) ORDER BY group_id, display_order`,
-        groups.map(g => g.id)
-      );
-      return res.json(groups.map(g => ({
-        ...g,
-        is_required: !!g.is_required,
-        is_multi_select: !!g.is_multi_select,
-        options: options.filter(o => o.group_id === g.id)
-      })));
-    }
-    res.json([]);
+    if (assignments.length === 0) return res.json([]);
+
+    const groupIds = assignments.map(a => a.modifier_group_id);
+    const gph = groupIds.map(() => '?').join(',');
+    const options = await all(
+      `SELECT * FROM modifier_options WHERE group_id IN (${gph}) ORDER BY group_id, sort_order`,
+      groupIds
+    );
+    res.json(assignments.map(a => ({
+      id: a.modifier_group_id,
+      name: a.name,
+      is_required: !!a.is_required,
+      is_multi_select: !!a.is_multi_select,
+      default_option_id: a.default_option_id,
+      options: options.filter(o => o.group_id === a.modifier_group_id)
+    })));
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+/** createModifierGroup — Creates a new global modifier group (not item-specific). */
+const createModifierGroup = async (req, res) => {
+  const { name, is_required = 1, is_multi_select = 0 } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  try {
+    const result = await run(
+      `INSERT INTO modifier_groups (name, is_required, is_multi_select) VALUES (?, ?, ?)`,
+      [name.trim(), is_required ? 1 : 0, is_multi_select ? 1 : 0]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_group_created' } });
+    res.json({ id: result.lastID, name: name.trim(), is_required: !!is_required, is_multi_select: !!is_multi_select, options: [], assignments: [] });
   } catch (error) {
+    if (error.message?.includes('UNIQUE')) return res.status(409).json({ error: 'A modifier group with that name already exists.' });
     res.status(500).json({ error: error.message });
   }
 };
 
-const createOptionGroup = async (req, res) => {
-  const { id } = req.params; // menu_item_id
-  const { name, is_required = 1, is_multi_select = 0 } = req.body;
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
-  try {
-    const maxRow = await all(`SELECT MAX(display_order) as m FROM item_option_groups WHERE menu_item_id = ?`, [id]);
-    const order = (maxRow[0]?.m ?? 0) + 1;
-    const result = await run(
-      `INSERT INTO item_option_groups (menu_item_id, name, is_required, is_multi_select, display_order) VALUES (?, ?, ?, ?, ?)`,
-      [id, name.trim(), is_required ? 1 : 0, is_multi_select ? 1 : 0, order]
-    );
-    const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_created' } });
-    res.json({ id: result.lastID, menu_item_id: parseInt(id), name: name.trim(), is_required: !!is_required, is_multi_select: !!is_multi_select, display_order: order, options: [] });
-  } catch (error) { res.status(500).json({ error: error.message }); }
-};
-
-const updateOptionGroup = async (req, res) => {
+/** updateModifierGroup — Renames / toggles required or multi-select on a global group. */
+const updateModifierGroup = async (req, res) => {
   const { groupId } = req.params;
   const { name, is_required, is_multi_select } = req.body;
   try {
-    if (name !== undefined) await run(`UPDATE item_option_groups SET name = ? WHERE id = ?`, [name.trim(), groupId]);
-    if (is_required !== undefined) await run(`UPDATE item_option_groups SET is_required = ? WHERE id = ?`, [is_required ? 1 : 0, groupId]);
-    if (is_multi_select !== undefined) await run(`UPDATE item_option_groups SET is_multi_select = ? WHERE id = ?`, [is_multi_select ? 1 : 0, groupId]);
+    if (name !== undefined) await run(`UPDATE modifier_groups SET name = ? WHERE id = ?`, [name.trim(), groupId]);
+    if (is_required !== undefined) await run(`UPDATE modifier_groups SET is_required = ? WHERE id = ?`, [is_required ? 1 : 0, groupId]);
+    if (is_multi_select !== undefined) await run(`UPDATE modifier_groups SET is_multi_select = ? WHERE id = ?`, [is_multi_select ? 1 : 0, groupId]);
     const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_updated' } });
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_group_updated' } });
     res.json({ success: true });
-  } catch (error) { res.status(500).json({ error: error.message }); }
+  } catch (error) {
+    if (error.message?.includes('UNIQUE')) return res.status(409).json({ error: 'Name already in use.' });
+    res.status(500).json({ error: error.message });
+  }
 };
 
-const deleteOptionGroup = async (req, res) => {
+/** deleteModifierGroup — Deletes a global group and all its options + assignments (CASCADE). */
+const deleteModifierGroup = async (req, res) => {
   const { groupId } = req.params;
   try {
-    await run(`DELETE FROM item_option_groups WHERE id = ?`, [groupId]);
+    // Enable FK cascades
+    await run(`PRAGMA foreign_keys = ON`);
+    await run(`DELETE FROM modifier_groups WHERE id = ?`, [groupId]);
     const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_deleted' } });
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_group_deleted' } });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: error.message }); }
 };
 
-const createOption = async (req, res) => {
+/** createModifierOption — Adds an option to a global modifier group. */
+const createModifierOption = async (req, res) => {
   const { groupId } = req.params;
   const { label, price_delta = 0 } = req.body;
   if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required.' });
   try {
-    const maxRow = await all(`SELECT MAX(display_order) as m FROM item_options WHERE group_id = ?`, [groupId]);
+    const maxRow = await all(`SELECT MAX(sort_order) as m FROM modifier_options WHERE group_id = ?`, [groupId]);
     const order = (maxRow[0]?.m ?? 0) + 1;
     const result = await run(
-      `INSERT INTO item_options (group_id, label, price_delta, display_order) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO modifier_options (group_id, label, price_delta, sort_order) VALUES (?, ?, ?, ?)`,
       [groupId, label.trim(), parseFloat(price_delta) || 0, order]
     );
     const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_created' } });
-    res.json({ id: result.lastID, group_id: parseInt(groupId), label: label.trim(), price_delta: parseFloat(price_delta) || 0, display_order: order });
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_option_created' } });
+    res.json({ id: result.lastID, group_id: parseInt(groupId), label: label.trim(), price_delta: parseFloat(price_delta) || 0, sort_order: order });
   } catch (error) { res.status(500).json({ error: error.message }); }
 };
 
-const updateOption = async (req, res) => {
+/** updateModifierOption — Edits label/price_delta on a global modifier option. */
+const updateModifierOption = async (req, res) => {
   const { optionId } = req.params;
   const { label, price_delta } = req.body;
   try {
-    if (label !== undefined) await run(`UPDATE item_options SET label = ? WHERE id = ?`, [label.trim(), optionId]);
-    if (price_delta !== undefined) await run(`UPDATE item_options SET price_delta = ? WHERE id = ?`, [parseFloat(price_delta) || 0, optionId]);
+    if (label !== undefined) await run(`UPDATE modifier_options SET label = ? WHERE id = ?`, [label.trim(), optionId]);
+    if (price_delta !== undefined) await run(`UPDATE modifier_options SET price_delta = ? WHERE id = ?`, [parseFloat(price_delta) || 0, optionId]);
     const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_updated' } });
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_option_updated' } });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: error.message }); }
 };
 
-const deleteOption = async (req, res) => {
+/** deleteModifierOption — Removes a global option. Also NULLs any default_option_id references. */
+const deleteModifierOption = async (req, res) => {
   const { optionId } = req.params;
   try {
-    await run(`DELETE FROM item_options WHERE id = ?`, [optionId]);
+    await run(`UPDATE item_modifier_assignments SET default_option_id = NULL WHERE default_option_id = ?`, [optionId]);
+    await run(`DELETE FROM modifier_options WHERE id = ?`, [optionId]);
     const broadcast = getBroadcast();
-    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_deleted' } });
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_option_deleted' } });
     res.json({ success: true });
   } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+/** assignModifierGroup — Tags a global modifier group onto a specific menu item. */
+const assignModifierGroup = async (req, res) => {
+  const { itemId } = req.params;
+  const { groupId } = req.body;
+  if (!groupId) return res.status(400).json({ error: 'groupId is required.' });
+  try {
+    await run(
+      `INSERT OR IGNORE INTO item_modifier_assignments (menu_item_id, modifier_group_id) VALUES (?, ?)`,
+      [itemId, groupId]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_assigned' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+/** unassignModifierGroup — Removes the tag (assignment) from this item only; global group is kept. */
+const unassignModifierGroup = async (req, res) => {
+  const { itemId, groupId } = req.params;
+  try {
+    await run(
+      `DELETE FROM item_modifier_assignments WHERE menu_item_id = ? AND modifier_group_id = ?`,
+      [itemId, groupId]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_unassigned' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+/** setDefaultOption — Sets (or clears) the pre-selected default option for a modifier on a specific item. */
+const setDefaultOption = async (req, res) => {
+  const { itemId, groupId } = req.params;
+  const { optionId } = req.body; // null to clear
+  try {
+    await run(
+      `UPDATE item_modifier_assignments SET default_option_id = ? WHERE menu_item_id = ? AND modifier_group_id = ?`,
+      [optionId ?? null, itemId, groupId]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'modifier_default_set' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+// Keep old per-item option functions for backward compatibility
+const getItemOptions = async (req, res) => {
+  const { id } = req.params;
+  // Delegate to the new global system
+  req.params.id = id;
+  return getItemModifiers(req, res);
 };
 
 module.exports = {
@@ -624,8 +739,12 @@ module.exports = {
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
   setBroadcast,
   createCategory, updateCategory, deleteCategory, reorderCategories,
-  getItemOptions, createOptionGroup, updateOptionGroup, deleteOptionGroup,
-  createOption, updateOption, deleteOption
+  // Global modifier library
+  getAllModifierGroups, getItemModifiers, getItemOptions,
+  createModifierGroup, updateModifierGroup, deleteModifierGroup,
+  createModifierOption, updateModifierOption, deleteModifierOption,
+  assignModifierGroup, unassignModifierGroup, setDefaultOption,
 };
+
 
 

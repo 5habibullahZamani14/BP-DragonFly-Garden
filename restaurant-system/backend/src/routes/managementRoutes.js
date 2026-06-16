@@ -21,7 +21,13 @@ const express = require("express");
 const managementController = require("../controllers/managementController");
 const menuController = require("../controllers/menuController");
 const { createCategory, updateCategory, deleteCategory, reorderCategories } = menuController;
-const { getItemOptions, createOptionGroup, updateOptionGroup, deleteOptionGroup, createOption, updateOption, deleteOption } = menuController;
+const {
+  getAllModifierGroups, getItemModifiers,
+  createModifierGroup, updateModifierGroup, deleteModifierGroup,
+  createModifierOption, updateModifierOption, deleteModifierOption,
+  assignModifierGroup, unassignModifierGroup, setDefaultOption,
+} = menuController;
+
 
 const feedbackController = require("../controllers/feedbackController");
 const jwt = require("jsonwebtoken");
@@ -292,7 +298,44 @@ const setupManagementBroadcast = (broadcastFn) => {
   managementController.setBroadcast(broadcastFn);
 };
 
+
+// ── Global Modifier Library ───────────────────────────────────────────────────
+
+/* GET  /management/modifier-groups            — all global groups + options + assignments */
+router.get("/modifier-groups", getAllModifierGroups);
+
+/* POST /management/modifier-groups            — create a new global group */
+router.post("/modifier-groups", createModifierGroup);
+
+/* PUT  /management/modifier-groups/:groupId   — rename / toggle flags */
+router.put("/modifier-groups/:groupId", updateModifierGroup);
+
+/* DELETE /management/modifier-groups/:groupId — delete globally (cascades) */
+router.delete("/modifier-groups/:groupId", deleteModifierGroup);
+
+/* POST /management/modifier-groups/:groupId/options — add an option */
+router.post("/modifier-groups/:groupId/options", createModifierOption);
+
+/* PUT  /management/modifier-options/:optionId  — edit an option */
+router.put("/modifier-options/:optionId", updateModifierOption);
+
+/* DELETE /management/modifier-options/:optionId — delete an option */
+router.delete("/modifier-options/:optionId", deleteModifierOption);
+
+/* GET  /management/menu-items/:itemId/modifiers  — get assigned modifiers for one item */
+router.get("/menu-items/:itemId/modifiers", getItemModifiers);
+
+/* POST /management/menu-items/:itemId/modifiers  — assign a group to an item */
+router.post("/menu-items/:itemId/modifiers", assignModifierGroup);
+
+/* DELETE /management/menu-items/:itemId/modifiers/:groupId — unassign (keeps global group) */
+router.delete("/menu-items/:itemId/modifiers/:groupId", unassignModifierGroup);
+
+/* PUT  /management/menu-items/:itemId/modifiers/:groupId/default — set default option */
+router.put("/menu-items/:itemId/modifiers/:groupId/default", setDefaultOption);
+
 module.exports = router;
+
 module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;
 module.exports.setupMenuBroadcast = setupMenuBroadcast;
 module.exports.setupManagementBroadcast = setupManagementBroadcast;
