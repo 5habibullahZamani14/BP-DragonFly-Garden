@@ -7,7 +7,8 @@
  */
 
 const express = require("express");
-const { getMenu, getCategories, recomputePopular, getRecommendations } = require("../controllers/menuController");
+const { getMenu, getCategories, recomputePopular, getRecommendations, getItemOptions } = require("../controllers/menuController");
+
 const { asyncHandler } = require("../middleware/validation");
 
 const router = express.Router();
@@ -45,4 +46,12 @@ router.post("/popular/recompute", asyncHandler(recomputePopular));
  */
 router.get("/recommendations", asyncHandler(getRecommendations));
 
+/*
+ * GET /menu/:id/options
+ * Returns all option groups (with their options) for a single menu item.
+ * Used by the management UI to populate the variations editor.
+ */
+router.get("/:id/options", asyncHandler(getItemOptions));
+
 module.exports = router;
+

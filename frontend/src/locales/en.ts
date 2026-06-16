@@ -212,7 +212,8 @@ export default {
     "customer.failedLoadMenu": "Failed to load menu. Please refresh.",
     "customer.failedSendOrder": "Network issue — order failed to send.",
     "customer.staffNotified": "Staff has been notified. We will be with you shortly.",
-    "customer.failedNotifyStaff": "Failed to notify staff. Please try again."
+    "customer.failedNotifyStaff": "Failed to notify staff. Please try again.",
+    "customer.addToOrder": "Add to Order"
 ,
     "m.empDir": "Employee Directory & Analytics",
     "m.addEmp": "Add Employee",

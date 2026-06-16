@@ -355,6 +355,63 @@ export const reorderCategories = async (order: { id: number; display_order: numb
     body: JSON.stringify({ order }),
   });
 
+// ── Item Option Groups & Options ──────────────────────────────────────────────
+
+export type { ItemOption, ItemOptionGroup } from "./menu-data";
+
+/** Fetch all option groups (+ options) for a single menu item. */
+export const fetchItemOptions = async (menuItemId: number) =>
+  safeFetch<import("./menu-data").ItemOptionGroup[]>(`/management/menu/${menuItemId}/options`);
+
+export const createOptionGroup = async (
+  menuItemId: number,
+  data: { name: string; is_required?: boolean; is_multi_select?: boolean }
+) =>
+  safeFetch<import("./menu-data").ItemOptionGroup>(`/management/menu/${menuItemId}/option-groups`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const updateOptionGroup = async (
+  groupId: number,
+  data: { name?: string; is_required?: boolean; is_multi_select?: boolean }
+) =>
+  safeFetch<{ success: boolean }>(`/management/menu/option-groups/${groupId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteOptionGroup = async (groupId: number) =>
+  safeFetch<{ success: boolean }>(`/management/menu/option-groups/${groupId}`, { method: "DELETE" });
+
+export const createOption = async (groupId: number, data: { label: string; price_delta?: number }) =>
+  safeFetch<import("./menu-data").ItemOption>(`/management/menu/option-groups/${groupId}/options`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const updateOption = async (optionId: number, data: { label?: string; price_delta?: number }) =>
+  safeFetch<{ success: boolean }>(`/management/menu/options/${optionId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteOption = async (optionId: number) =>
+  safeFetch<{ success: boolean }>(`/management/menu/options/${optionId}`, { method: "DELETE" });
+
+/** A single customer selection from one option group, stored in CartLine. */
+export type SelectedOption = {
+  groupId: number;
+  groupName: string;
+  optionId: number;
+  optionLabel: string;
+  priceDelta: number;
+};
+
 
 /*
  * fetchTable looks up a table by QR code. If the server returns nothing

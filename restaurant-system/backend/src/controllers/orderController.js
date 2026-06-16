@@ -101,6 +101,7 @@ const fetchOrderById = async (orderId) => {
         oi.price_at_order_time,
         oi.notes,
         oi.item_status,
+        oi.options_json,
         mi.name AS item_name,
         mi.description AS item_description
       FROM order_items oi
@@ -110,6 +111,7 @@ const fetchOrderById = async (orderId) => {
     `,
     [orderId]
   );
+
 
   return {
     ...order,
@@ -184,12 +186,18 @@ const createOrder = async (orderData) => {
   await run("BEGIN TRANSACTION");
 
   try {
-    /* Pro Way: Convert to integer cents to prevent IEEE-754 floating point precision errors */
+    /* Pro Way: Convert to integer cents to prevent IEEE-754 floating point precision errors.
+     * Each item's effective price = base price + sum of selected option price_deltas. */
     const additionalPriceCents = items.reduce((total, item) => {
       const menuItem = menuItemMap.get(item.menu_item_id);
-      return total + Math.round(menuItem.price * 100) * item.quantity;
+      const baseCents = Math.round(menuItem.price * 100);
+      const optionDeltaCents = (item.options || []).reduce(
+        (sum, opt) => sum + Math.round((opt.priceDelta || 0) * 100), 0
+      );
+      return total + (baseCents + optionDeltaCents) * item.quantity;
     }, 0);
     const additionalPrice = additionalPriceCents / 100;
+
 
     let orderId;
     let isAddOn = false;
@@ -263,22 +271,39 @@ const createOrder = async (orderData) => {
     for (const item of items) {
       const menuItem = menuItemMap.get(item.menu_item_id);
 
+      /* Compute effective price = base price + sum of selected option price_deltas */
+      const optionDeltaCents = (item.options || []).reduce(
+        (sum, opt) => sum + Math.round((opt.priceDelta || 0) * 100), 0
+      );
+      const effectivePriceCents = Math.round(menuItem.price * 100) + optionDeltaCents;
+      const effectivePrice = effectivePriceCents / 100;
+
+      const optionsJson = item.options && item.options.length > 0
+        ? JSON.stringify(item.options.map(o => ({
+            group: o.groupName,
+            option: o.optionLabel,
+            delta: o.priceDelta || 0
+          })))
+        : null;
+
       const itemInsert = await run(
         `
-          INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes, options_json)
+          VALUES (?, ?, ?, ?, ?, ?)
         `,
-        [orderId, item.menu_item_id, item.quantity, menuItem.price, item.notes]
+        [orderId, item.menu_item_id, item.quantity, effectivePrice, item.notes, optionsJson]
       );
 
       insertedOrderItems.push({
         id: itemInsert.lastID,
         menu_item_id: item.menu_item_id,
         quantity: item.quantity,
-        price_at_order_time: menuItem.price,
+        price_at_order_time: effectivePrice,
         notes: item.notes,
+        options_json: optionsJson,
         item_name: menuItem.name,
       });
+
 
       /*
        * Deduct ingredients from inventory. If no recipe is defined for a menu

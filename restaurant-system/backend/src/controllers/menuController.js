@@ -110,11 +110,41 @@ const getMenu = async (req, res) => {
       is_promo: !!row.is_promo,
       is_sold_out: !!row.is_sold_out
     }));
-    res.json(normalized);
+
+    // Attach option groups + options to each item
+    if (normalized.length > 0) {
+      const itemIds = normalized.map(r => r.id);
+      const ph = itemIds.map(() => '?').join(',');
+      const groups = await all(
+        `SELECT * FROM item_option_groups WHERE menu_item_id IN (${ph}) ORDER BY menu_item_id, display_order`,
+        itemIds
+      );
+      let options = [];
+      if (groups.length > 0) {
+        const gph = groups.map(() => '?').join(',');
+        options = await all(
+          `SELECT * FROM item_options WHERE group_id IN (${gph}) ORDER BY group_id, display_order`,
+          groups.map(g => g.id)
+        );
+      }
+      const groupsWithOptions = groups.map(g => ({
+        ...g,
+        is_required: !!g.is_required,
+        is_multi_select: !!g.is_multi_select,
+        options: options.filter(o => o.group_id === g.id)
+      }));
+      return res.json(normalized.map(item => ({
+        ...item,
+        option_groups: groupsWithOptions.filter(g => g.menu_item_id === item.id)
+      })));
+    }
+
+    res.json(normalized.map(item => ({ ...item, option_groups: [] })));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 /*
  * getCategories returns the full list of categories sorted by display_order.
@@ -421,30 +451,30 @@ const updateCategory = async (req, res) => {
 };
 
 /*
- * deleteCategory — Deletes a category. Before deleting, any items that belong
- * to this category are moved to a special "Uncategorised" fallback category,
- * which is created automatically if it does not yet exist. This ensures no
- * menu items are ever lost when a section is removed.
+ * deleteCategory — Deletes a category. Items that belonged to it are silently
+ * moved to the first remaining category (lowest display_order) so they stay
+ * visible in the menu without any "Uncategorised" concept being introduced.
+ * If this is the last category, deletion is blocked — the schema requires
+ * every menu item to have a category_id.
  */
 const deleteCategory = async (req, res) => {
   const { id } = req.params;
   try {
-    // Ensure the fallback "Uncategorised" category exists
-    let fallback = await all(`SELECT id FROM categories WHERE name = 'Uncategorised' LIMIT 1`);
-    let fallbackId;
-    if (fallback.length === 0) {
-      const maxRow = await all(`SELECT MAX(display_order) as maxOrder FROM categories`);
-      const nextOrder = (maxRow[0]?.maxOrder ?? 0) + 1;
-      const ins = await run(
-        `INSERT INTO categories (name, display_order) VALUES ('Uncategorised', ?)`,
-        [nextOrder]
-      );
-      fallbackId = ins.lastID;
-    } else {
-      fallbackId = fallback[0].id;
+    // Find the first remaining category that is NOT the one being deleted
+    const remaining = await all(
+      `SELECT id, name FROM categories WHERE id != ? ORDER BY display_order ASC LIMIT 1`,
+      [id]
+    );
+
+    if (remaining.length === 0) {
+      return res.status(400).json({
+        error: "Cannot delete the only remaining section. Create another section first."
+      });
     }
 
-    // Move orphaned items to the fallback category
+    const fallbackId = remaining[0].id;
+
+    // Silently reassign items from the deleted category to the fallback
     await run(`UPDATE menu_items SET category_id = ? WHERE category_id = ?`, [fallbackId, id]);
 
     // Delete the category
@@ -452,11 +482,12 @@ const deleteCategory = async (req, res) => {
 
     const broadcast = getBroadcast();
     if (broadcast) broadcast({ type: "MENU_UPDATE", payload: { action: "category_deleted", id } });
-    res.json({ success: true, fallback_category_id: fallbackId });
+    res.json({ success: true, fallback_category_id: fallbackId, fallback_name: remaining[0].name });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 /*
  * reorderCategories — Accepts an array of { id, display_order } objects and
@@ -480,5 +511,121 @@ const reorderCategories = async (req, res) => {
   }
 };
 
-module.exports = { getMenu, getCategories, recomputePopular, getRecommendations, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage, setBroadcast, createCategory, updateCategory, deleteCategory, reorderCategories };
+// ── Option Groups ─────────────────────────────────────────────────────────────
+
+/** Get all option groups (+ their options) for one menu item. Used by the management UI. */
+const getItemOptions = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const groups = await all(
+      `SELECT * FROM item_option_groups WHERE menu_item_id = ? ORDER BY display_order`,
+      [id]
+    );
+    if (groups.length > 0) {
+      const gph = groups.map(() => '?').join(',');
+      const options = await all(
+        `SELECT * FROM item_options WHERE group_id IN (${gph}) ORDER BY group_id, display_order`,
+        groups.map(g => g.id)
+      );
+      return res.json(groups.map(g => ({
+        ...g,
+        is_required: !!g.is_required,
+        is_multi_select: !!g.is_multi_select,
+        options: options.filter(o => o.group_id === g.id)
+      })));
+    }
+    res.json([]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const createOptionGroup = async (req, res) => {
+  const { id } = req.params; // menu_item_id
+  const { name, is_required = 1, is_multi_select = 0 } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  try {
+    const maxRow = await all(`SELECT MAX(display_order) as m FROM item_option_groups WHERE menu_item_id = ?`, [id]);
+    const order = (maxRow[0]?.m ?? 0) + 1;
+    const result = await run(
+      `INSERT INTO item_option_groups (menu_item_id, name, is_required, is_multi_select, display_order) VALUES (?, ?, ?, ?, ?)`,
+      [id, name.trim(), is_required ? 1 : 0, is_multi_select ? 1 : 0, order]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_created' } });
+    res.json({ id: result.lastID, menu_item_id: parseInt(id), name: name.trim(), is_required: !!is_required, is_multi_select: !!is_multi_select, display_order: order, options: [] });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+const updateOptionGroup = async (req, res) => {
+  const { groupId } = req.params;
+  const { name, is_required, is_multi_select } = req.body;
+  try {
+    if (name !== undefined) await run(`UPDATE item_option_groups SET name = ? WHERE id = ?`, [name.trim(), groupId]);
+    if (is_required !== undefined) await run(`UPDATE item_option_groups SET is_required = ? WHERE id = ?`, [is_required ? 1 : 0, groupId]);
+    if (is_multi_select !== undefined) await run(`UPDATE item_option_groups SET is_multi_select = ? WHERE id = ?`, [is_multi_select ? 1 : 0, groupId]);
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_updated' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+const deleteOptionGroup = async (req, res) => {
+  const { groupId } = req.params;
+  try {
+    await run(`DELETE FROM item_option_groups WHERE id = ?`, [groupId]);
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_group_deleted' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+const createOption = async (req, res) => {
+  const { groupId } = req.params;
+  const { label, price_delta = 0 } = req.body;
+  if (!label || !label.trim()) return res.status(400).json({ error: 'Label is required.' });
+  try {
+    const maxRow = await all(`SELECT MAX(display_order) as m FROM item_options WHERE group_id = ?`, [groupId]);
+    const order = (maxRow[0]?.m ?? 0) + 1;
+    const result = await run(
+      `INSERT INTO item_options (group_id, label, price_delta, display_order) VALUES (?, ?, ?, ?)`,
+      [groupId, label.trim(), parseFloat(price_delta) || 0, order]
+    );
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_created' } });
+    res.json({ id: result.lastID, group_id: parseInt(groupId), label: label.trim(), price_delta: parseFloat(price_delta) || 0, display_order: order });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+const updateOption = async (req, res) => {
+  const { optionId } = req.params;
+  const { label, price_delta } = req.body;
+  try {
+    if (label !== undefined) await run(`UPDATE item_options SET label = ? WHERE id = ?`, [label.trim(), optionId]);
+    if (price_delta !== undefined) await run(`UPDATE item_options SET price_delta = ? WHERE id = ?`, [parseFloat(price_delta) || 0, optionId]);
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_updated' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+const deleteOption = async (req, res) => {
+  const { optionId } = req.params;
+  try {
+    await run(`DELETE FROM item_options WHERE id = ?`, [optionId]);
+    const broadcast = getBroadcast();
+    if (broadcast) broadcast({ type: 'MENU_UPDATE', payload: { action: 'option_deleted' } });
+    res.json({ success: true });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+module.exports = {
+  getMenu, getCategories, recomputePopular, getRecommendations,
+  createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
+  setBroadcast,
+  createCategory, updateCategory, deleteCategory, reorderCategories,
+  getItemOptions, createOptionGroup, updateOptionGroup, deleteOptionGroup,
+  createOption, updateOption, deleteOption
+};
+
 

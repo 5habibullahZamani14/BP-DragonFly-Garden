@@ -212,7 +212,9 @@ export default {
     "customer.failedLoadMenu": "بارگیری منو انجام نشد. لطفاً صفحه را تازه‌سازی کنید.",
     "customer.failedSendOrder": "مشکل شبکه — ارسال سفارش انجام نشد.",
     "customer.staffNotified": "به پرسنل اطلاع داده شد. به زودی به شما مراجعه می‌کنیم.",
-    "customer.failedNotifyStaff": "اطلاع به پرسنل انجام نشد. لطفاً دوباره امتحان کنید."
+    "customer.failedNotifyStaff": "اطلاع به پرسنل انجام نشد. لطفاً دوباره امتحان کنید.",
+    "customer.addToOrder": "افزودن به سفارش"
+
 ,
     "m.empDir": "لیست کارمندان و تحلیل‌ها",
     "m.addEmp": "افزودن کارمند",

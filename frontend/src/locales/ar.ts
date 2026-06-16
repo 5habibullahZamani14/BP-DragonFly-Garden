@@ -212,7 +212,9 @@ export default {
     "customer.failedLoadMenu": "فشل تحميل القائمة. الرجاء التحديث.",
     "customer.failedSendOrder": "مشكلة في الشبكة — فشل إرسال الطلب.",
     "customer.staffNotified": "تم إخطار الموظفين. سنكون معك قريباً.",
-    "customer.failedNotifyStaff": "فشل إخطار الموظفين. يرجى المحاولة مرة أخرى."
+    "customer.failedNotifyStaff": "فشل إخطار الموظفين. يرجى المحاولة مرة أخرى.",
+    "customer.addToOrder": "أضف إلى الطلب"
+
 ,
     "m.empDir": "دليل الموظفين والتحليلات",
     "m.addEmp": "إضافة موظف",

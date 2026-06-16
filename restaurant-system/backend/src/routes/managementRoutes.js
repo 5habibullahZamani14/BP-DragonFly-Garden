@@ -21,6 +21,8 @@ const express = require("express");
 const managementController = require("../controllers/managementController");
 const menuController = require("../controllers/menuController");
 const { createCategory, updateCategory, deleteCategory, reorderCategories } = menuController;
+const { getItemOptions, createOptionGroup, updateOptionGroup, deleteOptionGroup, createOption, updateOption, deleteOption } = menuController;
+
 const feedbackController = require("../controllers/feedbackController");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
@@ -145,6 +147,18 @@ router.post("/categories", createCategory);
 router.put("/categories/reorder", reorderCategories);   // must be before /:id
 router.put("/categories/:id", updateCategory);
 router.delete("/categories/:id", deleteCategory);
+
+// ── Item Modifications / Variations ──────────────────────────────────────────
+// Routes ordered carefully: specific paths before parameterised ones.
+
+router.get("/menu/:id/options", getItemOptions);
+router.post("/menu/:id/option-groups", createOptionGroup);
+router.put("/menu/option-groups/:groupId", updateOptionGroup);
+router.delete("/menu/option-groups/:groupId", deleteOptionGroup);
+router.post("/menu/option-groups/:groupId/options", createOption);
+router.put("/menu/options/:optionId", updateOption);
+router.delete("/menu/options/:optionId", deleteOption);
+
 
 /*
  * GET /management/finance

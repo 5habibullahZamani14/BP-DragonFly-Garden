@@ -391,6 +391,38 @@ const initializeDatabase = async () => {
     )
   `);
 
+  /*
+   * item_option_groups groups modifier choices for a menu item, e.g. "Size",
+   * "Ice Level", "Spice Level". Each group can be required or optional, and
+   * single-select (radio) or multi-select (checkbox).
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS item_option_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      is_required INTEGER NOT NULL DEFAULT 1,
+      is_multi_select INTEGER NOT NULL DEFAULT 0,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+    )
+  `);
+
+  /*
+   * item_options are the individual choices within a group, e.g. Small/Medium/Large.
+   * price_delta is added to the item's base price (0 = no extra charge).
+   */
+  await run(`
+    CREATE TABLE IF NOT EXISTS item_options (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      price_delta REAL NOT NULL DEFAULT 0.0,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (group_id) REFERENCES item_option_groups(id) ON DELETE CASCADE
+    )
+  `);
+
   // ==========================================
   // PHASE 2: COLUMN MIGRATIONS (ensureColumn)
   // ==========================================
@@ -425,6 +457,8 @@ const initializeDatabase = async () => {
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");
   await ensureColumn("order_items", "item_status", "TEXT NOT NULL DEFAULT 'queue'");
+  await ensureColumn("order_items", "options_json", "TEXT");
+
 
   await ensureColumn("order_status_history", "order_id", "INTEGER NOT NULL");
   await ensureColumn("order_status_history", "status", "TEXT NOT NULL");
@@ -460,6 +494,9 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_feedback_findings_run", "feedback_analysis_findings", "run_id, status");
   await ensureIndex("idx_grand_archive_logs_category", "grand_archive_logs", "category, timestamp DESC");
   await ensureIndex("idx_employees_id", "employees", "employee_id");
+  await ensureIndex("idx_item_option_groups_item", "item_option_groups", "menu_item_id");
+  await ensureIndex("idx_item_options_group", "item_options", "group_id");
+
 
   // ==========================================
   // PHASE 4: LEGACY DATA MIGRATIONS & SEED PREPARATION

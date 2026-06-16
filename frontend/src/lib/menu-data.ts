@@ -11,17 +11,40 @@
  * when switching between live and mock modes.
  */
 
+export type ItemOption = {
+  id: number;
+  group_id: number;
+  label: string;
+  price_delta: number;
+  display_order: number;
+};
+
+export type ItemOptionGroup = {
+  id: number;
+  menu_item_id: number;
+  name: string;
+  is_required: boolean;
+  is_multi_select: boolean;
+  display_order: number;
+  options: ItemOption[];
+};
+
 export type MenuItem = {
   id: number;
   name: string;
   description: string;
   price: number;
+  category_id?: number;
   category_name: string;
   image_url?: string;
   is_popular?: boolean;
   is_promo?: boolean;
   promo_label?: string;
+  is_available?: boolean;
+  is_sold_out?: boolean;
+  option_groups?: ItemOptionGroup[];
 };
+
 
 const IMG = (slug: string) => `/menu-images/${slug}.jpg`;
 
@@ -70,10 +93,12 @@ export type Order = {
     quantity: number;
     item_name: string;
     notes?: string;
+    options_json?: string | null;
     price_at_order_time?: number;
     item_status?: "queue" | "preparing" | "ready";
   }[];
 };
+
 
 export const MOCK_KITCHEN_ORDERS: Order[] = [
   { id: 1042, status: "queue", table_number: "Table 4", total_price: 36.8,

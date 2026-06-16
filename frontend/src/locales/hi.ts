@@ -212,7 +212,9 @@ export default {
     "customer.failedLoadMenu": "मेनू लोड करने में विफल। कृपया रीफ्रेश करें।",
     "customer.failedSendOrder": "नेटवर्क समस्या - आदेश भेजने में विफल रहा।",
     "customer.staffNotified": "कर्मचारियों को सूचित कर दिया गया है। हम जल्द ही आपके साथ होंगे।",
-    "customer.failedNotifyStaff": "कर्मचारियों को सूचित करने में विफल। कृपया पुनः प्रयास करें।"
+    "customer.failedNotifyStaff": "कर्मचारियों को सूचित करने में विफल। कृपया पुनः प्रयास करें।",
+    "customer.addToOrder": "ऑर्डर में जोड़ें"
+
 ,
     "m.empDir": "कर्मचारी निर्देशिका और विश्लेषिकी",
     "m.addEmp": "कर्मचारी जोड़ें",

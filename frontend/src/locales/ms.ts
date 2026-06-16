@@ -212,7 +212,9 @@ export default {
     "customer.failedLoadMenu": "Gagal memuatkan menu. Sila muat semula.",
     "customer.failedSendOrder": "Isu rangkaian — pesanan gagal dihantar.",
     "customer.staffNotified": "Kakitangan telah dimaklumkan. Kami akan segera datang kepada anda.",
-    "customer.failedNotifyStaff": "Gagal memaklumkan kakitangan. Sila cuba lagi."
+    "customer.failedNotifyStaff": "Gagal memaklumkan kakitangan. Sila cuba lagi.",
+    "customer.addToOrder": "Tambah ke Pesanan"
+
 ,
     "m.empDir": "Direktori Pekerja & Analitik",
     "m.addEmp": "Tambah Pekerja",

@@ -88,8 +88,21 @@ const printerService = {
         }
         if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
       }
+
+      // Print selected options (modifiers/variations)
+      if (item.options_json) {
+        try {
+          const opts = JSON.parse(item.options_json);
+          opts.forEach(opt => {
+            const suffix = opt.delta > 0 ? ` (+${parseFloat(opt.delta).toFixed(2)})` : '';
+            ticket += `     > ${opt.option}${suffix}\n`;
+          });
+        } catch { /* ignore malformed JSON */ }
+      }
+
       ticket += "                     [ ]\n"; // Checkbox on the right
       ticket += "----------------------------\n";
+
     });
     
     ticket += "\n\n.";
@@ -140,6 +153,18 @@ const printerService = {
       
       ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
       ticket += `    (${item.price_at_order_time.toFixed(2)})\n`;
+      // Print selected options
+      if (item.options_json) {
+        try {
+          const opts = JSON.parse(item.options_json);
+          opts.forEach(opt => {
+            const suffix = opt.delta > 0 ? ` +${parseFloat(opt.delta).toFixed(2)}` : '';
+            const optLine = `    ${opt.option}${suffix}`.substring(0, 28);
+            ticket += `${optLine}\n`;
+          });
+        } catch { /* ignore */ }
+      }
+
     });
     
     ticket += "----------------------------\n";

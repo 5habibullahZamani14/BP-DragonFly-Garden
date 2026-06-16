@@ -212,7 +212,9 @@ export default {
     "customer.failedLoadMenu": "加载菜单失败。请刷新。",
     "customer.failedSendOrder": "网络问题 — 订单发送失败。",
     "customer.staffNotified": "已通知工作人员。我们将尽快为您服务。",
-    "customer.failedNotifyStaff": "通知工作人员失败。请重试。"
+    "customer.failedNotifyStaff": "通知工作人员失败。请重试。",
+    "customer.addToOrder": "加入订单"
+
 ,
     "m.empDir": "员工名录和分析",
     "m.addEmp": "添加员工",

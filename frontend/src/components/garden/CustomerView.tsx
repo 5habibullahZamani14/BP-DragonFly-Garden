@@ -73,9 +73,19 @@ type Notify = (kind: "success" | "error", text: string) => void;
 
 interface Props { qrCode: string; notify: Notify; }
 
-type CartLine = { id: number; name: string; price: number; quantity: number; notes: string };
-type CartSource = Pick<MenuItem, "id" | "name" | "price">;
+type SelectedOption = { groupId: number; groupName: string; optionId: number; optionLabel: string; priceDelta: number; };
+type CartLine = {
+  cartKey: string;    // unique key = itemId + sorted optionIds so same item with diff options = diff lines
+  id: number;
+  name: string;
+  price: number;      // effective price = base + sum(priceDelta)
+  quantity: number;
+  notes: string;
+  selectedOptions: SelectedOption[];
+};
+type CartSource = Pick<MenuItem, "id" | "name" | "price"> & { option_groups?: MenuItem["option_groups"] };
 type OrderWithVat = Order & { total_with_vat?: number | string | null };
+
 
 // Map category names to friendly icons (Grab-style)
 const CAT_ICON: Record<string, typeof Soup> = {
@@ -154,6 +164,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     catch { return false; }
   });
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+
+  // ── Option selection bottom sheet ───────────────────────────────────────
+  const [optionSheetItem, setOptionSheetItem] = useState<CartSource | null>(null);
+  // Tracks pending selections while sheet is open: groupId → Set of optionIds
+  const [pendingSelections, setPendingSelections] = useState<Record<number, Set<number>>>({});
+
 
   // Tax settings from backend
   const [taxSettings, setTaxSettings] = useState({ sstEnabled: true, sstRate: 0.06, scEnabled: true, scRate: 0.10 });
@@ -392,19 +408,79 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const cartCount = cart.reduce((n, c) => n + c.quantity, 0);
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
 
-  const addToCart = (item: CartSource) => {
+  // Build a cartKey from item id + sorted selected option ids
+  const buildCartKey = (itemId: number, opts: SelectedOption[]) =>
+    [itemId, ...opts.map(o => o.optionId).sort()].join("-");
+
+  const addToCart = (item: CartSource, selectedOptions: SelectedOption[] = []) => {
+    const effectivePrice = item.price + selectedOptions.reduce((s, o) => s + o.priceDelta, 0);
+    const cartKey = buildCartKey(item.id, selectedOptions);
     setCart((c) => {
-      const ex = c.find((x) => x.id === item.id);
-      if (ex) return c.map((x) => (x.id === item.id ? { ...x, quantity: x.quantity + 1 } : x));
-      return [...c, { id: item.id, name: item.name, price: item.price, quantity: 1, notes: "" }];
+      const ex = c.find((x) => x.cartKey === cartKey);
+      if (ex) return c.map((x) => (x.cartKey === cartKey ? { ...x, quantity: x.quantity + 1 } : x));
+      return [...c, { cartKey, id: item.id, name: item.name, price: effectivePrice, quantity: 1, notes: "", selectedOptions }];
     });
   };
-  const setQty = (id: number, q: number) => {
-    if (q <= 0) return setCart((c) => c.filter((x) => x.id !== id));
-    setCart((c) => c.map((x) => (x.id === id ? { ...x, quantity: q } : x)));
+
+  // Called when the customer taps the + button on a menu card
+  const handleAddPress = (item: CartSource) => {
+    const groups = item.option_groups ?? [];
+    if (groups.length === 0) {
+      addToCart(item);
+      return;
+    }
+    // Open bottom sheet for option selection
+    setPendingSelections({});
+    setOptionSheetItem(item);
   };
-  const setNote = (id: number, n: string) =>
-    setCart((c) => c.map((x) => (x.id === id ? { ...x, notes: n } : x)));
+
+  // Confirm selections from the bottom sheet
+  const handleSheetConfirm = () => {
+    if (!optionSheetItem) return;
+    const groups = optionSheetItem.option_groups ?? [];
+    // Validate all required groups have a selection
+    const missing = groups.filter(g => g.is_required && !(pendingSelections[g.id]?.size ?? 0));
+    if (missing.length > 0) {
+      notify("error", `Please choose: ${missing.map(g => g.name).join(", ")}`);
+      return;
+    }
+    const selectedOptions: SelectedOption[] = [];
+    for (const g of groups) {
+      const selected = pendingSelections[g.id];
+      if (!selected) continue;
+      for (const optId of selected) {
+        const opt = g.options.find(o => o.id === optId);
+        if (opt) selectedOptions.push({ groupId: g.id, groupName: g.name, optionId: opt.id, optionLabel: opt.label, priceDelta: opt.price_delta });
+      }
+    }
+    addToCart(optionSheetItem, selectedOptions);
+    setOptionSheetItem(null);
+  };
+
+  const togglePendingOption = (groupId: number, optionId: number, isMulti: boolean) => {
+    setPendingSelections(prev => {
+      const next = { ...prev };
+      if (!isMulti) {
+        // single-select: replace
+        next[groupId] = new Set([optionId]);
+      } else {
+        // multi-select: toggle
+        const s = new Set(prev[groupId] ?? []);
+        if (s.has(optionId)) s.delete(optionId); else s.add(optionId);
+        next[groupId] = s;
+      }
+      return next;
+    });
+  };
+
+
+  const setQty = (cartKey: string, q: number) => {
+    if (q <= 0) return setCart((c) => c.filter((x) => x.cartKey !== cartKey));
+    setCart((c) => c.map((x) => (x.cartKey === cartKey ? { ...x, quantity: q } : x)));
+  };
+  const setNote = (cartKey: string, n: string) =>
+    setCart((c) => c.map((x) => (x.cartKey === cartKey ? { ...x, notes: n } : x)));
+
 
   // Start the actual countdown (extracted so it can be called after duplicate-warning dismiss)
   const beginCountdown = () => {
@@ -447,8 +523,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     try {
       const order = await placeOrder(qrCode, {
         table_id: tableInfo.id,
-        items: snapshot.map(c => ({ menu_item_id: c.id, quantity: c.quantity, notes: c.notes }))
+        items: snapshot.map(c => ({
+          menu_item_id: c.id,
+          quantity: c.quantity,
+          notes: c.notes,
+          options: c.selectedOptions,
+        }))
       });
+
       setOrders(cur => {
         if (cur.some(o => o.id === order.id)) {
           return cur.map(o => o.id === order.id ? order : o);
@@ -937,7 +1019,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
                   </div>
                   <button
-                    onClick={() => addToCart(spotlight)}
+                    onClick={() => handleAddPress(spotlight)}
                     className="grid h-10 w-10 place-items-center rounded-full bg-white text-berry shadow-lg active:scale-90"
                     aria-label={t("customer.add")}
                   >
@@ -984,7 +1066,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <p className="font-display text-xl font-bold">{formatRM(p.price)}</p>
                     </div>
                     <button
-                      onClick={() => addToCart(p)}
+                      onClick={() => handleAddPress(p)}
                       className="grid h-10 w-10 place-items-center rounded-full bg-white text-berry shadow-lg active:scale-90"
                       aria-label={t("customer.add")}
                     >
@@ -1024,7 +1106,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </span>
                   )}
                   <button
-                    onClick={() => addToCart(item)}
+                    onClick={() => handleAddPress(item)}
                     className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition active:scale-90"
                     aria-label={t("customer.add")}
                   >
@@ -1128,7 +1210,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
                               <button
                                 disabled={item.is_sold_out}
-                                onClick={() => addToCart(item)}
+                                onClick={() => handleAddPress(item)}
                                 className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
                               >
                                 {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
@@ -1185,7 +1267,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </div>
                     <button
                       disabled={item.is_sold_out}
-                      onClick={() => addToCart(item)}
+                      onClick={() => handleAddPress(item)}
                       className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
                     >
                       {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
@@ -1449,27 +1531,38 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     <div className="min-w-0">
                       <h3 className="font-display text-base font-semibold leading-tight">{c.name}</h3>
                       <p className="text-xs text-foreground/50">{formatRM(c.price)} {t("customer.priceEach")}</p>
+                      {/* Selected options */}
+                      {c.selectedOptions.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {c.selectedOptions.map((o, i) => (
+                            <span key={i} className="inline-flex items-center gap-0.5 rounded-full bg-primary/8 px-2 py-0.5 text-[0.62rem] font-medium text-primary border border-primary/20">
+                              {o.optionLabel}{o.priceDelta > 0 ? ` +RM ${o.priceDelta.toFixed(2)}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <strong className="font-display text-base">{formatRM(c.price * c.quantity)}</strong>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="inline-flex items-center gap-2 rounded-full bg-muted p-1">
-                      <button onClick={() => setQty(c.id, c.quantity - 1)} className="grid h-8 w-8 place-items-center rounded-full bg-background shadow-sm active:scale-90">
+                      <button onClick={() => setQty(c.cartKey, c.quantity - 1)} className="grid h-8 w-8 place-items-center rounded-full bg-background shadow-sm active:scale-90">
                         <Minus className="h-3.5 w-3.5" />
                       </button>
                       <span className="w-6 text-center font-semibold">{c.quantity}</span>
-                      <button onClick={() => setQty(c.id, c.quantity + 1)} className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground active:scale-90">
+                      <button onClick={() => setQty(c.cartKey, c.quantity + 1)} className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground active:scale-90">
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
                     <input
                       value={c.notes}
-                      onChange={(e) => setNote(c.id, e.target.value)}
+                      onChange={(e) => setNote(c.cartKey, e.target.value)}
                       placeholder={t("customer.anyNotes")}
                       className="min-w-0 flex-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                 </li>
+
               ))}
             </ul>
 
@@ -1571,6 +1664,109 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           </div>
         )}
       </div>
+      {/* ── OPTION SELECTION BOTTOM SHEET ─────────────────────────────── */}
+      {optionSheetItem && (
+        <div
+          className="fixed inset-0 z-[200] flex items-end justify-center"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setOptionSheetItem(null); }}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-[32px] bg-background overflow-hidden"
+            style={{ boxShadow: "0 -8px 40px rgba(0,0,0,0.25)", maxHeight: "88dvh", display: "flex", flexDirection: "column" }}
+          >
+            {/* Sheet handle */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="h-1.5 w-12 rounded-full bg-muted-foreground/30" />
+            </div>
+
+            {/* Header */}
+            <div className="px-5 pb-3 pt-2 shrink-0 border-b">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-display text-xl font-bold leading-tight truncate">{optionSheetItem.name}</h2>
+                  <p className="text-sm text-foreground/55 mt-0.5">
+                    {t("customer.from")} <span className="font-semibold text-primary">{formatRM(optionSheetItem.price)}</span>
+                    {Object.values(pendingSelections).some(s => s.size > 0) && (
+                      <span className="text-foreground/40 ml-1">
+                        + {formatRM(Object.entries(pendingSelections).reduce((sum, [gidStr, sel]) => {
+                          const g = (optionSheetItem.option_groups ?? []).find(g => g.id === parseInt(gidStr));
+                          if (!g) return sum;
+                          return sum + [...sel].reduce((s, oid) => s + (g.options.find(o => o.id === oid)?.price_delta ?? 0), 0);
+                        }, 0))}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <button onClick={() => setOptionSheetItem(null)} className="p-2 rounded-full hover:bg-muted transition shrink-0">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Option groups - scrollable */}
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+              {(optionSheetItem.option_groups ?? []).map(group => (
+                <div key={group.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-sm">{group.name}</span>
+                    {group.is_required
+                      ? <span className="text-[0.6rem] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Required</span>
+                      : <span className="text-[0.6rem] font-medium text-muted-foreground">Optional</span>
+                    }
+                  </div>
+                  <div className="space-y-2">
+                    {group.options.map(opt => {
+                      const selected = pendingSelections[group.id]?.has(opt.id) ?? false;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => togglePendingOption(group.id, opt.id, group.is_multi_select)}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border-2 text-left transition-all active:scale-[0.98] ${
+                            selected
+                              ? "border-primary bg-primary/8 shadow-sm"
+                              : "border-border bg-card hover:border-primary/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                              selected ? "border-primary bg-primary" : "border-border"
+                            }`}>
+                              {selected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                            </div>
+                            <span className="text-sm font-medium">{opt.label}</span>
+                          </div>
+                          {opt.price_delta > 0 && (
+                            <span className="text-sm font-semibold text-primary shrink-0 ml-2">+{formatRM(opt.price_delta)}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 border-t shrink-0">
+              <button
+                onClick={handleSheetConfirm}
+                className="w-full rounded-2xl py-4 text-base font-bold text-white transition active:scale-[0.98]"
+                style={{ background: "var(--gradient-hero)" }}
+              >
+                {t("customer.addToOrder")} · {formatRM(
+                  optionSheetItem.price + Object.entries(pendingSelections).reduce((sum, [gidStr, sel]) => {
+                    const g = (optionSheetItem.option_groups ?? []).find(g => g.id === parseInt(gidStr));
+                    if (!g) return sum;
+                    return sum + [...sel].reduce((s, oid) => s + (g.options.find(o => o.id === oid)?.price_delta ?? 0), 0);
+                  }, 0)
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
