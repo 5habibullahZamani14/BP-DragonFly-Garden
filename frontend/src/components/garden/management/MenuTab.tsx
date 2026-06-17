@@ -1136,16 +1136,11 @@ export function MenuTab() {
                           </Select>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Button size="sm" onClick={() => patternInputRef.current?.click()}>
-                            <ImageIcon className="h-4 w-4 me-1" /> Upload
-                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditingItem(p => ({ ...p, pattern_id: null }))}>
                             Clear
                           </Button>
                         </div>
                       </div>
-                      <input ref={patternInputRef} type="file" accept="image/*" className="hidden" title="Upload pattern image"
-                        onChange={handleUploadPatternFile} />
                       {selectedPatternImage ? (
                         <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">
                           <div className="h-20 w-20 overflow-hidden rounded-xl bg-white shadow-sm">
