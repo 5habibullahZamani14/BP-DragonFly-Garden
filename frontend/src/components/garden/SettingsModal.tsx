@@ -75,7 +75,7 @@ export const SettingsModal = () => {
         {/* Header — stays fixed */}
         <div className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0" style={{ background: "var(--gradient-soft)" }}>
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">{t("settings.displayTitle")}</DialogTitle>
+            <DialogTitle className="font-1 text-2xl">{t("settings.displayTitle")}</DialogTitle>
             <DialogDescription className="text-sm text-foreground/60 mt-1">
               {t("settings.displayDesc")}
             </DialogDescription>

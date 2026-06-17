@@ -8,14 +8,10 @@
  *
  * Three settings are managed here:
  *
- *   fontTheme   — Controls which font pair is used across the app.
- *                 "font-1" (Clarity): Inter for both display and body —
- *                   maximum readability, ideal for users who find serif fonts
- *                   harder to read.
- *                 "font-2" (Classic): Fraunces (display) + Lexend (body) at
- *                   normal weight — the default garden aesthetic.
- *                 "font-3" (Elegance): Same pair at weight 300 — thinner,
- *                   airier, luxury feel. This is the app's default.
+ *   fontTheme   — Controls which font is used across the app.
+ *                 "font-1": Baskerville — elegant serif font
+ *                 "font-2": Merriweather — readable serif font
+ *                 "font-3": Montserrat — modern sans-serif font
  *
  *   uiScale     — A multiplier applied to the --ui-scale CSS property, which
  *                 scales interactive element sizes (buttons, cards). Range 0.8–1.4.
@@ -64,42 +60,26 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     localStorage.setItem("a11y-font-theme", fontTheme);
 
-    let displayFont = "'Fraunces', serif";
-    let sansFont = "'Lexend', sans-serif";
+    let selectedFont = "'Baskervville', serif";
     let bodyWeight = "400";
 
     const lng = i18n.language || "en";
 
     if (lng === "zh") {
-      displayFont = "'Noto Serif SC', serif";
-      sansFont = "'Noto Sans SC', sans-serif";
+      selectedFont = "'Noto Serif SC', serif";
     } else if (lng === "ar" || lng === "fa") {
-      displayFont = "'Amiri', serif";
-      sansFont = "'Noto Sans Arabic', sans-serif";
+      selectedFont = "'Amiri', serif";
     } else if (lng === "hi") {
-      displayFont = "'Noto Serif Devanagari', serif";
-      sansFont = "'Noto Sans Devanagari', sans-serif";
-    } else if (lng === "ms") {
-      displayFont = "'Fraunces', serif";
-      sansFont = "'Lexend', sans-serif";
-    }
-
-    if (fontTheme === "font-1") {
-      /* Clarity mode: single sans-serif font for everything. */
-      displayFont = lng === "en" || lng === "ms" ? "'Inter', sans-serif" : sansFont;
-      sansFont = lng === "en" || lng === "ms" ? "'Inter', sans-serif" : sansFont;
-      bodyWeight = "400";
+      selectedFont = "'Noto Serif Devanagari', serif";
     } else if (fontTheme === "font-2") {
-      /* Classic mode: display + sans at regular weight. */
-      bodyWeight = "400";
-    }
-    /* Elegance (font-3): same fonts as Classic but at weight 300 for a lighter feel. */
-    if (fontTheme === "font-3") {
-      bodyWeight = "300";
+      selectedFont = "'Merriweather', serif";
+    } else if (fontTheme === "font-3") {
+      selectedFont = "'Montserrat', sans-serif";
     }
 
-    document.documentElement.style.setProperty("--font-display", displayFont);
-    document.documentElement.style.setProperty("--font-sans", sansFont);
+    document.documentElement.style.setProperty("--font-1", selectedFont);
+    document.documentElement.style.setProperty("--font-2", selectedFont);
+    document.documentElement.style.setProperty("--font-3", selectedFont);
     document.documentElement.style.setProperty("--body-weight", bodyWeight);
   }, [fontTheme, i18n.language]);
 

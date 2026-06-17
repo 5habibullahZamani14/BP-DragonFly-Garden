@@ -83,7 +83,7 @@ export const FinanceTab = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
-          <h2 className="text-3xl font-display font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
+          <h2 className="text-3xl font-1 font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
             {t("m.finInt")}
           </h2>
           <p className="text-foreground/60 mt-1 font-medium">{t("m.financeDesc")}</p>
@@ -98,7 +98,7 @@ export const FinanceTab = () => {
           </div>
           <CardContent className="p-6 relative z-10">
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.totRev")}</p>
-            <h4 className="text-4xl font-display font-bold text-emerald-700">RM {metrics.revenue.toFixed(2)}</h4>
+            <h4 className="text-4xl font-1 font-bold text-emerald-700">RM {metrics.revenue.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded-full">
               <ArrowUpRight className="w-3 h-3 mr-1" /> {t("m.grossIncome")}
             </div>
@@ -111,7 +111,7 @@ export const FinanceTab = () => {
           </div>
           <CardContent className="p-6 relative z-10">
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.cogs")}</p>
-            <h4 className="text-4xl font-display font-bold text-rose-700">RM {metrics.cost.toFixed(2)}</h4>
+            <h4 className="text-4xl font-1 font-bold text-rose-700">RM {metrics.cost.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-rose-600 bg-rose-50 w-fit px-2 py-1 rounded-full">
               <ArrowDownRight className="w-3 h-3 mr-1" /> {t("m.ingredientCosts")}
             </div>
@@ -124,7 +124,7 @@ export const FinanceTab = () => {
           </div>
           <CardContent className="p-6 relative z-10">
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.grossProf")}</p>
-            <h4 className="text-4xl font-display font-bold text-blue-700">RM {metrics.profit.toFixed(2)}</h4>
+            <h4 className="text-4xl font-1 font-bold text-blue-700">RM {metrics.profit.toFixed(2)}</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-full">
               <Activity className="w-3 h-3 mr-1" /> {t("m.netEarn")}
             </div>
@@ -137,7 +137,7 @@ export const FinanceTab = () => {
           </div>
           <CardContent className="p-6 relative z-10">
             <p className="text-sm font-bold tracking-wider uppercase text-foreground/50 mb-1">{t("m.averageMargin")}</p>
-            <h4 className="text-4xl font-display font-bold text-violet-700">{metrics.margin.toFixed(1)}%</h4>
+            <h4 className="text-4xl font-1 font-bold text-violet-700">{metrics.margin.toFixed(1)}%</h4>
             <div className="mt-4 flex items-center text-xs font-bold text-violet-600 bg-violet-50 w-fit px-2 py-1 rounded-full">
               <PieChart className="w-3 h-3 mr-1" /> {t("m.profitability")}
             </div>
@@ -151,7 +151,7 @@ export const FinanceTab = () => {
         <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 h-[400px] flex flex-col">
           <div className="mb-6 flex items-center gap-2 px-2">
             <Activity className="h-5 w-5 text-accent" />
-            <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.revenueTimeline")}</h3>
+            <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.revenueTimeline")}</h3>
           </div>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -178,7 +178,7 @@ export const FinanceTab = () => {
             <div>
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-blue-500" />
-                <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.topProfitDrivers")}</h3>
+                <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.topProfitDrivers")}</h3>
               </div>
               <p className="text-xs text-foreground/50 mt-1">{t("m.topProfitDesc")}</p>
             </div>

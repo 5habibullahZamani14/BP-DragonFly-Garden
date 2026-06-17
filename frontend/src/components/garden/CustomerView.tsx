@@ -731,9 +731,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 style={{ transition: "stroke-dashoffset 0.9s linear" }}
               />
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center font-display text-3xl font-bold">{confirmCountdown}</span>
+            <span className="absolute inset-0 flex items-center justify-center font-1 text-3xl font-bold">{confirmCountdown}</span>
           </div>
-          <h2 className="font-display text-2xl font-semibold mb-1">{t("customer.confirmOrder")}</h2>
+          <h2 className="font-1 text-2xl font-semibold mb-1">{t("customer.confirmOrder")}</h2>
           <p className="text-sm text-foreground/55 mb-6 text-center">{t("customer.confirmDesc1")}<br/>{t("customer.confirmDesc2")}</p>
           {/* Mini receipt preview */}
           <div className="w-full max-w-xs rounded-2xl border border-border bg-card/80 px-4 py-3 mb-6 space-y-1.5 max-h-52 overflow-y-auto">
@@ -765,7 +765,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
                 <span className="text-2xl">⚠️</span>
               </div>
-              <h2 className="font-display text-xl font-bold text-primary-foreground leading-snug">{t("customer.dupTitle")}</h2>
+              <h2 className="font-1 text-xl font-bold text-primary-foreground leading-snug">{t("customer.dupTitle")}</h2>
               <p className="mt-1 text-sm text-primary-foreground/75">{t("customer.dupDesc")}</p>
             </div>
             <div className="px-5 py-4 flex flex-col gap-2.5">
@@ -818,7 +818,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               {t("customer.welcome")}
             </p>
             <p
-              className="mt-0.5 font-display text-lg font-semibold leading-tight"
+              className="mt-0.5 font-1 text-lg font-semibold leading-tight"
               style={{ fontVariationSettings: '"opsz" 96, "SOFT" 50' }}
             >
               {tableGreeting.line}
@@ -842,7 +842,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <p className="text-[0.55rem] font-bold uppercase tracking-[0.24em] text-foreground/55">
               {t("customer.welcome")}
             </p>
-            <p className="truncate font-display text-sm font-semibold">{tableGreeting.line}</p>
+            <p className="truncate font-1 text-sm font-semibold">{tableGreeting.line}</p>
           </div>
         </div>
 
@@ -895,7 +895,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <div className="mx-auto mb-2 grid h-10 w-10 place-items-center rounded-full bg-muted">
                     <Leaf className="h-4 w-4 text-foreground/40" />
                   </div>
-                  <p className="font-display text-sm text-foreground/70">
+                  <p className="font-1 text-sm text-foreground/70">
                     {t("customer.notOnMenu")}
                   </p>
                   <p className="mt-1 text-xs text-foreground/40">
@@ -921,7 +921,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-display text-sm font-semibold leading-tight">
+                        <p className="truncate font-1 text-sm font-semibold leading-tight">
                           {item.name}
                         </p>
                         <p className="mt-0.5 text-[0.7rem] text-foreground/50">
@@ -969,7 +969,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           <Leaf className="h-3 w-3 text-accent-soft" /> {t("customer.farmToTable")}
         </span>
 
-        <h1 className="mt-3 font-display text-[2.3rem] font-bold leading-[0.95] tracking-tight text-balance"
+        <h1 className="mt-3 font-1 text-[2.3rem] font-bold leading-[0.95] tracking-tight text-balance"
           style={{ fontVariationSettings: '"opsz" 144, "SOFT" 50' }}>
           {t("customer.goodnessOf")}<br />
           <span className="italic" style={{
@@ -1020,13 +1020,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <span className="inline-flex items-center gap-1 rounded-full bg-accent/95 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-accent-foreground">
                   <Flame className="h-3 w-3" /> {t("customer.popular")}
                 </span>
-                <h3 className="mt-2 font-display text-2xl font-bold leading-[1.05] text-balance">{spotlight.name}</h3>
+                <h3 className="mt-2 font-1 text-2xl font-bold leading-[1.05] text-balance">{spotlight.name}</h3>
                 <p className="mt-1.5 line-clamp-2 text-[0.78rem] text-primary-foreground/75">
                   {spotlight.description}
                 </p>
                 <div className="mt-3 flex items-end justify-between">
                   <div>
-                    <span className="font-display text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
+                    <span className="font-1 text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
                     <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
                   </div>
                   <button
@@ -1069,12 +1069,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     <span className="inline-block rounded-md bg-white/95 px-1.5 py-0.5 text-[0.58rem] font-extrabold uppercase tracking-widest text-berry">
                       {p.promo_label === "PRE-ORDER 3 DAYS" ? t("customer.preOrder3Days") : p.promo_label || t("customer.promoFallback")}
                     </span>
-                    <h3 className="mt-2 font-display text-xl font-bold leading-tight text-balance">{p.name}</h3>
+                    <h3 className="mt-2 font-1 text-xl font-bold leading-tight text-balance">{p.name}</h3>
                   </div>
                   <div className="mt-3 flex items-end justify-between">
                     <div>
                       <p className="text-[0.6rem] uppercase tracking-widest opacity-70">{t("customer.from")}</p>
-                      <p className="font-display text-xl font-bold">{formatRM(p.price)}</p>
+                      <p className="font-1 text-xl font-bold">{formatRM(p.price)}</p>
                     </div>
                     <button
                       onClick={() => handleAddPress(p)}
@@ -1125,9 +1125,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   </button>
                 </div>
                 <div className="p-2.5">
-                  <h3 className="font-display text-sm font-semibold leading-tight line-clamp-1">{item.name}</h3>
+                  <h3 className="font-1 text-sm font-semibold leading-tight line-clamp-1">{item.name}</h3>
                   <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{categoryLabel(item.category_name)}</p>
-                  <p className="mt-1 font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
+                  <p className="mt-1 font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                 </div>
               </article>
             ))}
@@ -1140,7 +1140,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         <div className="mb-3 flex items-end justify-between">
           <div>
             <span className="eyebrow">{t("customer.farmMenu")}</span>
-            <h2 className="mt-1 font-display text-[1.6rem] font-bold leading-tight">{t("customer.allGoodness")}</h2>
+            <h2 className="mt-1 font-1 text-[1.6rem] font-bold leading-tight">{t("customer.allGoodness")}</h2>
           </div>
           <span className="text-xs font-medium text-foreground/50">{filtered.length} {t("customer.items")}</span>
         </div>
@@ -1156,7 +1156,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         ) : filtered.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border bg-card/50 px-6 py-12 text-center">
             <Search className="mx-auto mb-2 h-8 w-8 text-foreground/30" />
-            <p className="font-display text-lg text-foreground/60">{t("customer.noMatches")}</p>
+            <p className="font-1 text-lg text-foreground/60">{t("customer.noMatches")}</p>
             <p className="mt-1 text-sm text-foreground/40">{t("customer.tryDifferentSearch")}</p>
           </div>
         ) : category === "All" ? (
@@ -1179,7 +1179,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     {/* Section heading */}
                     <div className="flex items-center gap-3 mb-4">
                       <div className="flex flex-col">
-                        <h3 className="font-display text-[1.1rem] font-bold leading-tight">{categoryLabel(catName)}</h3>
+                        <h3 className="font-1 text-[1.1rem] font-bold leading-tight">{categoryLabel(catName)}</h3>
                         <div className="h-0.5 w-10 bg-accent/60 rounded-full mt-1" />
                       </div>
                       <span className="text-xs text-foreground/40 font-medium">{sectionItems.length} {t("customer.items")}</span>
@@ -1239,7 +1239,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           </div>
                           <div className="flex min-w-0 flex-1 flex-col relative z-10">
                             <div className="flex items-start justify-between gap-2">
-                              <h3 className="font-display text-[1rem] font-semibold leading-tight">
+                              <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                                 {item.name}
                                 {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                               </h3>
@@ -1248,7 +1248,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               {item.description || t("customer.descriptionFallback")}
                             </p>
                             <div className="mt-auto flex items-end justify-between pt-2">
-                              <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
+                              <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                               <button
                                 disabled={item.is_sold_out}
                                 onClick={() => handleAddPress(item)}
@@ -1324,7 +1324,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col relative z-10">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-display text-[1rem] font-semibold leading-tight">
+                    <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                       {item.name}
                       {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                     </h3>
@@ -1335,7 +1335,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div>
                       <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
-                      <p className="font-display text-base font-bold text-primary">{formatRM(item.price)}</p>
+                      <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                     </div>
                     <button
                       disabled={item.is_sold_out}
@@ -1355,7 +1355,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         {/* End plate */}
         <div className="relative mt-8 flex flex-col items-center gap-2 py-6">
           <DragonflyMark className="h-10 w-10 opacity-40" />
-          <p className="font-display text-sm italic text-foreground/40">{t("customer.endOfGarden")}</p>
+          <p className="font-1 text-sm italic text-foreground/40">{t("customer.endOfGarden")}</p>
         </div>
       </div>
       </div>
@@ -1378,7 +1378,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.18em] backdrop-blur">
               <Receipt className="h-3 w-3 text-accent-soft" /> {t("customer.liveTracking")}
             </span>
-            <h1 className="mt-3 font-display text-[2rem] font-bold leading-[0.95] tracking-tight">
+            <h1 className="mt-3 font-1 text-[2rem] font-bold leading-[0.95] tracking-tight">
               <span className="italic text-accent">{t("customer.yourOrders")}</span>
             </h1>
             <p className="mt-2 max-w-[18rem] text-[0.85rem] leading-snug text-primary-foreground/80">
@@ -1392,7 +1392,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full bg-primary/10">
                 <Soup className="h-6 w-6 text-primary" />
               </div>
-              <h2 className="font-display text-xl font-semibold">{t("customer.noOrdersYet")}</h2>
+              <h2 className="font-1 text-xl font-semibold">{t("customer.noOrdersYet")}</h2>
               <p className="mt-1.5 text-sm text-foreground/55">
                 {t("customer.onceYouSend")}
               </p>
@@ -1434,7 +1434,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <div className="flex items-start justify-between mb-4">
                           <div>
                             <p className="text-[0.58rem] font-bold uppercase tracking-[0.22em] opacity-40">{t("customer.ticket")}</p>
-                            <h2 className="font-display text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.daily_ticket_number || o.id}</h2>
+                            <h2 className="font-1 text-[2.2rem] font-bold leading-none tracking-tight" style={{ color:"hsl(140,30%,18%)" }}>#{o.daily_ticket_number || o.id}</h2>
                             <p className="text-[0.7rem] opacity-50 mt-0.5">{o.table_number}{timeStr && ` · ${timeStr}`}</p>
                           </div>
                           <div>
@@ -1494,7 +1494,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               <div className="border-t border-dashed my-2" style={{ borderColor:"hsl(40,20%,68%)" }}/>
                               <div className="flex items-center justify-between">
                                 <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-60">{t("customer.total")}</span>
-                                <span className="font-display text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(finalTotal)}</span>
+                                <span className="font-1 text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(finalTotal)}</span>
                               </div>
                             </div>
                           );
@@ -1526,7 +1526,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         <p className="font-semibold text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</p>
                         <p className="text-foreground/40 truncate">{(o.items||[]).map(i=>`${i.quantity}× ${i.item_name}`).join(", ")}</p>
                       </div>
-                      <span className="shrink-0 font-display text-foreground/55">
+                      <span className="shrink-0 font-1 text-foreground/55">
                         {(() => {
                           const st = Number(o.total_price);
                           const rT = st + (st * 0.10) + (st * 1.10 * 0.06);
@@ -1556,7 +1556,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="truncate font-medium text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</span>
                       <span className="truncate text-foreground/40">· {t((o.items?.length || 0) === 1 ? "customer.historyItemCount_one" : "customer.historyItemCount_other", { count: o.items?.length || 0 })}</span>
                     </div>
-                    <span className="shrink-0 font-display text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || o.total_price * 1.166))}</span>
+                    <span className="shrink-0 font-1 text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || o.total_price * 1.166))}</span>
                   </li>
                 ))}
               </ul>
@@ -1566,7 +1566,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           {/* End plate */}
           <div className="relative mt-4 flex flex-col items-center gap-2 py-6">
             <DragonflyMark className="h-9 w-9 opacity-40" />
-            <p className="font-display text-xs italic text-foreground/40">{t("customer.endOfOrders")}</p>
+            <p className="font-1 text-xs italic text-foreground/40">{t("customer.endOfOrders")}</p>
           </div>
         </div>
       )}
@@ -1590,7 +1590,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <span className="eyebrow">{t("customer.checkout")}</span>
-                <h2 className="mt-1 font-display text-2xl font-semibold">{t("customer.yourCart")}</h2>
+                <h2 className="mt-1 font-1 text-2xl font-semibold">{t("customer.yourCart")}</h2>
               </div>
               <button onClick={() => setCartOpen(false)} className="grid h-9 w-9 place-items-center rounded-full bg-muted">
                 <X className="h-4 w-4" />
@@ -1602,7 +1602,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <li key={c.id} className="rounded-2xl border border-border bg-card p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-display text-base font-semibold leading-tight">{c.name}</h3>
+                      <h3 className="font-1 text-base font-semibold leading-tight">{c.name}</h3>
                       <p className="text-xs text-foreground/50">{formatRM(c.price)} {t("customer.priceEach")}</p>
                       {/* Selected options */}
                       {c.selectedOptions.length > 0 && (
@@ -1615,7 +1615,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         </div>
                       )}
                     </div>
-                    <strong className="font-display text-base">{formatRM(c.price * c.quantity)}</strong>
+                    <strong className="font-1 text-base">{formatRM(c.price * c.quantity)}</strong>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="inline-flex items-center gap-2 rounded-full bg-muted p-1">
@@ -1644,7 +1644,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <div className="mt-6 mb-2">
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles className="h-4 w-4 text-accent" />
-                  <h3 className="font-display text-sm font-semibold">{t("customer.perfectPairings")}</h3>
+                  <h3 className="font-1 text-sm font-semibold">{t("customer.perfectPairings")}</h3>
                   {recommendations[0]?.is_fallback && <span className="text-xs text-foreground/40 ml-auto italic">{t("customer.popularChoices")}</span>}
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 snap-x-mandatory no-scrollbar -mx-2 px-2">
@@ -1663,7 +1663,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         )}
                       </div>
                       <div className="p-2 flex flex-col flex-1">
-                        <p className="font-display text-xs font-semibold leading-tight line-clamp-2">{rec.name}</p>
+                        <p className="font-1 text-xs font-semibold leading-tight line-clamp-2">{rec.name}</p>
                         <div className="mt-auto pt-2 flex items-center justify-between">
                           <span className="text-xs font-bold text-primary">{formatRM(rec.price)}</span>
                           <button 
@@ -1683,7 +1683,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <div className="sticky bottom-0 mt-5 -mx-5 -mb-5 rounded-b-[32px] bg-background/95 px-5 pb-6 pt-4 backdrop-blur">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-foreground/60">{t("customer.total")}</span>
-                <strong className="font-display text-2xl font-semibold">{formatRM(total)}</strong>
+                <strong className="font-1 text-2xl font-semibold">{formatRM(total)}</strong>
               </div>
               <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo || submitCooldown || !!pendingCart} onClick={startConfirmation} className="w-full">
                 {submitCooldown ? t("customer.orderSent") : submitting ? t("customer.sending") : t("customer.sendOrder")}
@@ -1730,7 +1730,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   </span>
                 </span>
               </span>
-              <span className="relative shrink-0 rounded-xl bg-white px-3 py-2 font-display text-lg font-black text-violet-900 shadow-md ring-2 ring-amber-300/80">
+              <span className="relative shrink-0 rounded-xl bg-white px-3 py-2 font-1 text-lg font-black text-violet-900 shadow-md ring-2 ring-amber-300/80">
                 {formatRM(total)}
               </span>
             </button>
@@ -1757,7 +1757,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             <div className="px-5 pb-3 pt-2 shrink-0 border-b">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="font-display text-xl font-bold leading-tight truncate">{optionSheetItem.name}</h2>
+                  <h2 className="font-1 text-xl font-bold leading-tight truncate">{optionSheetItem.name}</h2>
                   <p className="text-sm text-foreground/55 mt-0.5">
                     {t("customer.from")} <span className="font-semibold text-primary">{formatRM(optionSheetItem.price)}</span>
                     {Object.values(pendingSelections).some(s => s.size > 0) && (

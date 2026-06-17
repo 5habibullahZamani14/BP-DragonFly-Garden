@@ -232,7 +232,7 @@ export const LogsTab = () => {
     return (
       <div className="flex flex-col items-center justify-center p-16 animate-pulse text-foreground/40">
         <Activity className="h-8 w-8 mb-4 opacity-50" />
-        <p className="font-display text-lg">{t("m.unearthingArchives")}</p>
+        <p className="font-1 text-lg">{t("m.unearthingArchives")}</p>
       </div>
     );
   }
@@ -242,7 +242,7 @@ export const LogsTab = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
-          <h2 className="text-3xl font-display font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
+          <h2 className="text-3xl font-1 font-bold" style={{ color: "hsl(140, 30%, 15%)" }}>
             {t("m.grandArchive")}
           </h2>
           <p className="text-foreground/60 mt-1 font-medium">{t("m.grandArchiveDesc")}</p>
@@ -262,7 +262,7 @@ export const LogsTab = () => {
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-emerald-500" />
-              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
+              <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
             </div>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -281,7 +281,7 @@ export const LogsTab = () => {
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-blue-500" />
-              <h3 className="font-display text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
+              <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
             </div>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -301,7 +301,7 @@ export const LogsTab = () => {
       {/* Detailed Audit Log Table */}
       <div className="bg-white/80 backdrop-blur-md border border-white/50 shadow-xl rounded-3xl overflow-hidden flex flex-col">
         <div className="p-6 border-b border-foreground/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40">
-          <h3 className="font-display text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
+          <h3 className="font-1 text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
             <FileText className="h-5 w-5 text-accent" />
             {t("m.auditTrail")}
           </h3>
@@ -404,7 +404,7 @@ export const LogsTab = () => {
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <DialogContent className="max-w-[85vw] w-[85vw] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-foreground/5 bg-foreground/[0.02]">
-            <DialogTitle className="flex items-center gap-3 text-2xl font-display" style={{ color: "hsl(140, 30%, 20%)" }}>
+            <DialogTitle className="flex items-center gap-3 text-2xl font-1" style={{ color: "hsl(140, 30%, 20%)" }}>
               <FileText className="h-6 w-6 text-primary" />
               {t("m.archiveRecord")}
             </DialogTitle>

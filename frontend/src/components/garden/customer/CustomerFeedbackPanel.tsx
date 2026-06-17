@@ -243,7 +243,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.18em] backdrop-blur">
           <MessageSquare className="h-3 w-3 text-accent-soft" /> {t("customer.feedback.badge")}
         </span>
-        <h1 className="mt-3 font-display text-[2rem] font-bold leading-[0.95] tracking-tight">
+        <h1 className="mt-3 font-1 text-[2rem] font-bold leading-[0.95] tracking-tight">
           {t("customer.feedback.title")}
         </h1>
         <p className="mt-2 max-w-[20rem] text-[0.85rem] leading-snug text-primary-foreground/80">
@@ -397,7 +397,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
 
         {/* My submissions */}
         <section className="rounded-[24px] border border-border/60 bg-card/60 p-4">
-          <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+          <h2 className="font-1 text-lg font-semibold flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-accent" />
             {t("customer.feedback.mySubmissions")}
           </h2>
