@@ -89,7 +89,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
                     fadeDirection === 'top-to-bottom' ? 'to bottom' :
                     'to top'
                   }, transparent, white)`,
-                  opacity: fadeIntensity
+                  opacity: fadeIntensity * 0.5
                 }}
               />
             )}
