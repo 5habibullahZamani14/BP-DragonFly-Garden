@@ -1,10 +1,10 @@
 /**
- * −5 … +5 rating scale — neumorphic 3D stars (recessed slots + puffy selected).
+ * 1 … 5 rating scale — neumorphic 3D stars (recessed slots + puffy selected).
  */
 
 import { useId, useMemo } from "react";
 
-const SCALE = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5] as const;
+const SCALE = [1, 2, 3, 4, 5] as const;
 
 /** Build a symmetric super-puffy star with soft rounded points (5 tips). */
 const buildPuffyStarPath = (
@@ -49,23 +49,35 @@ const STAR_TIP_RADIUS = STAR_OUTER_R;
 const STAR_DISPLAY_SCALE = 1.04;
 const STAR_CLIP_TRANSFORM = `translate(${STAR_CX} ${STAR_CY}) scale(${STAR_DISPLAY_SCALE}) translate(${-STAR_CX} ${-STAR_CY})`;
 
-type StarTone = "gold" | "red";
+type StarTone = "darkRed" | "red" | "orange" | "darkYellow" | "gold";
 
-const BRIGHT_RED = "#FF000D";
+const DARK_RED = "#8B0000";
+const RED = "#FF0000";
+const ORANGE = "#FF8C00";
+const DARK_YELLOW = "#FFD700";
+const GOLD = "#FFD700";
 
 const TRACK_BG = "hsl(42 18% 91%)";
 const TRACK_INSET =
   "inset 3px 3px 7px rgba(158, 152, 142, 0.55), inset -3px -3px 7px rgba(255, 255, 255, 0.92)";
 
 const intensityFromValue = (value: number | null) => {
-  if (value == null || value === 0) return 0;
-  return Math.min(1, Math.abs(value) / 5);
+  if (value == null) return 0;
+  return value / 5;
 };
 
 const isStarFilled = (n: number, value: number | null) => {
-  if (value == null || value === 0 || n === 0) return false;
-  if (value > 0) return n >= 1 && n <= value;
-  return n <= -1 && n >= value;
+  if (value == null) return false;
+  return n <= value;
+};
+
+const getStarTone = (n: number, value: number | null): StarTone => {
+  if (value == null || n > value) return "gold";
+  if (value === 1) return "darkRed";
+  if (value === 2) return "red";
+  if (value === 3) return "orange";
+  if (value === 4) return "darkYellow";
+  return "gold";
 };
 
 const createSeededRandom = (seed: number) => {
@@ -80,21 +92,45 @@ const puffyPalettes: Record<
   StarTone,
   { light: string; mid: string; dark: string; glitter: string; halo: string; haloOpacity: number }
 > = {
-  gold: {
-    light: "#fff9c4",
-    mid: "#ffd54f",
-    dark: "#c17900",
-    glitter: "#fffde7",
-    halo: "#b8860b",
-    haloOpacity: 0.32,
+  darkRed: {
+    light: "#a52a2a",
+    mid: DARK_RED,
+    dark: "#5c0000",
+    glitter: "#ffcccc",
+    halo: "#4a0000",
+    haloOpacity: 0.38,
   },
   red: {
     light: "#ff5a5a",
-    mid: BRIGHT_RED,
+    mid: RED,
     dark: "#a30009",
     glitter: "#ffe8e8",
     halo: "#990008",
     haloOpacity: 0.38,
+  },
+  orange: {
+    light: "#ffb347",
+    mid: ORANGE,
+    dark: "#cc7000",
+    glitter: "#fff0cc",
+    halo: "#cc7000",
+    haloOpacity: 0.35,
+  },
+  darkYellow: {
+    light: "#ffeb3b",
+    mid: DARK_YELLOW,
+    dark: "#ccac00",
+    glitter: "#fffde7",
+    halo: "#ccac00",
+    haloOpacity: 0.33,
+  },
+  gold: {
+    light: "#fff9c4",
+    mid: "#ffd700",
+    dark: "#c17900",
+    glitter: "#fffde7",
+    halo: "#b8860b",
+    haloOpacity: 0.32,
   },
 };
 
@@ -109,9 +145,9 @@ type GlitterSpot = {
 };
 
 const buildGlitterSpots = (tone: StarTone, intensity: number, slotSeed: number): GlitterSpot[] => {
-  const rand = createSeededRandom(slotSeed * 7919 + (tone === "red" ? 104729 : 524287));
+  const rand = createSeededRandom(slotSeed * 7919 + (tone === "darkRed" || tone === "red" ? 104729 : 524287));
   const count = Math.floor(5 + intensity * 11);
-  /** At max rating, glitters span center → tips; scales with |value|/5 */
+  /** At max rating, glitters span center → tips; scales with value/5 */
   const maxRadius = 2.2 + intensity * (STAR_TIP_RADIUS - 0.8);
 
   return Array.from({ length: count }, () => {
@@ -318,9 +354,9 @@ const StarSlotButton = ({
   puffySize: number;
   intensity: number;
 }) => {
-  const filled = n !== 0 && isStarFilled(n, value);
-  const tone: StarTone = n > 0 ? "gold" : "red";
-  const label = n === 0 ? "Neutral rating" : `Rate ${n > 0 ? "+" : ""}${n}`;
+  const filled = isStarFilled(n, value);
+  const tone: StarTone = getStarTone(n, value);
+  const label = `Rate ${n} star${n !== 1 ? 's' : ''}`;
 
   return (
     <button
@@ -333,7 +369,7 @@ const StarSlotButton = ({
         readOnly ? "cursor-default" : "cursor-pointer hover:opacity-90 active:scale-95"
       }`}
     >
-      {n === 0 || !filled ? (
+      {!filled ? (
         <RecessedStar size={starSize} />
       ) : (
         <PuffyStar tone={tone} intensity={intensity} size={puffySize} slotSeed={n} />
@@ -359,54 +395,18 @@ export const FeedbackRatingScale = ({
 
   const handlePick = (n: number) => {
     if (readOnly || !onChange) return;
-    if (n === 0) {
-      // Only the center (0) clears; tap again when already neutral removes rating entirely
-      onChange(value === 0 ? null : 0);
+    // Re-clicking the same value clears the rating
+    if (value === n) {
+      onChange(null);
     } else {
-      // Re-clicking the same ± value keeps the rating — does not clear
       onChange(n);
     }
   };
 
   return (
     <div className="w-full">
-      <div className="flex justify-between gap-px px-1">
-        {SCALE.map((n) => {
-          const isActive = value === n;
-          const inPositiveRun = value != null && value > 0 && n >= 1 && n <= value;
-          const inNegativeRun = value != null && value < 0 && n <= -1 && n >= value;
-          const inRun = inPositiveRun || inNegativeRun;
-
-          return (
-            <button
-              key={n}
-              type="button"
-              disabled={readOnly}
-              onClick={() => handlePick(n)}
-              className={`min-w-0 flex-1 rounded-lg py-0.5 text-center text-[0.62rem] font-bold transition sm:text-[0.65rem] ${
-                readOnly ? "cursor-default" : "cursor-pointer hover:bg-black/[0.04]"
-              } ${
-                isActive
-                  ? n > 0
-                    ? "text-amber-900"
-                    : n < 0
-                      ? "text-[#8a0008]"
-                      : "text-foreground/60"
-                  : inRun
-                    ? n > 0
-                      ? "text-amber-800/75"
-                      : "text-[#FF000D]/80"
-                    : "text-foreground/40"
-              }`}
-            >
-              {n > 0 ? `+${n}` : n}
-            </button>
-          );
-        })}
-      </div>
-
       <div
-        className="mt-1.5 flex items-center justify-between gap-0.5 rounded-full px-1 py-2.5 sm:px-1.5"
+        className="flex items-center justify-center gap-1.5 rounded-full px-2 py-2"
         style={{ background: TRACK_BG, boxShadow: TRACK_INSET }}
       >
         {SCALE.map((n) => (
