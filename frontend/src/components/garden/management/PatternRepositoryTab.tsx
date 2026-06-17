@@ -58,16 +58,16 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
   ];
 
   return (
-    <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
-      <div className="grid gap-2">
+    <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+      <div className="grid gap-1">
         <Label>Pattern Name</Label>
-        <Input value={name} onChange={e => setName(e.target.value)} />
+        <Input value={name} onChange={e => setName(e.target.value)} className="px-4" />
       </div>
 
       {/* Live Preview */}
-      <div className="grid gap-2">
+      <div className="grid gap-1">
         <Label>Live Preview</Label>
-        <div className="relative h-32 w-full bg-gray-100 rounded-lg overflow-hidden border">
+        <div className="relative h-28 w-full bg-gray-100 rounded-lg overflow-hidden border">
           <img
             src={pattern.image_url}
             alt="Pattern preview"
@@ -94,13 +94,13 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="grid gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid gap-1">
           <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
           <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid gap-1">
           <Label>Zoom ({zoom.toFixed(1)}x)</Label>
           <div className="flex gap-1 items-center">
             <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="px-2"><ZoomIn className="h-3 w-3" /></Button>
@@ -109,7 +109,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
           </div>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid gap-1">
           <Label>Rotation ({rotation}°)</Label>
           <div className="flex gap-1 items-center">
             <Button size="sm" variant="outline" onClick={() => setRotation(rotation - 90)} className="px-2"><RotateCw className="h-3 w-3" /></Button>
@@ -118,7 +118,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
           </div>
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid gap-1">
           <Label>Flip</Label>
           <div className="flex gap-2">
             <Button size="sm" variant={flipHorizontal ? "default" : "outline"} onClick={() => setFlipHorizontal(!flipHorizontal)} className="flex-1">
@@ -131,7 +131,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
         </div>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid gap-1">
         <Label>Fade Direction</Label>
         <div className="flex gap-2">
           {fadeDirections.map(dir => (
@@ -152,13 +152,13 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
       </div>
 
       {fadeDirection !== 'none' && (
-        <div className="grid gap-2">
+        <div className="grid gap-1">
           <Label>Fade Intensity ({Math.round(fadeIntensity * 100)}%)</Label>
           <Input type="range" min="0" max="1" step="0.1" value={fadeIntensity} onChange={e => setFadeIntensity(parseFloat(e.target.value))} />
         </div>
       )}
 
-      <div className="flex gap-2 pt-4">
+      <div className="flex gap-2 pt-2">
         <Button onClick={handleSave} className="flex-1"><Check className="h-4 w-4 mr-2" /> Save</Button>
         <Button variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
       </div>
@@ -405,7 +405,7 @@ export function PatternRepositoryTab() {
 
       {/* Editor Dialog */}
       <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-6">
+        <DialogContent className="sm:max-w-[910px] max-h-[90vh] p-6">
           <DialogHeader>
             <DialogTitle>Edit Pattern</DialogTitle>
           </DialogHeader>
