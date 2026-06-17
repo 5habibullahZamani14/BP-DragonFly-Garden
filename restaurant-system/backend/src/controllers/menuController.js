@@ -506,12 +506,13 @@ const updatePattern = async (req, res) => {
            fade_direction = COALESCE(?, fade_direction),
            fade_intensity = COALESCE(?, fade_intensity)
        WHERE id = ?`,
-      [name, opacity !== undefined ? opacity : null, zoom !== undefined ? zoom : null, rotation !== undefined ? rotation : null, flip_horizontal !== undefined ? (flip_horizontal ? 1 : 0) : null, flip_vertical !== undefined ? (flip_vertical ? 1 : 0) : null, fade_direction, fade_intensity !== undefined ? fade_intensity : null, id]
+      [name, opacity !== undefined ? opacity : null, zoom !== undefined ? zoom : null, rotation !== undefined ? rotation : null, flip_horizontal !== undefined ? (flip_horizontal ? 1 : 0) : null, flip_vertical !== undefined ? (flip_vertical ? 1 : 0) : null, fade_direction !== undefined ? fade_direction : null, fade_intensity !== undefined ? fade_intensity : null, id]
     );
 
     const updated = await all(`SELECT * FROM patterns WHERE id = ?`, [id]);
     res.json({ success: true, pattern: updated[0] });
   } catch (error) {
+    console.error('Error updating pattern:', error);
     res.status(500).json({ error: error.message });
   }
 };
