@@ -58,44 +58,76 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
       <div className="grid gap-2">
         <Label>Pattern Name</Label>
         <Input value={name} onChange={e => setName(e.target.value)} />
       </div>
 
+      {/* Live Preview */}
       <div className="grid gap-2">
-        <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
-        <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
-      </div>
-
-      <div className="grid gap-2">
-        <Label>Zoom ({zoom.toFixed(1)}x)</Label>
-        <div className="flex gap-2 items-center">
-          <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}><ZoomIn className="h-4 w-4" /></Button>
-          <Input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} className="flex-1" />
-          <Button size="sm" variant="outline" onClick={() => setZoom(Math.min(3, zoom + 0.1))}><ZoomOut className="h-4 w-4" /></Button>
+        <Label>Live Preview</Label>
+        <div className="relative h-32 w-full bg-gray-100 rounded-lg overflow-hidden border">
+          <img
+            src={pattern.image_url}
+            alt="Pattern preview"
+            className="w-full h-full object-cover"
+            style={{
+              opacity,
+              transform: `scale(${zoom}) rotate(${rotation}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
+              mixBlendMode: 'multiply'
+            }}
+          />
+          {fadeDirection !== 'none' && (
+            <div className="absolute inset-0"
+              style={{
+                background: `linear-gradient(${
+                  fadeDirection === 'right-to-left' ? 'to left' :
+                  fadeDirection === 'left-to-right' ? 'to right' :
+                  fadeDirection === 'top-to-bottom' ? 'to bottom' :
+                  'to top'
+                }, transparent, white)`,
+                opacity: fadeIntensity
+              }}
+            />
+          )}
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <Label>Rotation ({rotation}°)</Label>
-        <div className="flex gap-2 items-center">
-          <Button size="sm" variant="outline" onClick={() => setRotation(rotation - 90)}><RotateCw className="h-4 w-4" /></Button>
-          <Input type="range" min="0" max="360" step="15" value={rotation} onChange={e => setRotation(parseFloat(e.target.value))} className="flex-1" />
-          <Button size="sm" variant="outline" onClick={() => setRotation(rotation + 90)}><RotateCw className="h-4 w-4" /></Button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
+          <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
         </div>
-      </div>
 
-      <div className="grid gap-2">
-        <Label>Flip</Label>
-        <div className="flex gap-2">
-          <Button size="sm" variant={flipHorizontal ? "default" : "outline"} onClick={() => setFlipHorizontal(!flipHorizontal)}>
-            <FlipHorizontal className="h-4 w-4 mr-2" /> Horizontal
-          </Button>
-          <Button size="sm" variant={flipVertical ? "default" : "outline"} onClick={() => setFlipVertical(!flipVertical)}>
-            <FlipHorizontal className="h-4 w-4 mr-2 rotate-90" /> Vertical
-          </Button>
+        <div className="grid gap-2">
+          <Label>Zoom ({zoom.toFixed(1)}x)</Label>
+          <div className="flex gap-1 items-center">
+            <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="px-2"><ZoomIn className="h-3 w-3" /></Button>
+            <Input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} className="flex-1" />
+            <Button size="sm" variant="outline" onClick={() => setZoom(Math.min(3, zoom + 0.1))} className="px-2"><ZoomOut className="h-3 w-3" /></Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Rotation ({rotation}°)</Label>
+          <div className="flex gap-1 items-center">
+            <Button size="sm" variant="outline" onClick={() => setRotation(rotation - 90)} className="px-2"><RotateCw className="h-3 w-3" /></Button>
+            <Input type="range" min="0" max="360" step="15" value={rotation} onChange={e => setRotation(parseFloat(e.target.value))} className="flex-1" />
+            <Button size="sm" variant="outline" onClick={() => setRotation(rotation + 90)} className="px-2"><RotateCw className="h-3 w-3" /></Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Flip</Label>
+          <div className="flex gap-2">
+            <Button size="sm" variant={flipHorizontal ? "default" : "outline"} onClick={() => setFlipHorizontal(!flipHorizontal)} className="flex-1">
+              <FlipHorizontal className="h-3 w-3 mr-1" /> H
+            </Button>
+            <Button size="sm" variant={flipVertical ? "default" : "outline"} onClick={() => setFlipVertical(!flipVertical)} className="flex-1">
+              <FlipHorizontal className="h-3 w-3 mr-1 rotate-90" /> V
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -106,14 +138,14 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
             <button
               key={dir.value}
               onClick={() => setFadeDirection(dir.value)}
-              className={`p-2 rounded-lg border transition-all ${
+              className={`p-2 rounded-lg border transition-all flex-1 ${
                 fadeDirection === dir.value 
                   ? 'bg-primary text-primary-foreground border-primary' 
                   : 'bg-background hover:bg-muted border-border'
               }`}
               title={dir.label}
             >
-              <dir.icon className="h-4 w-4" />
+              <dir.icon className="h-4 w-4 mx-auto" />
             </button>
           ))}
         </div>
@@ -373,7 +405,7 @@ export function PatternRepositoryTab() {
 
       {/* Editor Dialog */}
       <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-6">
           <DialogHeader>
             <DialogTitle>Edit Pattern</DialogTitle>
           </DialogHeader>
