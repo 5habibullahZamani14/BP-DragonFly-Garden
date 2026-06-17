@@ -853,18 +853,19 @@ export function MenuTab() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredItems.map(item => (
-              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} ${item.card_size === 'extra_large' ? 'col-span-full' : ''}`}>
+              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} ${item.card_size === 'extra_large' ? 'col-span-full' : ''} relative`}>
+                {(item.pattern_image_url || item.default_pattern_image_url) && (
+                  <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                    alt="Pattern overlay"
+                    className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
+                  />
+                )}
                 {item.card_size === 'extra_large' ? (
-                  <div className="flex flex-col sm:flex-row">
+                  <div className="flex flex-col sm:flex-row relative z-10">
                     <div className="w-full sm:w-1/2 h-64 bg-gray-100 relative overflow-hidden">
                       {item.image_url
                         ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-12 w-12 opacity-50" /></div>}
-                      {(item.pattern_image_url || item.default_pattern_image_url) && (
-                        <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                          alt="Pattern overlay"
-                          className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none" />
-                      )}
                     </div>
                     <CardContent className="p-6 w-full sm:w-1/2">
                       <div className="mb-2">
@@ -888,15 +889,10 @@ export function MenuTab() {
                   </div>
                 ) : (
                   <>
-                    <div className={`${item.card_size === 'large' ? 'h-64' : 'h-32'} bg-gray-100 relative overflow-hidden`}>
+                    <div className={`${item.card_size === 'large' ? 'h-64' : 'h-32'} bg-gray-100 relative overflow-hidden relative z-10`}>
                       {item.image_url
                         ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
-                      {(item.pattern_image_url || item.default_pattern_image_url) && (
-                        <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                          alt="Pattern overlay"
-                          className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none" />
-                      )}
                       <div className="absolute top-2 end-2 flex gap-1">
                         {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
                         {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
@@ -918,7 +914,7 @@ export function MenuTab() {
                         )}
                       </div>
                     </div>
-                    <CardContent className="p-4 bg-white">
+                    <CardContent className="p-4 bg-white relative z-10">
                       <div className="mb-2">
                         <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
                         <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>

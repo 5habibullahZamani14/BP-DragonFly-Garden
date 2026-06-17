@@ -1184,10 +1184,17 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       {sectionItems.map((item, idx) => (
                         <li
                           key={item.id}
-                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''}`}
+                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                           style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
                         >
-                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5">
+                          {(item.pattern_image_url || item.default_pattern_image_url) && (
+                            <img
+                              src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                              alt="Pattern overlay"
+                              className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
+                            />
+                          )}
+                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
                             {item.image_url ? (
                               <img src={item.image_url} alt={item.name} loading="lazy"
                                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -1197,20 +1204,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 <Leaf className="h-7 w-7 text-leaf/60" />
                               </div>
                             )}
-                            {(item.pattern_image_url || item.default_pattern_image_url) && (
-                              <img
-                                src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                                alt="Pattern overlay"
-                                className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none"
-                              />
-                            )}
                             {item.is_popular && (
                               <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
                                 <Star className="h-2.5 w-2.5 fill-current" />
                               </span>
                             )}
                           </div>
-                          <div className="flex min-w-0 flex-1 flex-col">
+                          <div className="flex min-w-0 flex-1 flex-col relative z-10">
                             <div className="flex items-start justify-between gap-2">
                               <h3 className="font-display text-[1rem] font-semibold leading-tight">
                                 {item.name}
@@ -1245,10 +1245,17 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             {filtered.map((item, idx) => (
               <li
                 key={item.id}
-                className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''}`}
+                className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
-                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5">
+                {(item.pattern_image_url || item.default_pattern_image_url) && (
+                  <img
+                    src={item.pattern_image_url || item.default_pattern_image_url || undefined}
+                    alt="Pattern overlay"
+                    className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
+                  />
+                )}
+                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
                   {item.image_url ? (
                     <img src={item.image_url} alt={item.name} loading="lazy"
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -1264,7 +1271,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </span>
                   )}
                 </div>
-                <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex min-w-0 flex-1 flex-col relative z-10">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-display text-[1rem] font-semibold leading-tight">
                       {item.name}
