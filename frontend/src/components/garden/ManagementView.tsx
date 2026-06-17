@@ -46,7 +46,6 @@ import { InventoryTab } from "./management/InventoryTab";
 import { LogsTab } from "./management/LogsTab";
 import { TablesTab } from "./management/TablesTab";
 import { FinanceTab } from "./management/FinanceTab";
-import { PatternRepositoryTab } from "./management/PatternRepositoryTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
 import { managerAuth, sendPasswordResetEmail, fetchInventory } from "@/lib/api";
@@ -60,7 +59,7 @@ interface ManagementViewProps {
   notify: (kind: "success" | "error", text: string) => void;
 }
 
-const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "patterns", "feedback", "ai-chatbot"] as const;
+const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback", "ai-chatbot"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
 type ManagerNotification = {
   id: string;
@@ -411,14 +410,6 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-indigo-500 cursor-pointer" onClick={() => goToTab("patterns")}>
-              <CardContent className="pt-6">
-                <ImageIcon className="h-10 w-10 text-indigo-500 mb-4" />
-                <CardTitle className="mb-2">Pattern Repository</CardTitle>
-                <CardDescription>Upload, edit, and manage pattern overlays for menu cards</CardDescription>
-              </CardContent>
-            </Card>
-
             <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer" onClick={() => goToTab("finance")}>
               <CardContent className="pt-6">
                 <DollarSign className="h-10 w-10 text-rose-500 mb-4" />
@@ -452,7 +443,6 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "logs" && <LogsTab />}
         {activeTab === "finance" && <FinanceTab />}
         {activeTab === "menu" && <MenuTab />}
-        {activeTab === "patterns" && <PatternRepositoryTab />}
         {activeTab === "feedback" && <FeedbackTab notify={notify} />}
         {activeTab === "ai-chatbot" && <AIChatbotTab />}
         

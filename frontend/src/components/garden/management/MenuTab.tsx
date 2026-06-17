@@ -32,12 +32,13 @@ import {
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
   RotateCw, FlipHorizontal, ZoomIn, ZoomOut, Layers,
-  Check, AlertTriangle, Pencil, GripVertical, Settings2, X, ChevronDown, ChevronRight,
+  Check, AlertTriangle, Pencil, GripVertical, Settings2, X, ChevronDown, ChevronRight, ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import Cropper, { ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { PatternRepositoryTab } from "./PatternRepositoryTab";
 
 // ───────────────────────────────────────────────────────────────────────────────
 // VariationsEditor — Global modifier tag library
@@ -562,6 +563,7 @@ export function MenuTab() {
   const cropperRef = useRef<ReactCropperElement>(null);
   const patternInputRef = useRef<HTMLInputElement | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
+  const [showPatternRepository, setShowPatternRepository] = useState(false);
 
   const selectedPattern = patterns.find(p => p.id === editingItem?.pattern_id);
   const selectedPatternImage = editingItem?.pattern_image_url
@@ -773,6 +775,28 @@ export function MenuTab() {
 
   return (
     <div className="space-y-8 animate-fade-up" dir={i18n.dir()}>
+
+      {/* ══ PATTERN REPOSITORY ════════════════════════════════════════════════════════ */}
+      <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b bg-muted/30 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-semibold text-lg leading-none">Pattern Repository</h3>
+              <p className="text-sm text-muted-foreground mt-1">Upload, edit, and manage pattern overlays for menu cards</p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setShowPatternRepository(!showPatternRepository)}>
+            {showPatternRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            {showPatternRepository ? "Hide" : "Show"}
+          </Button>
+        </div>
+        {showPatternRepository && (
+          <div className="p-6">
+            <PatternRepositoryTab />
+          </div>
+        )}
+      </div>
 
       {/* ══ SECTIONS ════════════════════════════════════════════════════════ */}
       <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
