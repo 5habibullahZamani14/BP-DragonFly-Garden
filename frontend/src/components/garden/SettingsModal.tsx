@@ -14,25 +14,24 @@ const FONT_OPTIONS: {
 }[] = [
   {
     id: "font-1",
-    label: "Clarity",
-    tagline: "Maximum readability — clean, open, effortless for all ages",
-    fontFamily: "'Inter', sans-serif",
-    headingFamily: "'Inter', sans-serif",
+    label: "Baskerville",
+    tagline: "Elegant serif — classic and refined",
+    fontFamily: "'Baskervville', serif",
+    headingFamily: "'Baskervville', serif",
   },
   {
     id: "font-2",
-    label: "Classic",
-    tagline: "Warm & familiar — the garden signature at full strength",
-    fontFamily: "'Lexend', sans-serif",
-    headingFamily: "'Fraunces', serif",
+    label: "Merriweather",
+    tagline: "Readable serif — designed for screen reading",
+    fontFamily: "'Merriweather', serif",
+    headingFamily: "'Merriweather', serif",
   },
   {
     id: "font-3",
-    label: "Elegance",
-    tagline: "Light & refined — the same garden voice, whisper-thin",
-    fontFamily: "'Lexend', sans-serif",
-    headingFamily: "'Fraunces', serif",
-    sampleStyle: { fontWeight: 300, letterSpacing: "0.01em" },
+    label: "Montserrat",
+    tagline: "Modern sans-serif — clean and contemporary",
+    fontFamily: "'Montserrat', sans-serif",
+    headingFamily: "'Montserrat', sans-serif",
   },
 ];
 
