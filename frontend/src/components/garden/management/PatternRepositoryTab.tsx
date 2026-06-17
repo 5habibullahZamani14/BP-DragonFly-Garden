@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Edit2, ZoomIn, ZoomOut, RotateCw, FlipHorizontal, 
   ArrowRight, ArrowLeft, ArrowUp, ArrowDown, X, Check, Settings2
@@ -145,6 +145,10 @@ export function PatternRepositoryTab() {
   const cropperRef = useRef<ReactCropperElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [patternToDelete, setPatternToDelete] = useState<number | null>(null);
+  const [applyAllConfirmOpen, setApplyAllConfirmOpen] = useState(false);
+  const [patternToApplyAll, setPatternToApplyAll] = useState<number | null>(null);
 
   useEffect(() => {
     loadPatterns();
@@ -227,25 +231,41 @@ export function PatternRepositoryTab() {
   };
 
   const handleDeletePattern = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this pattern?")) return;
+    setPatternToDelete(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeletePattern = async () => {
+    if (patternToDelete === null) return;
     try {
-      await deletePattern(id);
+      await deletePattern(patternToDelete);
       toast.success("Pattern deleted successfully");
       loadPatterns();
     } catch {
       toast.error("Failed to delete pattern");
+    } finally {
+      setDeleteConfirmOpen(false);
+      setPatternToDelete(null);
     }
   };
 
   const handleApplyToAll = async (patternId: number) => {
-    if (!confirm("Apply this pattern to all menu items? This will overwrite existing patterns.")) return;
+    setPatternToApplyAll(patternId);
+    setApplyAllConfirmOpen(true);
+  };
+
+  const confirmApplyToAll = async () => {
+    if (patternToApplyAll === null) return;
     try {
-      await Promise.all(menuItems.map(item => 
-        updateMenuItem(item.id, { pattern_id: patternId })
+      await Promise.all(menuItems.map(item =>
+        updateMenuItem(item.id, { pattern_id: patternToApplyAll })
       ));
       toast.success("Pattern applied to all items");
     } catch {
       toast.error("Failed to apply pattern to all items");
+    } finally {
+      setApplyAllConfirmOpen(false);
+      setPatternToApplyAll(null);
     }
   };
 
@@ -360,6 +380,38 @@ export function PatternRepositoryTab() {
           {editingPattern && (
             <PatternEditor pattern={editingPattern} onSave={handleSavePattern} onCancel={() => setIsEditorOpen(false)} />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Pattern</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this pattern? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeletePattern}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply to All Confirmation Dialog */}
+      <Dialog open={applyAllConfirmOpen} onOpenChange={setApplyAllConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply Pattern to All Items</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to apply this pattern to all menu items? This will overwrite existing patterns on all items.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplyAllConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={confirmApplyToAll}>Apply</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
