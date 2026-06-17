@@ -563,8 +563,9 @@ export function MenuTab() {
   const patternInputRef = useRef<HTMLInputElement | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
 
+  const selectedPattern = patterns.find(p => p.id === editingItem?.pattern_id);
   const selectedPatternImage = editingItem?.pattern_image_url
-    || patterns.find(p => p.id === editingItem?.pattern_id)?.image_url
+    || selectedPattern?.image_url
     || editingItem?.default_pattern_image_url || null;
 
   // ── Sections state
@@ -852,13 +853,36 @@ export function MenuTab() {
           <div className="text-center py-12"><p className="text-gray-500 animate-pulse">{t("m.loadingMenu")}</p></div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredItems.map(item => (
+            {filteredItems.map(item => {
+              const pattern = patterns.find(p => p.id === item.pattern_id);
+              const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
+              return (
               <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} ${item.card_size === 'extra_large' ? 'col-span-full' : ''} relative`}>
-                {(item.pattern_image_url || item.default_pattern_image_url) && (
-                  <img src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                    alt="Pattern overlay"
-                    className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
-                  />
+                {patternImage && (
+                  <div className="absolute inset-0 z-0 pointer-events-none">
+                    <img src={patternImage}
+                      alt="Pattern overlay"
+                      className="h-full w-full object-cover"
+                      style={{
+                        opacity: pattern?.opacity ?? 0.4,
+                        transform: `scale(${pattern?.zoom ?? 1}) rotate(${pattern?.rotation ?? 0}deg) scaleX(${pattern?.flip_horizontal ? -1 : 1}) scaleY(${pattern?.flip_vertical ? -1 : 1})`,
+                        mixBlendMode: 'multiply'
+                      }}
+                    />
+                    {pattern?.fade_direction && pattern.fade_direction !== 'none' && (
+                      <div className="absolute inset-0"
+                        style={{
+                          background: `linear-gradient(${
+                            pattern.fade_direction === 'right-to-left' ? 'to left' :
+                            pattern.fade_direction === 'left-to-right' ? 'to right' :
+                            pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
+                            'to top'
+                          }, transparent, white)`,
+                          opacity: pattern.fade_intensity ?? 0.5
+                        }}
+                      />
+                    )}
+                  </div>
                 )}
                 {item.card_size === 'extra_large' ? (
                   <div className="flex flex-col sm:flex-row relative z-10">
@@ -936,7 +960,8 @@ export function MenuTab() {
                   </>
                 )}
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -1094,7 +1119,7 @@ export function MenuTab() {
                   <div className="grid gap-2 pt-1">
                     <div>
                       <Label>Pattern overlay</Label>
-                      <p className="text-xs text-muted-foreground mt-1">Optional decorative pattern layer (PNG/JPG, 300×300px recommended). Displays with 40% opacity behind the item name.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Select a pattern from the repository. Patterns can be edited (zoom, rotate, flip, opacity, fade effects) in the Pattern Repository tab.</p>
                     </div>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">

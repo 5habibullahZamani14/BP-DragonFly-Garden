@@ -53,10 +53,12 @@ import {
   fetchCustomerArchivedOrders,
   fetchRecommendations,
   callStaff,
+  fetchPatterns,
   type MenuItem,
   type Order,
   type Recommendation,
   type Category,
+  type Pattern,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
@@ -99,6 +101,7 @@ const CAT_ICON: Record<string, typeof Soup> = {
 export const CustomerView = ({ qrCode, notify }: Props) => {
   const { t, i18n } = useTranslation();
   const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>(() => {
@@ -219,17 +222,18 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     return () => { alive = false; };
   }, [cartOpen, cart.length, qrCode]);
 
-  // Load menu + table + tax settings + categories, then restore any active orders from the DB
+  // Load menu + table + tax settings + categories + patterns, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const [m, t, settings, cats] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings(), fetchCategories()]);
+        const [m, t, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings(), fetchCategories(), fetchPatterns()]);
         if (!alive) return;
         setMenu(m);
         setTableInfo(t);
         setCategoriesFromApi(cats.sort((a, b) => a.display_order - b.display_order));
+        setPatterns(p || []);
         // Load tax settings
         const sstEnabled = settings?.sst_enabled !== false && settings?.sst_enabled !== 'false';
         const scEnabled = settings?.service_charge_enabled !== false && settings?.service_charge_enabled !== 'false';
@@ -1181,18 +1185,41 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="text-xs text-foreground/40 font-medium">{sectionItems.length} {t("customer.items")}</span>
                     </div>
                     <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {sectionItems.map((item, idx) => (
+                      {sectionItems.map((item, idx) => {
+                        const pattern = patterns.find(p => p.id === item.pattern_id);
+                        const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
+                        return (
                         <li
                           key={item.id}
                           className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                           style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
                         >
-                          {(item.pattern_image_url || item.default_pattern_image_url) && (
-                            <img
-                              src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                              alt="Pattern overlay"
-                              className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
-                            />
+                          {patternImage && (
+                            <div className="absolute inset-0 z-0 pointer-events-none">
+                              <img
+                                src={patternImage}
+                                alt="Pattern overlay"
+                                className="h-full w-full object-cover"
+                                style={{
+                                  opacity: pattern?.opacity ?? 0.4,
+                                  transform: `scale(${pattern?.zoom ?? 1}) rotate(${pattern?.rotation ?? 0}deg) scaleX(${pattern?.flip_horizontal ? -1 : 1}) scaleY(${pattern?.flip_vertical ? -1 : 1})`,
+                                  mixBlendMode: 'multiply'
+                                }}
+                              />
+                              {pattern?.fade_direction && pattern.fade_direction !== 'none' && (
+                                <div className="absolute inset-0"
+                                  style={{
+                                    background: `linear-gradient(${
+                                      pattern.fade_direction === 'right-to-left' ? 'to left' :
+                                      pattern.fade_direction === 'left-to-right' ? 'to right' :
+                                      pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
+                                      'to top'
+                                    }, transparent, white)`,
+                                    opacity: pattern.fade_intensity ?? 0.5
+                                  }}
+                                />
+                              )}
+                            </div>
                           )}
                           <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
                             {item.image_url ? (
@@ -1232,7 +1259,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                             </div>
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   </div>
                 );
@@ -1242,18 +1270,41 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         ) : (
           /* ── FLAT VIEW: a specific category is selected ── */
           <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((item, idx) => (
+            {filtered.map((item, idx) => {
+              const pattern = patterns.find(p => p.id === item.pattern_id);
+              const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
+              return (
               <li
                 key={item.id}
                 className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
-                {(item.pattern_image_url || item.default_pattern_image_url) && (
-                  <img
-                    src={item.pattern_image_url || item.default_pattern_image_url || undefined}
-                    alt="Pattern overlay"
-                    className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-multiply pointer-events-none z-0"
-                  />
+                {patternImage && (
+                  <div className="absolute inset-0 z-0 pointer-events-none">
+                    <img
+                      src={patternImage}
+                      alt="Pattern overlay"
+                      className="h-full w-full object-cover"
+                      style={{
+                        opacity: pattern?.opacity ?? 0.4,
+                        transform: `scale(${pattern?.zoom ?? 1}) rotate(${pattern?.rotation ?? 0}deg) scaleX(${pattern?.flip_horizontal ? -1 : 1}) scaleY(${pattern?.flip_vertical ? -1 : 1})`,
+                        mixBlendMode: 'multiply'
+                      }}
+                    />
+                    {pattern?.fade_direction && pattern.fade_direction !== 'none' && (
+                      <div className="absolute inset-0"
+                        style={{
+                          background: `linear-gradient(${
+                            pattern.fade_direction === 'right-to-left' ? 'to left' :
+                            pattern.fade_direction === 'left-to-right' ? 'to right' :
+                            pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
+                            'to top'
+                          }, transparent, white)`,
+                          opacity: pattern.fade_intensity ?? 0.5
+                        }}
+                      />
+                    )}
+                  </div>
                 )}
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
                   {item.image_url ? (
@@ -1296,7 +1347,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
 

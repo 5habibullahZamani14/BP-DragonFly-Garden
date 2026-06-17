@@ -122,7 +122,14 @@ const initializeDatabase = async () => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       image_url TEXT NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      opacity REAL NOT NULL DEFAULT 0.4,
+      zoom REAL NOT NULL DEFAULT 1.0,
+      rotation REAL NOT NULL DEFAULT 0,
+      flip_horizontal INTEGER NOT NULL DEFAULT 0,
+      flip_vertical INTEGER NOT NULL DEFAULT 0,
+      fade_direction TEXT NOT NULL DEFAULT 'none',
+      fade_intensity REAL NOT NULL DEFAULT 0.5
     )
   `);
 
@@ -450,12 +457,28 @@ const initializeDatabase = async () => {
   await ensureColumn("menu_items", "promo_label", "TEXT");
   await ensureColumn("menu_items", "card_size", "TEXT NOT NULL DEFAULT 'normal'");
 
+  // Pattern editing properties
+  await ensureColumn("patterns", "opacity", "REAL NOT NULL DEFAULT 0.4");
+  await ensureColumn("patterns", "zoom", "REAL NOT NULL DEFAULT 1.0");
+  await ensureColumn("patterns", "rotation", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn("patterns", "flip_horizontal", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("patterns", "flip_vertical", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("patterns", "fade_direction", "TEXT NOT NULL DEFAULT 'none'");
+  await ensureColumn("patterns", "fade_intensity", "REAL NOT NULL DEFAULT 0.5");
+
   await run(`
     CREATE TABLE IF NOT EXISTS patterns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       image_url TEXT NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      opacity REAL NOT NULL DEFAULT 0.4,
+      zoom REAL NOT NULL DEFAULT 1.0,
+      rotation REAL NOT NULL DEFAULT 0,
+      flip_horizontal INTEGER NOT NULL DEFAULT 0,
+      flip_vertical INTEGER NOT NULL DEFAULT 0,
+      fade_direction TEXT NOT NULL DEFAULT 'none',
+      fade_intensity REAL NOT NULL DEFAULT 0.5
     )
   `);
 

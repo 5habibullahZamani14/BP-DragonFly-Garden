@@ -450,12 +450,31 @@ const createPattern = async (req, res) => {
   try {
     const imageUrl = `/menu-images/${req.file.filename}`;
     const patternName = req.body.name ? String(req.body.name).trim() : `pattern-${Date.now()}`;
+    const opacity = parseFloat(req.body.opacity) || 0.4;
+    const zoom = parseFloat(req.body.zoom) || 1.0;
+    const rotation = parseFloat(req.body.rotation) || 0;
+    const flip_horizontal = req.body.flip_horizontal ? 1 : 0;
+    const flip_vertical = req.body.flip_vertical ? 1 : 0;
+    const fade_direction = req.body.fade_direction || 'none';
+    const fade_intensity = parseFloat(req.body.fade_intensity) || 0.5;
+
     const result = await run(
-      `INSERT INTO patterns (name, image_url) VALUES (?, ?)`,
-      [patternName || `pattern-${Date.now()}`, imageUrl]
+      `INSERT INTO patterns (name, image_url, opacity, zoom, rotation, flip_horizontal, flip_vertical, fade_direction, fade_intensity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [patternName || `pattern-${Date.now()}`, imageUrl, opacity, zoom, rotation, flip_horizontal, flip_vertical, fade_direction, fade_intensity]
     );
 
-    const pattern = { id: result.lastID, name: patternName, image_url: imageUrl };
+    const pattern = {
+      id: result.lastID,
+      name: patternName,
+      image_url: imageUrl,
+      opacity,
+      zoom,
+      rotation,
+      flip_horizontal,
+      flip_vertical,
+      fade_direction,
+      fade_intensity
+    };
     res.json({ success: true, pattern });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -464,8 +483,34 @@ const createPattern = async (req, res) => {
 
 const getPatterns = async (req, res) => {
   try {
-    const rows = await all(`SELECT id, name, image_url FROM patterns ORDER BY created_at DESC`);
+    const rows = await all(`SELECT id, name, image_url, opacity, zoom, rotation, flip_horizontal, flip_vertical, fade_direction, fade_intensity FROM patterns ORDER BY created_at DESC`);
     res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updatePattern = async (req, res) => {
+  const { id } = req.params;
+  const { name, opacity, zoom, rotation, flip_horizontal, flip_vertical, fade_direction, fade_intensity } = req.body;
+
+  try {
+    await run(
+      `UPDATE patterns 
+       SET name = COALESCE(?, name),
+           opacity = COALESCE(?, opacity),
+           zoom = COALESCE(?, zoom),
+           rotation = COALESCE(?, rotation),
+           flip_horizontal = COALESCE(?, flip_horizontal),
+           flip_vertical = COALESCE(?, flip_vertical),
+           fade_direction = COALESCE(?, fade_direction),
+           fade_intensity = COALESCE(?, fade_intensity)
+       WHERE id = ?`,
+      [name, opacity !== undefined ? opacity : null, zoom !== undefined ? zoom : null, rotation !== undefined ? rotation : null, flip_horizontal !== undefined ? (flip_horizontal ? 1 : 0) : null, flip_vertical !== undefined ? (flip_vertical ? 1 : 0) : null, fade_direction, fade_intensity !== undefined ? fade_intensity : null, id]
+    );
+
+    const updated = await all(`SELECT * FROM patterns WHERE id = ?`, [id]);
+    res.json({ success: true, pattern: updated[0] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -994,7 +1039,7 @@ const getItemOptions = async (req, res) => {
 module.exports = {
   getMenu, getCategories, recomputePopular, getRecommendations,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
-  createPattern, getPatterns, deletePattern,
+  createPattern, getPatterns, updatePattern, deletePattern,
   uploadMenuItemPatternImage, updateMenuItemPattern,
   setBroadcast,
   createCategory, updateCategory, deleteCategory, reorderCategories,

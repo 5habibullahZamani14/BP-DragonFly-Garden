@@ -155,6 +155,7 @@ router.post("/menu/apply-default-card-size", menuController.applyDefaultCardSize
 // ── Pattern Assets Management ───────────────────────────────────────────────
 router.get("/patterns", menuController.getPatterns);
 router.post("/patterns", upload.single("image"), menuController.createPattern);
+router.put("/patterns/:id", menuController.updatePattern);
 router.delete("/patterns/:id", menuController.deletePattern);
 
 // ── Category (Section) Management ────────────────────────────────────────────

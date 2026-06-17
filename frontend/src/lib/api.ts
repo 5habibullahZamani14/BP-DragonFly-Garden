@@ -277,6 +277,13 @@ export interface Pattern {
   id: number;
   name: string;
   image_url: string;
+  opacity?: number;
+  zoom?: number;
+  rotation?: number;
+  flip_horizontal?: number;
+  flip_vertical?: number;
+  fade_direction?: 'none' | 'right-to-left' | 'left-to-right' | 'top-to-bottom' | 'bottom-to-top';
+  fade_intensity?: number;
 }
 
 export interface Recommendation {
@@ -364,6 +371,12 @@ export const createPattern = async (file: Blob, name?: string) => {
 
 export const deletePattern = async (id: number) =>
   safeFetch<{ success: boolean }>(`/management/patterns/${id}`, { method: "DELETE" });
+
+export const updatePattern = async (id: number, data: Partial<Pattern>) =>
+  safeFetch<{ success: boolean; pattern: Pattern }>(`/management/patterns/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 
 export interface Category {
   id: number;
