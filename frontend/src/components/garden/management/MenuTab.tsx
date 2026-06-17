@@ -778,7 +778,10 @@ export function MenuTab() {
 
       {/* ══ PATTERN REPOSITORY ════════════════════════════════════════════════════════ */}
       <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-muted/30 flex items-center justify-between gap-4">
+        <div
+          className="px-6 py-4 border-b bg-muted/30 flex items-center justify-between gap-4 cursor-pointer hover:bg-muted/40 transition-colors"
+          onClick={() => setShowPatternRepository(!showPatternRepository)}
+        >
           <div className="flex items-center gap-2">
             <ImageIcon className="h-5 w-5 text-primary" />
             <div>
@@ -786,13 +789,10 @@ export function MenuTab() {
               <p className="text-sm text-muted-foreground mt-1">Upload, edit, and manage pattern overlays for menu cards</p>
             </div>
           </div>
-          <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setShowPatternRepository(!showPatternRepository)}>
-            {showPatternRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            {showPatternRepository ? "Hide" : "Show"}
-          </Button>
+          {showPatternRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
         {showPatternRepository && (
-          <div className="p-6">
+          <div className="p-6 max-h-[400px] overflow-y-auto">
             <PatternRepositoryTab />
           </div>
         )}
