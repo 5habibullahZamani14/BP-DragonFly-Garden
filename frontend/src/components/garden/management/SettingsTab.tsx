@@ -409,10 +409,10 @@ export const SettingsTab = () => {
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>Default Pattern</Label>
-              <Select value={defaultPatternId ? String(defaultPatternId) : ""} onValueChange={value => setDefaultPatternId(value ? parseInt(value, 10) : null)}>
+              <Select value={defaultPatternId ? String(defaultPatternId) : "none"} onValueChange={value => setDefaultPatternId(value === "none" ? null : parseInt(value, 10))}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None — no pattern overlay</SelectItem>
+                  <SelectItem value="none">None — no pattern overlay</SelectItem>
                   {patterns.map(pattern => (
                     <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
                   ))}
