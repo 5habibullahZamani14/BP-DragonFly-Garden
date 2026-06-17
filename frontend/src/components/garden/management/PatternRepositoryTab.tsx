@@ -64,51 +64,57 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
         <Input value={name} onChange={e => setName(e.target.value)} className="px-4" />
       </div>
 
-      {/* Live Preview */}
-      <div className="grid gap-1">
-        <Label>Live Preview</Label>
-        <div className="relative h-28 w-full bg-gray-100 rounded-lg overflow-hidden border">
-          <img
-            src={pattern.image_url}
-            alt="Pattern preview"
-            className="w-full h-full object-cover"
-            style={{
-              opacity,
-              transform: `scale(${zoom}) rotate(${rotation}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
-              mixBlendMode: 'multiply'
-            }}
-          />
-          {fadeDirection !== 'none' && (
-            <div className="absolute inset-0"
+      {/* Live Preview + Opacity + Zoom Row */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Live Preview - Left 50% */}
+        <div className="grid gap-1">
+          <Label>Live Preview</Label>
+          <div className="relative h-28 w-full bg-gray-100 rounded-lg overflow-hidden border">
+            <img
+              src={pattern.image_url}
+              alt="Pattern preview"
+              className="w-full h-full object-cover"
               style={{
-                background: `linear-gradient(${
-                  fadeDirection === 'right-to-left' ? 'to left' :
-                  fadeDirection === 'left-to-right' ? 'to right' :
-                  fadeDirection === 'top-to-bottom' ? 'to bottom' :
-                  'to top'
-                }, transparent, white)`,
-                opacity: fadeIntensity
+                opacity,
+                transform: `scale(${zoom}) rotate(${rotation}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
+                mixBlendMode: 'multiply'
               }}
             />
-          )}
+            {fadeDirection !== 'none' && (
+              <div className="absolute inset-0"
+                style={{
+                  background: `linear-gradient(${
+                    fadeDirection === 'right-to-left' ? 'to left' :
+                    fadeDirection === 'left-to-right' ? 'to right' :
+                    fadeDirection === 'top-to-bottom' ? 'to bottom' :
+                    'to top'
+                  }, transparent, white)`,
+                  opacity: fadeIntensity
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Opacity and Zoom - Right 50% */}
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
+            <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
+          </div>
+
+          <div className="grid gap-1">
+            <Label>Zoom ({zoom.toFixed(1)}x)</Label>
+            <div className="flex gap-1 items-center">
+              <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="px-2"><ZoomIn className="h-3 w-3" /></Button>
+              <Input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} className="flex-1" />
+              <Button size="sm" variant="outline" onClick={() => setZoom(Math.min(3, zoom + 0.1))} className="px-2"><ZoomOut className="h-3 w-3" /></Button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="grid gap-1">
-          <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
-          <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
-        </div>
-
-        <div className="grid gap-1">
-          <Label>Zoom ({zoom.toFixed(1)}x)</Label>
-          <div className="flex gap-1 items-center">
-            <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="px-2"><ZoomIn className="h-3 w-3" /></Button>
-            <Input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} className="flex-1" />
-            <Button size="sm" variant="outline" onClick={() => setZoom(Math.min(3, zoom + 0.1))} className="px-2"><ZoomOut className="h-3 w-3" /></Button>
-          </div>
-        </div>
-
         <div className="grid gap-1">
           <Label>Rotation ({rotation}°)</Label>
           <div className="flex gap-1 items-center">
