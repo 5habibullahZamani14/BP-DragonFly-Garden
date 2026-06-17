@@ -202,7 +202,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
-          <SettingsModal />
+          <SettingsModal restrictLanguages={true} />
           <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} />
         </div>
         <div className="flex-1 flex items-center justify-center pb-20">
@@ -293,7 +293,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
-            <SettingsModal />
+            <SettingsModal restrictLanguages={true} />
             {activeTab !== "overview" && (
               <Button variant="outline" size="icon" onClick={() => goToTab("overview")} className="rounded-full shadow-sm">
                 <ArrowLeft className="h-5 w-5 text-gray-600" />

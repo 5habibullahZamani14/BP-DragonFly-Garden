@@ -35,11 +35,11 @@ const FONT_OPTIONS: {
   },
 ];
 
-export const SettingsModal = () => {
+export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages?: boolean }) => {
   const { fontTheme, setFontTheme, uiScale, setUiScale, fontScale, setFontScale } = useAccessibility();
   const { t, i18n } = useTranslation();
 
-  const LANGUAGES = [
+  const ALL_LANGUAGES = [
     { code: "en", label: "English" },
     { code: "zh", label: "中文" },
     { code: "ms", label: "Bahasa Melayu" },
@@ -47,6 +47,10 @@ export const SettingsModal = () => {
     { code: "fa", label: "فارسی" },
     { code: "hi", label: "हिन्दी" }
   ];
+
+  const LANGUAGES = restrictLanguages 
+    ? ALL_LANGUAGES.filter(lang => lang.code === "en" || lang.code === "zh")
+    : ALL_LANGUAGES;
 
   const selectedFont = FONT_OPTIONS.find((f) => f.id === fontTheme) ?? FONT_OPTIONS[1];
 

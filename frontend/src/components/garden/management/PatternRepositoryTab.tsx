@@ -89,7 +89,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
                     fadeDirection === 'top-to-bottom' ? 'to bottom' :
                     'to top'
                   }, transparent, white)`,
-                  opacity: fadeIntensity * 0.5
+                  opacity: fadeIntensity
                 }}
               />
             )}
@@ -414,6 +414,7 @@ export function PatternRepositoryTab() {
         <DialogContent className="sm:max-w-[910px] max-h-[90vh] p-6">
           <DialogHeader>
             <DialogTitle>Edit Pattern</DialogTitle>
+            <DialogDescription>Adjust the pattern overlay settings for menu cards</DialogDescription>
           </DialogHeader>
           {editingPattern && (
             <PatternEditor pattern={editingPattern} onSave={handleSavePattern} onCancel={() => setIsEditorOpen(false)} />

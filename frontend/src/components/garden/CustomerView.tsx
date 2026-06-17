@@ -1215,7 +1215,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                       pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
                                       'to top'
                                     }, transparent, white)`,
-                                    opacity: (pattern.fade_intensity ?? 0.5) * 0.5
+                                    opacity: (pattern.fade_intensity ?? 0.5)
                                   }}
                                 />
                               )}
@@ -1300,7 +1300,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                             pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
                             'to top'
                           }, transparent, white)`,
-                          opacity: (pattern.fade_intensity ?? 0.5) * 0.5
+                          opacity: (pattern.fade_intensity ?? 0.5)
                         }}
                       />
                     )}
