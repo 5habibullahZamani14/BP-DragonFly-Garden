@@ -94,6 +94,21 @@ fill in the values before starting the server. The only required variable for ba
 is `PORT` (defaults to 5000 if not set). The `RESEND_API_KEY` is needed only for the password
 reset email feature.
 
+Security-sensitive variables (required)
+
+- `JWT_SECRET`: a long random secret used to sign manager JWTs and reset tokens. The backend
+  will refuse to start if this is not set. Generate one with e.g. `openssl rand -hex 32`.
+- `RESET_BASE_URL` (optional): URL prefix used in password-reset emails (e.g. `https://admin.example.com`).
+
+Notes:
+- Manager passwords are stored hashed with `bcrypt`. On first login, any legacy plaintext
+  password will be migrated automatically to a secure bcrypt hash.
+
+Security recommendations:
+- Change the default kitchen passcode stored in `DEFAULT_KITCHEN_PASSCODE` (backend controller)
+  or set `kitchen_passcode` via the Settings tab in the manager dashboard after first startup.
+- Replace any placeholder API keys in `restaurant-system/backend/.env` (e.g. `RESEND_API_KEY`, `GROQ_API_KEY`) before deploying.
+
 The frontend reads from `frontend/.env`. The only variable is `VITE_API_BASE`, which should
 point to the backend server address. During local development this is handled automatically
 by the Vite proxy, so no `.env` change is needed for dev.

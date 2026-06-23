@@ -158,6 +158,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
     if (isLoggedIn) loadNotifications();
+  }, () => {
+    const saved = localStorage.getItem("managerLogin");
+    try {
+      const parsed = JSON.parse(saved || "null");
+      return parsed?.token || null;
+    } catch {
+      return null;
+    }
   });
 
   const handleLogin = async () => {

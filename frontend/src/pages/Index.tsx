@@ -59,7 +59,10 @@ const detectRole = (): { role: Role; qrCode: string } => {
   if (PAYMENT_QR_PATTERN.test(qr)) return { role: "payment", qrCode: qr };
   if (TABLE_QR_PATTERN.test(qr)) return { role: "customer", qrCode: qr };
   /* Default to customer preview if no QR is present (development convenience). */
-  if (!qr) return { role: "customer", qrCode: "table-1" };
+  if (!qr) {
+    if (import.meta.env.DEV) return { role: "customer", qrCode: "table-1" };
+    return { role: "landing", qrCode: "" };
+  }
   return { role: "landing", qrCode: "" };
 };
 
@@ -94,11 +97,7 @@ const Index = () => {
   }, [toast]);
 
   /*
-   * The ?view= override bypasses QR detection — useful during development
-   * to quickly switch between views without needing physical QR codes.
-   */
-  const view = new URLSearchParams(window.location.search).get("view");
-  const role: Role = (view as Role) || initial.role;
+  const role: Role = initial.role;
   const qr = role === "manager" ? "manager-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
 
   return (

@@ -81,7 +81,11 @@ type EventCallback = (event: WSEvent) => void;
  * @param callback    Function to call when a matching event arrives.
  * @returns           Boolean indicating whether the socket is currently open.
  */
-export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback) => {
+export const useWebSocket = (
+  eventTypes: WSEventType[],
+  callback: EventCallback,
+  tokenGetter?: () => string | null
+) => {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -99,9 +103,14 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
 
   useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let reconnectAttempts = 0;
 
     const connect = () => {
-      const ws = new WebSocket(WS_BASE);
+      const token = tokenGetter ? tokenGetter() : null;
+      const sep = WS_BASE.includes("?") ? "&" : "?";
+      const url = token ? `${WS_BASE}${sep}token=${encodeURIComponent(token)}` : WS_BASE;
+
+      const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -120,13 +129,13 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
         }
       };
 
-      let reconnectAttempts = 0;
-
       ws.onclose = () => {
         setIsConnected(false);
-        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
+        /* Exponential backoff with jitter */
+        const base = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
+        const jitter = Math.floor(Math.random() * 3000);
+        const delay = base + jitter;
         reconnectAttempts++;
-        /* Schedule a reconnect attempt with exponential backoff. */
         reconnectTimeout = setTimeout(connect, delay);
       };
 
@@ -147,7 +156,7 @@ export const useWebSocket = (eventTypes: WSEventType[], callback: EventCallback)
         wsRef.current.close();
       }
     };
-  }, []); // Empty deps: connect once on mount, reconnect on close, clean up on unmount.
+  }, [tokenGetter]); // Reconnect if tokenGetter reference changes
 
   return isConnected;
 };

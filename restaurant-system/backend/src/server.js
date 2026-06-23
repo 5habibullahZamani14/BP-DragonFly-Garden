@@ -9,12 +9,18 @@
  */
 
 require("dotenv").config();
+// Fail fast if critical secrets are missing to avoid insecure fallback behavior
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is not set. Aborting startup to prevent insecure default secrets.");
+  process.exit(1);
+}
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { WebSocketServer } = require("ws");
+const helmet = require("helmet");
 
 const { errorHandler, notFoundHandler } = require("./middleware/validation");
 const { attachRoleMiddleware } = require("./middleware/role-based-access");
@@ -42,13 +48,55 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 /*
- * Handle new WebSocket connections. Right now the server only uses WebSockets
- * to push events to clients (new orders, status changes) — clients do not send
- * any messages back, so I only need to handle the connect and disconnect events.
+ * Handle new WebSocket connections. Require a `token` query parameter with a
+ * valid JWT (signed with `JWT_SECRET`). This prevents anonymous clients from
+ * receiving sensitive management events. Non-browser clients (like mobile
+ * devices) should connect using `wss://.../?token=<JWT>`.
  */
-wss.on("connection", (ws) => {
-  console.log("Client connected");
-  ws.on("close", () => console.log("Client disconnected"));
+wss.on("connection", (ws, req) => {
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const token = url.searchParams.get('token');
+    const qr = url.searchParams.get('qr') || url.searchParams.get('qr_code');
+
+    const jwtLib = require('jsonwebtoken');
+    const { getRoleFromQRCode, getTableNumberFromQR } = require('./middleware/role-based-access');
+
+    // Prefer JWT token for authenticated/staff/manager clients
+    if (token) {
+      if (!process.env.JWT_SECRET) {
+        console.error('JWT_SECRET not configured; rejecting WS connection');
+        ws.close(1011, 'Server misconfiguration');
+        return;
+      }
+      const decoded = jwtLib.verify(token, process.env.JWT_SECRET);
+      ws._auth = decoded; // attach decoded JWT for use elsewhere
+      ws._role = decoded?.role || null;
+      console.log('WS client connected (token):', ws._role || 'unknown');
+    } else if (qr) {
+      // Allow QR-based connections for customer/kitchen/payment QR holders
+      const role = getRoleFromQRCode(qr);
+      if (!role) {
+        ws.close(4003, 'Invalid QR code');
+        return;
+      }
+      ws._role = role;
+      ws._qr = qr;
+      if (role === 'customer_waiter') {
+        const tableNumber = getTableNumberFromQR(qr);
+        ws._tableNumber = tableNumber; // numeric table id
+      }
+      console.log('WS client connected (qr):', role, qr);
+    } else {
+      ws.close(4001, 'Missing auth token or QR');
+      return;
+    }
+
+    ws.on('close', () => console.log('Client disconnected'));
+  } catch (err) {
+    console.warn('WS connection auth failed:', err.message);
+    try { ws.close(4002, 'Auth failed'); } catch (e) {}
+  }
 });
 
 /*
@@ -58,10 +106,60 @@ wss.on("connection", (ws) => {
  * Controllers call this function after any state change that clients
  * need to know about immediately, such as a new order or a status update.
  */
+/**
+ * Determine whether a given WebSocket client should receive this event.
+ * Managers (JWT with role=manager) receive everything. Kitchen and
+ * payment counters receive events relevant to their workflows. Customers
+ * (table QR) only receive events that reference their table.
+ */
+const clientShouldReceive = (client, data) => {
+  if (client.readyState !== 1) return false;
+  const type = data && data.type;
+
+  // Managers get all events
+  if (client._auth?.role === 'manager' || client._role === 'manager') return true;
+
+  // Customer (table) sockets only get events for their own table
+  if (client._role === 'customer_waiter') {
+    const tableId = client._tableNumber || client._tableId || client._tableNumber === 0 ? client._tableNumber : null;
+    // payload may include table_id or order.table_id
+    const payload = data && data.payload;
+    const eventTableId = payload && (payload.table_id || payload.order?.table_id || payload.table_id);
+    if (eventTableId && tableId && Number(eventTableId) === Number(tableId)) return true;
+    // Also allow explicit CALL_WAITER_ACK/CALL_WAITER events containing table_id
+    if (type === 'CALL_WAITER' || type === 'CALL_WAITER_ACK') {
+      return payload && Number(payload.table_id) === Number(tableId);
+    }
+    return false;
+  }
+
+  // Kitchen crew: interested in new orders and order/item updates
+  if (client._role === 'kitchen_crew') {
+    return ['NEW_ORDER', 'ITEM_STATUS_UPDATE', 'ORDER_STATUS_UPDATE', 'ORDER_STATUS_CHANGED'].includes(type);
+  }
+
+  // Payment counter: interested in payments and order status changes
+  if (client._role === 'payment_counter') {
+    return ['NEW_PAYMENT', 'ORDER_STATUS_CHANGED', 'ORDER_STATUS_UPDATE', 'CALL_WAITER', 'CALL_WAITER_ACK'].includes(type);
+  }
+
+  // Fallback: if client has an authenticated role via JWT, allow if role matches the type
+  if (client._auth && client._auth.role) {
+    // conservative default: allow authenticated non-manager roles to receive nothing
+    return false;
+  }
+
+  return false;
+};
+
 const broadcast = (data) => {
   wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.send(JSON.stringify(data));
+    try {
+      if (clientShouldReceive(client, data)) {
+        client.send(JSON.stringify(data));
+      }
+    } catch (e) {
+      console.warn('Failed to send WS message to client:', e && e.message);
     }
   });
 };
@@ -74,8 +172,21 @@ const broadcast = (data) => {
  */
 const frontendDistPath = path.resolve(__dirname, "../../../frontend/dist");
 
-/* Allow cross-origin requests (needed during local development). */
-app.use(cors());
+/* Configure CORS: permissive in dev, restricted in production via CORS_ALLOWED_ORIGINS */
+if (process.env.VITE_DEV_MODE === '1') {
+  app.use(cors());
+} else {
+  const allowed = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(cors({ origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // allow non-browser requests like curl
+    if (allowed.length === 0) return cb(new Error('CORS not configured'));
+    if (allowed.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS origin not allowed'));
+  }}));
+}
+
+// Apply basic security headers
+app.use(helmet({ contentSecurityPolicy: false }));
 
 /* Parse incoming JSON request bodies, capped at 100 KB to prevent abuse. */
 app.use(express.json({ limit: "100kb" }));
@@ -152,6 +263,18 @@ app.get(/^(?!\/(?:menu|orders|tables|payments|management|menu-images|feedback-im
       message: "API is running",
       frontend: "No frontend build found. Run the frontend build to serve the web app from this server.",
     });
+  }
+});
+
+/* Health and readiness endpoints */
+app.get('/health', (req, res) => res.json({ status: 'ok', time: Date.now() }));
+app.get('/ready', async (req, res) => {
+  try {
+    // quick DB ping
+    await initializeDatabase();
+    res.json({ ready: true });
+  } catch (err) {
+    res.status(503).json({ ready: false, error: String(err) });
   }
 });
 

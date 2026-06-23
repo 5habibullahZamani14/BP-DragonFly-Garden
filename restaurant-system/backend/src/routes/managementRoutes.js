@@ -58,7 +58,7 @@ const authLimiter = rateLimit({
 
 const verifyToken = (req, res, next) => {
   // Allow open routes
-  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/kitchen-passcode' || req.path === '/employees/verify') {
+  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/manager-profile/reset' || req.path === '/kitchen-passcode' || req.path === '/employees/verify') {
     return next();
   }
   const authHeader = req.headers.authorization;
@@ -67,7 +67,11 @@ const verifyToken = (req, res, next) => {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET not configured. Management token validation unavailable.");
+      return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (decoded.role !== 'manager') throw new Error("Invalid role");
     req.managerId = decoded.id;
     next();
@@ -111,6 +115,7 @@ router.post("/employees/verify", authLimiter, managementController.verifyEmploye
  * Requires the Resend API key to be configured in the backend .env file.
  */
 router.post("/send-reset-email", managementController.sendResetEmail);
+router.post("/manager-profile/reset", managementController.managerResetPassword);
 
 // ── Manager profile ───────────────────────────────────────────────────────────
 

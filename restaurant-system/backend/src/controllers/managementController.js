@@ -27,6 +27,7 @@
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 
@@ -57,7 +58,7 @@ const getResend = () => {
  * configured their own credentials. The password should be changed on
  * first login via the Profile tab in the dashboard.
  */
-const DEFAULT_MANAGER = { id: "admin", password: "manager", name: "Manager", email: "", phone: "" };
+const DEFAULT_MANAGER = { id: "admin", password: "", name: "Manager", email: "", phone: "" };
 const DEFAULT_KITCHEN_PASSCODE = "kitchen2024";
 
 const run = (sql, params = []) =>
@@ -481,12 +482,71 @@ const managerAuth = async (req, res, next) => {
     const { id, password } = req.body;
     if (!id || !password) return next(createHttpError(400, "ID and password are required"));
     const profile = await getManagerProfile();
-    if (id === profile.id && password === profile.password) {
-      const token = jwt.sign({ role: "manager", id: profile.id }, process.env.JWT_SECRET || "fallback_secret", { expiresIn: "7d" });
+
+    // Support migration from plaintext stored password -> bcrypt-hashed password.
+    let passwordMatches = false;
+    if (profile.password && profile.password.startsWith("$2")) {
+      passwordMatches = await bcrypt.compare(password, profile.password);
+    } else {
+      // legacy plaintext match; if it matches, migrate to bcrypt
+      passwordMatches = id === profile.id && password === profile.password;
+      if (passwordMatches) {
+        try {
+          const hashed = await bcrypt.hash(password, 10);
+          const migrated = { ...profile, password: hashed };
+          await run(
+            "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [JSON.stringify(migrated)]
+          );
+          // update local profile variable so token issuance uses migrated data
+          profile.password = hashed;
+        } catch (mErr) {
+          console.error("Failed to migrate manager password to hashed form:", mErr);
+        }
+      }
+    }
+
+    if (passwordMatches) {
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET not configured. Refusing to issue auth token.");
+        return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
+      }
+      const token = jwt.sign({ role: "manager", id: profile.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
       res.json({ success: true, name: profile.name, token });
     } else {
       res.status(401).json({ success: false, message: "Invalid credentials" });
     }
+  } catch (error) { next(error); }
+};
+
+/*
+ * managerResetPassword accepts a reset token (issued by sendResetEmail) and a
+ * new password. It verifies the token, hashes the new password, and stores the
+ * updated manager_profile value in restaurant_settings.
+ */
+const managerResetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return next(createHttpError(400, "Token and newPassword are required"));
+    if (!process.env.JWT_SECRET) return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
+    }
+    if (!payload || payload.action !== 'reset_manager_password') return res.status(400).json({ success: false, message: "Invalid reset token" });
+    const profile = await getManagerProfile();
+    if (payload.id !== profile.id) return res.status(400).json({ success: false, message: "Invalid reset token" });
+    if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+    const hashed = await bcrypt.hash(newPassword, 10);
+    const updated = { ...profile, password: hashed };
+    await run(
+      "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      [JSON.stringify(updated)]
+    );
+    await createLog("SYSTEM", "MANAGER_PASSWORD_RESET", "system", "System", "manager", profile.name, {});
+    res.json({ success: true, message: "Password reset successfully" });
   } catch (error) { next(error); }
 };
 
@@ -562,19 +622,25 @@ const sendResetEmail = async (req, res, next) => {
     }
 
     const from = process.env.EMAIL_FROM || "onboarding@resend.dev";
+    // Issue a short-lived reset token instead of emailing the password directly.
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET not configured. Cannot issue reset token.");
+      return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
+    }
+    const resetToken = jwt.sign({ id: profile.id, action: 'reset_manager_password' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const resetUrl = `${process.env.RESET_BASE_URL || ''}/manager-reset?token=${resetToken}`;
     await resend.emails.send({
       from: `BP DragonFly Garden <${from}>`,
       to: profile.email,
-      subject: "Your Manager Login Credentials — BP DragonFly Garden",
+      subject: "Reset your Manager password — BP DragonFly Garden",
       html: `
         <div style="font-family: Georgia, serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #fdf8f0; border-radius: 16px;">
           <h1 style="font-size: 22px; color: #2d4a22; margin-bottom: 8px;">BP DragonFly Garden 🌿</h1>
-          <p style="color: #555; margin-bottom: 24px;">You requested your manager login credentials. Here they are:</p>
+          <p style="color: #555; margin-bottom: 24px;">You requested a password reset for the manager dashboard. Click the link below to set a new password. This link expires in 60 minutes.</p>
           <div style="background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5ddd0;">
-            <p style="margin: 0 0 8px;"><strong>Manager ID:</strong> <code style="background:#f4f0ea;padding:2px 8px;border-radius:6px;">${profile.id}</code></p>
-            <p style="margin: 0;"><strong>Password:</strong> <code style="background:#f4f0ea;padding:2px 8px;border-radius:6px;">${profile.password}</code></p>
+            <p style="margin: 0 0 8px;"><a href="${resetUrl}" style="color:#2d4a22;">Reset Manager Password</a></p>
           </div>
-          <p style="margin-top: 24px; font-size: 13px; color: #999;">If you did not request this, please ignore this email. Your credentials have not been changed.</p>
+          <p style="margin-top: 24px; font-size: 13px; color: #999;">If you did not request this, please ignore this email.</p>
         </div>
       `
     });
@@ -677,6 +743,7 @@ module.exports = {
   managerAuth,
   getManagerProfileRoute,
   updateManagerProfile,
+  managerResetPassword,
   getKitchenPasscode,
   sendResetEmail,
   getBackups,

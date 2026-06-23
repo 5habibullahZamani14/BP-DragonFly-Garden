@@ -55,10 +55,12 @@ const apiUrl = (path: string, qrCode?: string) => {
  * Response object.
  */
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
-  const url = apiUrl(path, qr);
-  
+  // Management endpoints must use JWT-based auth; ignore any QR argument for them.
+  const isManagement = path.startsWith("/management");
+  const url = isManagement ? `${API_BASE}${path}` : apiUrl(path, qr);
+
   const headers = new Headers(init?.headers);
-  if (path.startsWith("/management")) {
+  if (isManagement) {
     const savedLogin = localStorage.getItem("managerLogin");
     if (savedLogin) {
       try {
@@ -66,7 +68,7 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
         if (parsed.token) {
           headers.set("Authorization", `Bearer ${parsed.token}`);
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore malformed stored login */ }
     }
   }
 
