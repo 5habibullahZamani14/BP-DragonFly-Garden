@@ -206,7 +206,11 @@ export const InventoryTab = ({
     setSelectedMenuItem(menuItemId);
     const existingRecipe = recipes.find(r => r.id === menuItemId);
     if (existingRecipe) {
-      setEditingRecipe([...(existingRecipe.ingredients || [])]);
+      const mapped = (existingRecipe.ingredients || []).map(ing => ({
+        ...ing,
+        inventory_item_id: ing.inventory_item_id || ing.id
+      }));
+      setEditingRecipe(mapped);
     } else {
       setEditingRecipe([]);
     }
@@ -233,7 +237,7 @@ export const InventoryTab = ({
     if (!selectedMenuItem) return;
     try {
       await updateRecipe(selectedMenuItem, editingRecipe.map(ing => ({
-        inventory_item_id: parseInt(String(ing.inventory_item_id)),
+        inventory_item_id: parseInt(String(ing.inventory_item_id || ing.id)),
         quantity_required: parseFloat(String(ing.quantity_required))
       })));
       setSelectedMenuItem(null);
@@ -693,8 +697,8 @@ export const InventoryTab = ({
                                 onChange={(e) => updateIngredientInRecipe(idx, 'quantity_required', e.target.value)}
                               />
                               <span className="text-sm font-medium text-gray-500 w-8">
-                                {inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.usage_unit ||
-                                  inventory.find(i => String(i.id) === String(ing.inventory_item_id))?.unit}
+                                {inventory.find(i => String(i.id) === String(ing.inventory_item_id || ing.id))?.usage_unit ||
+                                  inventory.find(i => String(i.id) === String(ing.inventory_item_id || ing.id))?.unit}
                               </span>
                             </div>
                             <Button variant="destructive" size="icon" onClick={() => removeIngredientFromRecipe(idx)}>

@@ -1,7 +1,7 @@
 /*
  * printerService.js — Thermal printer integration for order tickets.
  * Rewritten to support Advanced C# GDI Printing with Rich Text tags
- * and distinct receipt layouts (Checklist vs Final Bill).
+ * on Windows, and clean plain-text fallback on Linux (Raspberry Pi).
  */
 
 const fs = require("fs");
@@ -9,24 +9,67 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const centerText = (text) => {
-  const pad = Math.max(0, Math.floor((32 - text.length) / 2));
+  const pad = Math.max(0, Math.floor((28 - text.length) / 2));
   return ' '.repeat(pad) + text;
+};
+
+/* Strips GDI tags and applies alignment manually for non-Windows (Linux/Raspberry Pi) raw print fallback. */
+const stripGdiTags = (ticket) => {
+  return ticket
+    .split('\n')
+    .map(line => {
+      let isCenter = false;
+      let isRight = false;
+      let isSquare = false;
+      let cleanLine = line.trimEnd();
+
+      while (cleanLine.startsWith("[")) {
+        if (cleanLine.startsWith("[H1]")) {
+          cleanLine = cleanLine.substring(4).trim();
+        } else if (cleanLine.startsWith("[BOLD]")) {
+          cleanLine = cleanLine.substring(6).trim();
+        } else if (cleanLine.startsWith("[CENTER]")) {
+          isCenter = true;
+          cleanLine = cleanLine.substring(8).trim();
+        } else if (cleanLine.startsWith("[RIGHT]")) {
+          isRight = true;
+          cleanLine = cleanLine.substring(7).trim();
+        } else if (cleanLine.startsWith("[SQUARE]")) {
+          isSquare = true;
+          cleanLine = cleanLine.substring(8).trim();
+        } else {
+          break;
+        }
+      }
+
+      if (isSquare) {
+        cleanLine = "[ ] " + cleanLine;
+      }
+
+      if (isCenter) {
+        cleanLine = centerText(cleanLine);
+      } else if (isRight) {
+        cleanLine = cleanLine.padStart(28, ' ');
+      }
+      return cleanLine;
+    })
+    .join('\n');
 };
 
 const printerService = {
   formatChecklistTicket: (order, itemsToPrint, isAddOn) => {
     const timestamp = new Date().toLocaleString('en-GB');
-    let ticket = "";
+    let ticket = "\n";
     
     let orderTypeStr = isAddOn ? "ADD-ON" : "NEW ORDER";
     if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON (PICKUP)" : "PICKUP";
     else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON (DELIVERY)" : "DELIVERY";
     else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON (TAKEAWAY)" : "TAKEAWAY";
 
-    ticket += centerText(orderTypeStr) + "\n";
+    ticket += `[CENTER][H1] ${orderTypeStr}\n`;
     
     const leftHeader = `${timestamp.substring(0, 16)}`;
-    const rightHeader = `${order.id}`;
+    const rightHeader = `#${order.daily_ticket_number || order.id}`;
     ticket += `${leftHeader}${rightHeader.padStart(28 - leftHeader.length, ' ')}\n`;
     ticket += `Send by: Cashier\n`;
     
@@ -41,7 +84,6 @@ const printerService = {
     ticket += "----------------------------\n";
     
     itemsToPrint.forEach(item => {
-      
       // Pro Way: Clean and robust word wrapping
       const nameLines = [];
       const words = item.item_name.split(/\s+/);
@@ -51,7 +93,6 @@ const printerService = {
         if ((curLine + word).length > 22) {
           if (curLine) nameLines.push(curLine.trim());
           if (word.length > 22) {
-            // Handle edge case where a single word is longer than max width
             const chunks = word.match(/.{1,22}/g) || [];
             nameLines.push(...chunks.slice(0, -1));
             curLine = chunks[chunks.length - 1] + " ";
@@ -75,7 +116,6 @@ const printerService = {
       });
 
       if (item.notes) {
-        // Wrap notes too
         const noteWords = item.notes.split(' ');
         let curNote = "     Note: ";
         for (let nw of noteWords) {
@@ -100,24 +140,23 @@ const printerService = {
         } catch { /* ignore malformed JSON */ }
       }
 
-      ticket += "                     [ ]\n"; // Checkbox on the right
+      ticket += "[RIGHT][SQUARE]\n"; // Checkbox on the right
       ticket += "----------------------------\n";
-
     });
     
-    ticket += "\n\n.";
+    ticket += "\n\n";
     return ticket;
   },
 
   formatFinalReceipt: (order, cashierName) => {
     const timestamp = new Date().toLocaleString('en-GB');
-    let ticket = "";
+    let ticket = "\n";
     
-    ticket += centerText("BP DragonFly") + "\n";
-    ticket += centerText("FORMOSA ETEN SDN. BHD.") + "\n";
-    ticket += centerText("REG NO: 201601030589") + "\n";
-    ticket += centerText("SST NO: P11-1809-32000074") + "\n";
-    ticket += centerText("NO. 6H-1-19, PENANG") + "\n";
+    ticket += "[CENTER][H1] BP DragonFly\n";
+    ticket += "[CENTER]FORMOSA ETEN SDN. BHD.\n";
+    ticket += "[CENTER]REG NO: 201601030589\n";
+    ticket += "[CENTER]SST NO: P11-1809-32000074\n";
+    ticket += "[CENTER]NO. 6H-1-19, PENANG\n";
     ticket += "----------------------------\n";
     
     ticket += `Invoice no: ${order.id}\n`;
@@ -136,7 +175,7 @@ const printerService = {
       }
     }
     ticket += "\n";
-    ticket += `ORDER ${order.id}\n`;
+    ticket += `[H1] ORDER #${order.daily_ticket_number || order.id}\n`;
     ticket += "----------------------------\n";
     ticket += "Qty Item          Price(MYR)\n";
     ticket += "----------------------------\n";
@@ -146,25 +185,61 @@ const printerService = {
     order.items.forEach(item => {
       totalQty += item.quantity;
       const qtyStr = item.quantity.toString().padEnd(3, ' ');
-      // 28 chars total. Qty(3)+space(1)+name(16)+price(8) = 28 chars
       const nameStr = item.item_name.substring(0, 16).padEnd(16, ' ');
       const lineTotal = (item.quantity * item.price_at_order_time).toFixed(2);
       const priceStr = lineTotal.padStart(8, ' ');
       
       ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
-      ticket += `    (${item.price_at_order_time.toFixed(2)})\n`;
-      // Print selected options
+      
+      // Calculate price before and after variations
+      let deltasSum = 0;
+      let hasPriceDelta = false;
       if (item.options_json) {
         try {
           const opts = JSON.parse(item.options_json);
           opts.forEach(opt => {
-            const suffix = opt.delta > 0 ? ` +${parseFloat(opt.delta).toFixed(2)}` : '';
-            const optLine = `    ${opt.option}${suffix}`.substring(0, 28);
+            if (opt.delta) {
+              deltasSum += parseFloat(opt.delta);
+              hasPriceDelta = true;
+            }
+          });
+        } catch {}
+      }
+      const basePrice = item.price_at_order_time - deltasSum;
+      
+      if (hasPriceDelta) {
+        ticket += `    Price Before Var: RM ${basePrice.toFixed(2)}\n`;
+        ticket += `    Price After Var:  RM ${item.price_at_order_time.toFixed(2)}\n`;
+      } else {
+        ticket += `    (Unit: RM ${item.price_at_order_time.toFixed(2)})\n`;
+      }
+      
+      // Print selected options (modifiers/variations)
+      if (item.options_json) {
+        try {
+          const opts = JSON.parse(item.options_json);
+          opts.forEach(opt => {
+            const suffix = opt.delta > 0 ? ` +RM ${parseFloat(opt.delta).toFixed(2)}` : '';
+            const optLine = `    > ${opt.option}${suffix}`.substring(0, 28);
             ticket += `${optLine}\n`;
           });
         } catch { /* ignore */ }
       }
 
+      // Print item notes if present
+      if (item.notes) {
+        const noteWords = item.notes.split(' ');
+        let curNote = "    Note: ";
+        for (let nw of noteWords) {
+          if ((curNote + nw).length > 28) {
+            ticket += `${curNote.trimEnd()}\n`;
+            curNote = "    " + nw + " ";
+          } else {
+            curNote += nw + " ";
+          }
+        }
+        if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
+      }
     });
     
     ticket += "----------------------------\n";
@@ -192,20 +267,25 @@ const printerService = {
     ticket += `Bill rounding       ${rounding.toFixed(2).padStart(8, ' ')}\n`;
     ticket += "----------------------------\n";
     
-    ticket += `Total (MYR)         ${roundedTotal.toFixed(2).padStart(8, ' ')}\n`;
+    ticket += `[BOLD]Total (MYR)         ${roundedTotal.toFixed(2).padStart(8, ' ')}\n`;
     ticket += "----------------------------\n";
     
     ticket += "\n";
-    ticket += centerText("This is an official receipt") + "\n";
-    ticket += centerText("Thank you for visiting us") + "\n";
-    ticket += centerText("We hope to see you again!") + "\n";
-    ticket += "\n\n.";
+    ticket += "[CENTER]This is an official receipt\n";
+    ticket += "[CENTER]Thank you for visiting us\n";
+    ticket += "[CENTER]We hope to see you again!\n";
+    ticket += "\n\n";
     
     return ticket;
   },
 
-  printChecklistTicket: async (order, itemsToPrint, isAddOn) => {
-    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn);
+  printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {
+    let ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn);
+    if (copyNum === 1) {
+      ticket = `[CENTER][BOLD]*** CUSTOMER COPY ***\n` + ticket;
+    } else if (copyNum === 2) {
+      ticket = `[CENTER][BOLD]*** KITCHEN COPY ***\n` + ticket;
+    }
     return await printerService.executePrint(ticket, `order_${order.id}_checklist`);
   },
 
@@ -221,34 +301,54 @@ const printerService = {
         console.log(ticket);
         console.log("=====================================\n");
 
-        // Generic Bluetooth drivers in Windows ignore standard \n and require \r\n
-        const formattedTicket = ticket.replace(/(?<!\r)\n/g, "\r\n");
-
         const logsDir = path.join(__dirname, "../../logs");
         if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const filename = `${filenamePrefix}_${timestamp}.txt`;
         const filepath = path.join(logsDir, filename);
-        fs.writeFileSync(filepath, formattedTicket);
 
-        // Native Windows Raw Printing via PowerShell (bypasses print_gdi.exe)
-        // We MUST use -Raw so PowerShell preserves the \r\n line breaks!
-        const proc = spawn("powershell.exe", ["-Command", `Get-Content -Path '${filepath}' -Raw | Out-Printer`], { shell: false });
-        
-        let stdout = "";
-        let stderr = "";
-        proc.stdout.on("data", (data) => stdout += data);
-        proc.stderr.on("data", (data) => stderr += data);
-        
-        proc.on("close", (code) => {
-          if (code === 0) {
-            resolve({ success: true, message: `Ticket printed natively`, filename });
-          } else {
-            reject({ success: false, message: "Native print failed", error: stderr || stdout });
-          }
-        });
-        proc.on("error", (err) => reject({ success: false, message: "Native print command failed", error: err.message }));
+        const cleanTicket = stripGdiTags(ticket);
+
+        if (process.platform === "win32") {
+          const formattedTicket = cleanTicket.replace(/(?<!\r)\n/g, "\r\n");
+          fs.writeFileSync(filepath, formattedTicket);
+
+          const printerName = "BP_DragonFly_Garden_Confirmed";
+          const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${printerName}'`;
+
+          const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
+          let stdout = "";
+          let stderr = "";
+          proc.stdout.on("data", (data) => stdout += data);
+          proc.stderr.on("data", (data) => stderr += data);
+          
+          proc.on("close", (code) => {
+            if (code === 0) {
+              resolve({ success: true, message: `Ticket printed natively on Windows`, filename });
+            } else {
+              reject({ success: false, message: "Windows native print failed", error: stderr || stdout });
+            }
+          });
+          proc.on("error", (err) => reject({ success: false, message: "Windows native print execution failed", error: err.message }));
+        } else {
+          fs.writeFileSync(filepath, cleanTicket);
+
+          const proc = spawn("lp", ["-d", "BP_DragonFly_Garden_Confirmed", filepath], { shell: false });
+          let stdout = "";
+          let stderr = "";
+          proc.stdout.on("data", (data) => stdout += data);
+          proc.stderr.on("data", (data) => stderr += data);
+          
+          proc.on("close", (code) => {
+            if (code === 0) {
+              resolve({ success: true, message: `Ticket printed natively on Linux`, filename });
+            } else {
+              reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
+            }
+          });
+          proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
+        }
       } catch (error) {
         reject({ success: false, message: "Error printing ticket", error: error.message });
       }

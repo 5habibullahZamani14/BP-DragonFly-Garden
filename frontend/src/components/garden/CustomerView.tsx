@@ -54,11 +54,13 @@ import {
   fetchRecommendations,
   callStaff,
   fetchPatterns,
+  fetchMyFeedback,
   type MenuItem,
   type Order,
   type Recommendation,
   type Category,
   type Pattern,
+  type CustomerFeedback,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { SettingsModal } from "./SettingsModal";
@@ -180,6 +182,42 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Categories fetched from API (ordered by display_order)
   const [categoriesFromApi, setCategoriesFromApi] = useState<Category[]>([]);
 
+  // Feedback responses tracking
+  const [feedbackList, setFeedbackList] = useState<CustomerFeedback[]>([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(true);
+  const [seenFeedbackReplies, setSeenFeedbackReplies] = useState<number[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`dfg_seen_feedback_replies_${qrCode}`) || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const loadFeedbackList = useCallback(async () => {
+    try {
+      const refsStr = sessionStorage.getItem(`dfg_feedback_refs_${qrCode}`);
+      const refs = refsStr ? JSON.parse(refsStr) : [];
+      if (!refs.length) {
+        setFeedbackList([]);
+        setLoadingFeedback(false);
+        return;
+      }
+      const list = await fetchMyFeedback(qrCode, refs);
+      setFeedbackList(list);
+    } catch (e) {
+      console.error("Failed to load feedback replies", e);
+      setFeedbackList([]);
+    } finally {
+      setLoadingFeedback(false);
+    }
+  }, [qrCode]);
+
+  const hasUnseenFeedbackResponse = useMemo(() => {
+    return feedbackList.some(
+      (fb) => fb.manager_response && !seenFeedbackReplies.includes(fb.id)
+    );
+  }, [feedbackList, seenFeedbackReplies]);
+
   useEffect(() => {
     sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
   }, [archivedOrders, qrCode]);
@@ -222,6 +260,22 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     return () => { alive = false; };
   }, [cartOpen, cart.length, qrCode]);
 
+  // Mark manager responses as seen when the user visits the feedback tab
+  useEffect(() => {
+    if (tab === "feedback" && feedbackList.length > 0) {
+      const respondedIds = feedbackList
+        .filter((fb) => fb.manager_response)
+        .map((fb) => fb.id);
+      
+      const newSeenIds = respondedIds.filter(id => !seenFeedbackReplies.includes(id));
+      if (newSeenIds.length > 0) {
+        const updated = [...seenFeedbackReplies, ...newSeenIds];
+        setSeenFeedbackReplies(updated);
+        localStorage.setItem(`dfg_seen_feedback_replies_${qrCode}`, JSON.stringify(updated));
+      }
+    }
+  }, [tab, feedbackList, qrCode, seenFeedbackReplies]);
+
   // Load menu + table + tax settings + categories + patterns, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
@@ -248,6 +302,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             active.forEach(o => { prevStageRef.current[o.id] = o.status; });
           }
         } catch { /* non-critical: orders panel just starts empty */ }
+        // Fetch user's feedback history/replies
+        if (alive) {
+          loadFeedbackList();
+        }
       } catch (err) {
         if (alive) notify("error", t("customer.failedLoadMenu"));
       } finally {
@@ -265,7 +323,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Real-time WebSocket listener for order updates
   // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
   // ORDER_STATUS_UPDATE fires when the whole order status changes (e.g. direct status patch)
-  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE", "NEW_PAYMENT"], (event) => {
+  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE", "NEW_PAYMENT", "FEEDBACK_RESPONSE"], (event) => {
+    if (event.type === "FEEDBACK_RESPONSE") {
+      loadFeedbackList();
+      return;
+    }
     const updatedOrder = event.payload as Order | null;
     if (!updatedOrder?.id) return;
     
@@ -658,6 +720,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     <span className="absolute -right-2 -top-1 grid h-4 w-4 place-items-center rounded-full bg-berry text-[0.55rem] font-bold text-berry-foreground shadow-sm animate-pulse-soft">
                       {badge}
                     </span>
+                  )}
+                  {id === "feedback" && hasUnseenFeedbackResponse && (
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-berry border-2 border-card shadow-sm animate-pulse-soft animate-duration-1000" />
                   )}
                 </span>
                 <span className="w-full min-w-0 px-0.5 text-center leading-snug break-words hyphens-auto">{label}</span>
@@ -1457,6 +1522,28 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                     <div className="min-w-0">
                                       <p className="text-sm font-semibold leading-snug">{item.item_name}</p>
                                       {item.notes && <p className="text-[0.68rem] opacity-40 italic mt-0.5">"{item.notes}"</p>}
+                                      {item.options_json && (() => {
+                                        try {
+                                          const opts = JSON.parse(item.options_json);
+                                          if (Array.isArray(opts) && opts.length > 0) {
+                                            return (
+                                              <ul className="text-[0.68rem] opacity-50 mt-0.5 list-disc pl-3.5 space-y-0.5">
+                                                {opts.map((opt: any, index: number) => {
+                                                  const priceSuffix = opt.delta > 0 ? ` (+${formatRM(opt.delta)})` : "";
+                                                  return (
+                                                    <li key={index}>
+                                                      {opt.option}{priceSuffix}
+                                                    </li>
+                                                  );
+                                                })}
+                                              </ul>
+                                            );
+                                          }
+                                        } catch (e) {
+                                          return null;
+                                        }
+                                        return null;
+                                      })()}
                                     </div>
                                   </div>
                                   {item.price_at_order_time != null && (
@@ -1578,6 +1665,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           orders={orders}
           notify={notify}
           onSuccess={() => setTab("home")}
+          myFeedback={feedbackList}
+          loadingMine={loadingFeedback}
+          onRefreshFeedback={loadFeedbackList}
         />
       )}
 

@@ -288,6 +288,13 @@ exports.respondToFeedback = async (req, res) => {
   );
   const row = await get("SELECT * FROM customer_feedback WHERE id = ?", [id]);
   if (!row) throw createHttpError(404, "Feedback not found.");
+
+  // Emit WebSocket event for feedback response
+  const broadcast = getBroadcast();
+  if (broadcast) {
+    broadcast({ type: "FEEDBACK_RESPONSE", payload: { id } });
+  }
+
   res.json(stripTokenForManager(await mapFeedbackRow(row)));
 };
 

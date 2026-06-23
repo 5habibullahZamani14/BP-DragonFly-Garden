@@ -303,6 +303,37 @@ const updateEmployee = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+/*
+ * verifyEmployee checks the employee ID and name.
+ * It is a public verification endpoint so the cashier terminal does not require a manager token.
+ */
+const verifyEmployee = async (req, res, next) => {
+  try {
+    const { employee_id, name } = req.body;
+    if (!employee_id || !name) {
+      return res.status(400).json({ success: false, message: "Employee ID and Name are required" });
+    }
+
+    const employee = await get(
+      "SELECT employee_id, name, department FROM employees WHERE UPPER(employee_id) = ? AND LOWER(name) = ? AND is_archived = 0",
+      [employee_id.trim().toUpperCase(), name.trim().toLowerCase()]
+    );
+
+    if (employee) {
+      res.json({
+        success: true,
+        employee: {
+          id: employee.employee_id,
+          name: employee.name,
+          department: employee.department
+        }
+      });
+    } else {
+      res.status(401).json({ success: false, message: "Invalid employee credentials" });
+    }
+  } catch (error) { next(error); }
+};
+
 // ── Inventory & recipes ───────────────────────────────────────────────────────
 
 /* getInventory returns all active (non-archived) inventory items. */
@@ -637,6 +668,7 @@ module.exports = {
   getEmployees,
   createEmployee,
   updateEmployee,
+  verifyEmployee,
   getInventory,
   createInventoryItem,
   updateInventoryStock,

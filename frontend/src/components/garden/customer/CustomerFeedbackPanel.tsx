@@ -4,10 +4,17 @@ import {
   MessageSquare, Star, ImagePlus, X, Send, Loader2, Mail, User,
   Sparkles, ChevronDown, ChevronUp,
 } from "lucide-react";
-import { FeedbackRatingScale } from "./FeedbackRatingStars";
+import { FeedbackRatingScale, SelectedRatingStars } from "./FeedbackRatingStars";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   submitFeedback,
   fetchMyFeedback,
@@ -25,6 +32,9 @@ type Props = {
   orders: Order[];
   notify: Notify;
   onSuccess?: () => void;
+  myFeedback: CustomerFeedback[];
+  loadingMine: boolean;
+  onRefreshFeedback: () => void;
 };
 
 type RatingKey = keyof CustomerFeedback["ratings"];
@@ -96,7 +106,7 @@ const RatingPicker = ({
   </div>
 );
 
-export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSuccess }: Props) => {
+export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSuccess, myFeedback, loadingMine, onRefreshFeedback }: Props) => {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -115,8 +125,8 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
   const [submitting, setSubmitting] = useState(false);
   const [profanityWords, setProfanityWords] = useState<string[]>([]);
   const [showRatings, setShowRatings] = useState(true);
-  const [myFeedback, setMyFeedback] = useState<CustomerFeedback[]>([]);
-  const [loadingMine, setLoadingMine] = useState(true);
+  const [selectedSub, setSelectedSub] = useState<CustomerFeedback | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const suggestions = useMemo(() => buildSuggestions(orders, t), [orders, t]);
 
@@ -124,27 +134,6 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
     const active = orders.filter((o) => !o.customer_archived_at);
     return active[0]?.id ?? orders[0]?.id ?? null;
   }, [orders]);
-
-  const loadMine = useCallback(async () => {
-    const refs = loadRefs(qrCode);
-    if (!refs.length) {
-      setMyFeedback([]);
-      setLoadingMine(false);
-      return;
-    }
-    try {
-      const list = await fetchMyFeedback(qrCode, refs);
-      setMyFeedback(list);
-    } catch {
-      setMyFeedback([]);
-    } finally {
-      setLoadingMine(false);
-    }
-  }, [qrCode]);
-
-  useEffect(() => {
-    loadMine();
-  }, [loadMine]);
 
   useEffect(() => {
     return () => previews.forEach((u) => URL.revokeObjectURL(u));
@@ -216,7 +205,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
         atmosphere: null,
         value: null,
       });
-      await loadMine();
+      onRefreshFeedback();
       onSuccess?.();
     } catch (e: unknown) {
       const err = e as Error & { error?: string; words?: string[] };
@@ -336,7 +325,6 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
 
           {showRatings && (
             <div className="space-y-2">
-              <p className="text-[0.65rem] text-foreground/50">{t("customer.feedback.ratingScale")}</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {RATING_KEYS.map(({ key, labelKey }) => (
                   <RatingPicker
@@ -408,7 +396,11 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
           ) : (
             <ul className="mt-3 space-y-3">
               {myFeedback.map((fb) => (
-                <li key={fb.id} className="rounded-2xl border border-border/50 bg-background/80 p-3">
+                <li
+                  key={fb.id}
+                  onClick={() => setSelectedSub(fb)}
+                  className="rounded-2xl border border-border/50 bg-background/80 p-3 cursor-pointer hover:bg-muted/30 transition text-left"
+                >
                   <p className="text-xs text-foreground/45">
                     {new Date(fb.created_at).toLocaleString()}
                   </p>
@@ -416,7 +408,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
                   {fb.manager_response && (
                     <div className="mt-2 rounded-xl bg-primary/10 px-3 py-2 text-sm">
                       <p className="text-[0.6rem] font-bold uppercase text-primary/70">{t("customer.feedback.managerReply")}</p>
-                      <p className="mt-0.5">{fb.manager_response}</p>
+                      <p className="mt-0.5 truncate">{fb.manager_response}</p>
                     </div>
                   )}
                 </li>
@@ -425,6 +417,97 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
           )}
         </section>
       </div>
+
+      <Dialog open={!!selectedSub} onOpenChange={(o) => !o && setSelectedSub(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-[28px] border border-border bg-card p-6 shadow-[var(--shadow-deep)]">
+          {selectedSub && (
+            <div className="space-y-4 text-sm text-foreground">
+              <DialogHeader>
+                <DialogTitle className="font-1 text-xl font-bold text-primary">
+                  {selectedSub.sender_name || t("customer.feedback.badge")}
+                </DialogTitle>
+                <p className="text-xs text-foreground/50">
+                  {new Date(selectedSub.created_at).toLocaleString()}
+                </p>
+              </DialogHeader>
+
+              <div className="space-y-3 pt-2">
+                {selectedSub.sender_email && (
+                  <p className="text-xs text-foreground/75">
+                    <strong>{t("customer.feedback.email")}:</strong> {selectedSub.sender_email}
+                  </p>
+                )}
+                {selectedSub.table_number && (
+                  <p className="text-xs text-foreground/75">
+                    <strong>{t("manager.feedback.table")}:</strong> {selectedSub.table_number}
+                  </p>
+                )}
+                <div className="rounded-2xl bg-muted/40 p-4 border border-border/50 whitespace-pre-wrap leading-relaxed text-[0.9rem]">
+                  {selectedSub.comment}
+                </div>
+
+                {/* Ratings */}
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  {RATING_KEYS.map(({ key, labelKey }) => {
+                    const v = selectedSub.ratings?.[key] ?? selectedSub[`rating_${key}` as keyof CustomerFeedback];
+                    if (v == null) return null;
+                    const num = Number(v);
+                    return (
+                      <div key={key} className="rounded-xl border border-border/40 bg-background/85 px-3 py-2">
+                        <span className="text-[0.68rem] font-medium text-foreground/60">{t(labelKey)}</span>
+                        <div className="mt-1 flex items-center justify-between">
+                          <SelectedRatingStars value={num} compact />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Uploaded images */}
+                {selectedSub.images && selectedSub.images.length > 0 && (
+                  <div className="pt-2">
+                    <p className="text-xs font-semibold text-foreground/60 mb-2">{t("customer.feedback.photos", { count: selectedSub.images.length }).split(" (")[0]}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedSub.images.map((img) => (
+                        <button
+                          key={img.id}
+                          type="button"
+                          onClick={() => setPreviewImage(`${API_BASE}${img.image_url}`)}
+                          className="block h-20 w-20 rounded-xl overflow-hidden border border-border hover:opacity-90 transition"
+                        >
+                          <img src={`${API_BASE}${img.image_url}`} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Manager response */}
+                {selectedSub.manager_response && (
+                  <div className="mt-4 rounded-2xl bg-primary/10 border border-primary/20 px-4 py-3 text-sm">
+                    <p className="text-[0.7rem] font-bold uppercase tracking-wider text-primary/80">{t("customer.feedback.managerReply")}</p>
+                    <p className="mt-1 leading-relaxed text-foreground/90">{selectedSub.manager_response}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
+          {previewImage && (
+            <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4">
+              <img
+                src={previewImage}
+                alt="Feedback preview"
+                className="max-w-full max-h-[75vh] object-contain rounded-2xl"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

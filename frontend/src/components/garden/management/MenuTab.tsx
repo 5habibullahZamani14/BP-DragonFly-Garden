@@ -601,7 +601,7 @@ export function MenuTab() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [menuData, catData] = await Promise.all([fetchMenu(), fetchCategories()]);
+      const [menuData, catData] = await Promise.all([fetchMenu(true), fetchCategories()]);
       setItems(menuData);
       setCategories(catData);
     } catch { toast.error(t("m.loadMenuFailed")); }

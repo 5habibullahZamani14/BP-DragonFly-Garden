@@ -104,6 +104,7 @@ const fetchOrderWithPayments = async (orderId) => {
         oi.quantity,
         oi.price_at_order_time,
         oi.notes,
+        oi.options_json,
         mi.name AS item_name,
         mi.description AS item_description
       FROM order_items oi

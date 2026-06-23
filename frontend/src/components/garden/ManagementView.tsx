@@ -29,7 +29,7 @@
  *      every administrative task, from adding tables to managing inventory.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -72,6 +72,8 @@ type ManagerNotification = {
 export const ManagementView = ({ notify }: ManagementViewProps) => {
   const { t } = useTranslation();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [shouldFlash, setShouldFlash] = useState(false);
+  const flashTriggeredRef = useRef(false);
   const [loginId, setLoginId] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -116,7 +118,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const loadNotifications = async () => {
     try {
       const invData = await fetchInventory();
-      if (!invData) return;
+      if (!invData) return false;
       const lowStock = invData.filter((item: InventoryItem) => {
         const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
         return percent <= item.low_stock_threshold_percent;
@@ -131,13 +133,27 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           goToTab("inventory");
         }
       })));
+      return lowStock.length > 0;
     } catch (e) {
       console.error(e);
+      return false;
     }
   };
 
   useEffect(() => {
-    if (isLoggedIn) loadNotifications();
+    if (isLoggedIn) {
+      loadNotifications().then((hasLowStock) => {
+        if (hasLowStock && !flashTriggeredRef.current) {
+          setShouldFlash(true);
+          flashTriggeredRef.current = true;
+          setTimeout(() => {
+            setShouldFlash(false);
+          }, 4000);
+        }
+      });
+    } else {
+      flashTriggeredRef.current = false;
+    }
   }, [isLoggedIn]);
 
   useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
@@ -189,6 +205,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setLoginId("");
+    setLoginPassword("");
     sessionStorage.removeItem("mgr_active_tab");
     localStorage.removeItem("managerLogin");
   };
@@ -290,6 +307,48 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+      <style>{`
+        @keyframes redFlashPulseThreeTimes {
+          0% { opacity: 0; }
+          6.25% { opacity: 0.45; }
+          18.75% { opacity: 0.45; }
+          25% { opacity: 0; }
+          37.5% { opacity: 0; }
+          43.75% { opacity: 0.45; }
+          56.25% { opacity: 0.45; }
+          62.5% { opacity: 0; }
+          75% { opacity: 0; }
+          81.25% { opacity: 0.45; }
+          93.75% { opacity: 0.45; }
+          100% { opacity: 0; }
+        }
+        .red-flash-overlay {
+          animation: redFlashPulseThreeTimes 4s ease-in-out forwards;
+        }
+        @keyframes notificationGlow {
+          0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+            background-color: rgba(254, 226, 226, 0.8);
+            color: #ef4444;
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
+            background-color: rgba(255, 237, 213, 0.9);
+            color: #f97316;
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            background-color: rgba(254, 226, 226, 0.8);
+            color: #ef4444;
+          }
+        }
+        .notif-glow-btn {
+          animation: notificationGlow 2s infinite ease-in-out !important;
+        }
+      `}</style>
+      {shouldFlash && (
+        <div className="fixed inset-0 bg-red-600 z-[9999] pointer-events-none red-flash-overlay" />
+      )}
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
@@ -317,8 +376,13 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             </span>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title={t("manager.notifications")}>
-                  <Bell className="h-5 w-5 text-gray-600" />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={`relative rounded-full hover:bg-white/80 ${notifications.length > 0 ? "notif-glow-btn" : ""}`} 
+                  title={t("manager.notifications")}
+                >
+                  <Bell className={`h-5 w-5 ${notifications.length > 0 ? "text-inherit" : "text-gray-600"}`} />
                   {notifications.length > 0 && (
                     <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm" />
                   )}

@@ -140,7 +140,8 @@ const createOrder = async (orderData) => {
     customer_name = null,
     customer_phone = null,
     collection_time = null,
-    delivery_address = null
+    delivery_address = null,
+    parent_order_id = null
   } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
 
@@ -202,7 +203,16 @@ const createOrder = async (orderData) => {
     let orderId;
     let isAddOn = false;
 
-    const activeOrder = await get(`SELECT id, total_price FROM orders WHERE table_id = ? AND payment_status = 'unpaid'`, [tableId]);
+    let activeOrder = null;
+    if (parent_order_id) {
+      activeOrder = await get(`SELECT id, total_price, table_id, order_type FROM orders WHERE id = ? AND payment_status = 'unpaid'`, [parent_order_id]);
+      if (activeOrder) {
+        tableId = activeOrder.table_id;
+        order_type = activeOrder.order_type;
+      }
+    } else if (order_type === 'DINE_IN' && tableId !== 999) {
+      activeOrder = await get(`SELECT id, total_price FROM orders WHERE table_id = ? AND payment_status = 'unpaid'`, [tableId]);
+    }
 
     if (activeOrder) {
       isAddOn = true;

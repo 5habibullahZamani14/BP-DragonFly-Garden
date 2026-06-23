@@ -75,6 +75,7 @@ const deleteMenuImageIfUnused = async (imageUrl, excludeItemId = null) => {
  * Items are ordered by category display_order first, then alphabetically by name.
  */
 const getMenu = async (req, res) => {
+  const showAll = req.query.all === 'true';
   const query = `
     SELECT
       menu_items.id,
@@ -102,7 +103,7 @@ const getMenu = async (req, res) => {
     FROM menu_items
     LEFT JOIN patterns ON menu_items.pattern_id = patterns.id
     INNER JOIN categories ON menu_items.category_id = categories.id
-    WHERE menu_items.is_available = 1
+    ${showAll ? "" : "WHERE menu_items.is_available = 1"}
     ORDER BY categories.display_order ASC, menu_items.name ASC
   `;
 
@@ -750,7 +751,7 @@ const getAllModifierGroups = async (req, res) => {
 
 /** getItemModifiers — Get the assigned modifiers (with defaults) for one item. */
 const getItemModifiers = async (req, res) => {
-  const { id } = req.params;
+  const id = req.params.id || req.params.itemId;
   try {
     const assignments = await all(
       `SELECT ima.modifier_group_id, ima.default_option_id,

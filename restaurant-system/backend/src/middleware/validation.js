@@ -124,52 +124,72 @@ const validateOrderCreation = (req, res, next) => {
      * their quantities are summed and the first item's notes are kept.
      */
     const aggregatedItems = new Map();
-
+ 
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
       const menuItemId = toPositiveInteger(item?.menu_item_id);
       const quantity = toPositiveInteger(item?.quantity);
-
+ 
       if (!menuItemId) {
         throw createHttpError(400, `Item ${index + 1}: Invalid menu_item_id. Must be a positive integer.`);
       }
-
+ 
       if (!quantity) {
         throw createHttpError(400, `Item ${index + 1}: Invalid quantity. Must be a positive integer.`);
       }
-
+ 
       if (quantity > MAX_ITEM_QUANTITY) {
         throw createHttpError(400, `Item ${index + 1}: Quantity must be ${MAX_ITEM_QUANTITY} or less.`);
       }
-
+ 
       const notes = sanitizeNotes(item?.notes);
-      const existing = aggregatedItems.get(menuItemId);
-
+      
+      const options = Array.isArray(item?.options)
+        ? item.options
+            .map(o => ({
+              groupId: toPositiveInteger(o?.groupId),
+              groupName: String(o?.groupName || "").trim(),
+              optionId: toPositiveInteger(o?.optionId),
+              optionLabel: String(o?.optionLabel || "").trim(),
+              priceDelta: Number(o?.priceDelta || 0)
+            }))
+            .filter(o => o.groupId && o.optionId)
+        : [];
+      
+      const optionsKey = options
+        .map(o => `${o.groupId}_${o.optionId}`)
+        .sort()
+        .join(",");
+      const aggregationKey = `${menuItemId}_${optionsKey}`;
+ 
+      const existing = aggregatedItems.get(aggregationKey);
+ 
       if (existing) {
         const combinedQuantity = existing.quantity + quantity;
-
+ 
         if (combinedQuantity > MAX_ITEM_QUANTITY) {
           throw createHttpError(
             400,
             `Menu item ${menuItemId}: Combined quantity must be ${MAX_ITEM_QUANTITY} or less.`
           );
         }
-
-        aggregatedItems.set(menuItemId, {
+ 
+        aggregatedItems.set(aggregationKey, {
           ...existing,
           quantity: combinedQuantity,
           notes: existing.notes || notes
         });
         continue;
       }
-
-      aggregatedItems.set(menuItemId, {
+ 
+      aggregatedItems.set(aggregationKey, {
         menu_item_id: menuItemId,
         quantity,
-        notes
+        notes,
+        options
       });
     }
-
+ 
     /* Replace the raw request body with the cleaned, validated version. */
     req.body = {
       table_id: tableId,
@@ -178,6 +198,7 @@ const validateOrderCreation = (req, res, next) => {
       customer_phone: req.body?.customer_phone || null,
       collection_time: req.body?.collection_time || null,
       delivery_address: req.body?.delivery_address || null,
+      parent_order_id: req.body?.parent_order_id ? toPositiveInteger(req.body.parent_order_id) : null,
       items: [...aggregatedItems.values()]
     };
 

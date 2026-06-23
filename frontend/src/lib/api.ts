@@ -133,7 +133,13 @@ type CounterOrderPayload = {
   customer_phone?: string;
   collection_time?: string;
   delivery_address?: string;
-  items: { menu_item_id: number; quantity: number; notes?: string }[];
+  parent_order_id?: number;
+  items: { 
+    menu_item_id: number; 
+    quantity: number; 
+    notes?: string;
+    options?: { groupName: string; optionLabel: string; priceDelta: number }[];
+  }[];
   silent?: boolean;
 };
 
@@ -251,8 +257,9 @@ export type FinanceData = {
 // ── Menu ─────────────────────────────────────────────────────────────────────
 
 /* fetchMenu returns all available menu items. No role required. */
-export const fetchMenu = async (): Promise<MenuItem[]> => {
-  return await safeFetch<MenuItem[]>("/menu");
+export const fetchMenu = async (all?: boolean): Promise<MenuItem[]> => {
+  const query = all ? "?all=true" : "";
+  return await safeFetch<MenuItem[]>(`/menu${query}`);
 };
 
 export interface MenuItem {
@@ -271,6 +278,7 @@ export interface MenuItem {
   is_promo: boolean;
   promo_label: string | null;
   is_sold_out?: boolean;
+  option_groups?: any[];
 }
 
 export interface Pattern {
@@ -853,6 +861,13 @@ export const updateSetting = async (key: string, value: unknown) =>
 
 export const fetchEmployees = async (includeArchived = false) =>
   safeFetch<EmployeeRecord[]>(`/management/employees?include_archived=${includeArchived}`);
+
+export const verifyEmployeeCredentials = async (employee_id: string, name: string) =>
+  safeFetch<{ success: boolean; employee: { id: string; name: string; department?: string } }>("/management/employees/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employee_id, name })
+  });
 export const createEmployee = async (data: EmployeePayload) =>
   safeFetch<EmployeeRecord>("/management/employees", {
     method: "POST",

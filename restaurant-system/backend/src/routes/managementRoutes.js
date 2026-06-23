@@ -58,7 +58,7 @@ const authLimiter = rateLimit({
 
 const verifyToken = (req, res, next) => {
   // Allow open routes
-  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/kitchen-passcode') {
+  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/kitchen-passcode' || req.path === '/employees/verify') {
     return next();
   }
   const authHeader = req.headers.authorization;
@@ -97,6 +97,13 @@ router.use((req, res, next) => {
  * manager session across page reloads.
  */
 router.post("/auth", authLimiter, managementController.managerAuth);
+
+/*
+ * POST /management/employees/verify
+ * Validates an employee's credentials. Publicly accessible so cashiers can log in
+ * without a manager session. Rate-limited to prevent brute-force.
+ */
+router.post("/employees/verify", authLimiter, managementController.verifyEmployee);
 
 /*
  * POST /management/send-reset-email

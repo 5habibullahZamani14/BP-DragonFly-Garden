@@ -259,12 +259,14 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
   const [selected, setSelected] = useState<CustomerFeedback | null>(null);
   const [responseText, setResponseText] = useState("");
   const [responding, setResponding] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [analysisFrom, setAnalysisFrom] = useState("");
   const [analysisTo, setAnalysisTo] = useState("");
   const [analysis, setAnalysis] = useState<FeedbackAnalysisResponse | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [deleteFindingId, setDeleteFindingId] = useState<number | null>(null);
+  const [deleteFeedbackId, setDeleteFeedbackId] = useState<number | null>(null);
   const [useAI, setUseAI] = useState(true);
   const [findingPriorityFilter, setFindingPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
 
@@ -453,13 +455,18 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
     notify("success", "Analysis exported successfully");
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm(t("manager.feedback.deleteConfirm"))) return;
+  const handleDelete = (id: number) => {
+    setDeleteFeedbackId(id);
+  };
+
+  const confirmDeleteFeedback = async () => {
+    if (!deleteFeedbackId) return;
     try {
-      await deleteManagerFeedback(id);
+      await deleteManagerFeedback(deleteFeedbackId);
       setSelected(null);
       await loadList();
       notify("success", t("manager.feedback.deleted"));
+      setDeleteFeedbackId(null);
     } catch {
       notify("error", t("manager.feedback.deleteFailed"));
     }
@@ -644,7 +651,7 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
       </Card>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
               <DialogHeader>
@@ -663,7 +670,6 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
                     return (
                       <div key={key} className="rounded-lg bg-gray-50 px-2 py-2">
                         <span className="text-xs text-gray-500">{t(labelKey)}</span>
-                        <p className="font-bold text-sm">{num > 0 ? `+${num}` : num}</p>
                         <SelectedRatingStars value={num} />
                       </div>
                     );
@@ -681,15 +687,14 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
                 {selected.images?.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {selected.images.map((img) => (
-                      <a
+                      <button
                         key={img.id}
-                        href={`${API_BASE}${img.image_url}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block h-20 w-20 rounded-lg overflow-hidden border"
+                        type="button"
+                        onClick={() => setPreviewImage(`${API_BASE}${img.image_url}`)}
+                        className="block h-20 w-20 rounded-lg overflow-hidden border hover:opacity-90 transition"
                       >
                         <img src={`${API_BASE}${img.image_url}`} alt="" className="h-full w-full object-cover" />
-                      </a>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -738,6 +743,39 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
               {t("manager.feedback.delete")}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Feedback Confirmation Dialog */}
+      <Dialog open={!!deleteFeedbackId} onOpenChange={(open) => !open && setDeleteFeedbackId(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>{t("manager.feedback.deleteConfirm")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">{t("manager.feedback.deleteConfirm")}</p>
+          <div className="flex gap-2 mt-4">
+            <Button onClick={() => setDeleteFeedbackId(null)} variant="outline" className="flex-1">
+              {t("manager.feedback.cancel")}
+            </Button>
+            <Button onClick={confirmDeleteFeedback} variant="destructive" className="flex-1">
+              {t("manager.feedback.delete")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
+          {previewImage && (
+            <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4">
+              <img
+                src={previewImage}
+                alt="Feedback preview"
+                className="max-w-full max-h-[75vh] object-contain rounded-2xl"
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

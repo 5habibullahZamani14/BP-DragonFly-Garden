@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square, Bell, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square, Bell, CheckCircle2, Plus } from "lucide-react";
 import {
   fetchUnpaidOrders,
   fetchPaidOrders,
@@ -48,7 +48,7 @@ import {
   processPayment,
   addOrderItem,
   fetchMenuItems,
-  fetchEmployees,
+  verifyEmployeeCredentials,
   fetchSettings,
   printFinalBill,
   fetchStaffAssistanceRequests,
@@ -101,6 +101,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [loading, setLoading] = useState(true);
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">("TAKEAWAY");
+  const [posModalParentOrder, setPosModalParentOrder] = useState<PaymentOrder | null>(null);
   const [assistanceRequests, setAssistanceRequests] = useState<StaffAssistanceRequest[]>([]);
   const [activeAssistanceRequest, setActiveAssistanceRequest] = useState<StaffAssistanceRequest | null>(null);
   
@@ -156,27 +157,33 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   }, []);
 
   const handleLogin = async () => {
+    if (!loginInputId.trim() || !loginInputName.trim()) {
+      notify("error", t("payment.invalidLogin"));
+      return;
+    }
     try {
-      const employees = await fetchEmployees(false);
-      const matched = employees.find(
-        (emp) => emp.employee_id.toUpperCase() === loginInputId.trim().toUpperCase() && emp.name.toLowerCase() === loginInputName.trim().toLowerCase()
-      );
-
-      if (matched) {
-        setLoggedInEmployee({ name: matched.name, id: matched.employee_id });
+      const result = await verifyEmployeeCredentials(loginInputId, loginInputName);
+      if (result.success && result.employee) {
+        setLoggedInEmployee({ name: result.employee.name, id: result.employee.id });
         localStorage.setItem(
           "paymentCounterLogin",
           JSON.stringify({
-            id: matched.employee_id,
-            name: matched.name,
+            id: result.employee.id,
+            name: result.employee.name,
             expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
           })
         );
       } else {
         notify("error", t("payment.invalidLogin"));
       }
-    } catch {
-      notify("error", t("payment.failedVerify"));
+    } catch (error: any) {
+      if (error?.message?.includes("429")) {
+        notify("error", t("payment.rateLimited", "Too many login attempts. Please try again in 5 minutes."));
+      } else if (error?.message?.includes("401")) {
+        notify("error", t("payment.invalidLogin"));
+      } else {
+        notify("error", t("payment.failedVerify"));
+      }
     }
   };
 
@@ -572,10 +579,40 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="bg-gray-50 pt-4">
-                      <ul className="space-y-1 mb-4 text-gray-700">
+                      <ul className="space-y-2 mb-4 text-gray-700">
                         {order.items.map((item, index) => (
-                          <li key={`${item.id || item.item_name}-${index}`} className="flex justify-between">
-                            <span>{item.quantity}x {item.item_name}</span>
+                          <li key={`${item.id || item.item_name}-${index}`} className="flex flex-col border-b border-gray-100 pb-1 last:border-0 last:pb-0">
+                            <div className="flex justify-between items-start">
+                              <span className="font-medium">{item.quantity}x {item.item_name}</span>
+                              <span className="text-sm text-gray-600 font-mono">RM {((item.price_at_order_time ?? 0) * item.quantity).toFixed(2)}</span>
+                            </div>
+                            {item.notes && (
+                              <span className="text-xs text-gray-500 italic pl-4">
+                                "{item.notes}"
+                              </span>
+                            )}
+                            {item.options_json && (() => {
+                              try {
+                                const opts = JSON.parse(item.options_json);
+                                if (Array.isArray(opts) && opts.length > 0) {
+                                  return (
+                                    <ul className="text-xs text-gray-500 list-disc pl-8 mt-0.5">
+                                      {opts.map((opt: any, idx: number) => {
+                                        const deltaText = opt.delta > 0 ? ` (+RM ${opt.delta.toFixed(2)})` : "";
+                                        return (
+                                          <li key={idx}>
+                                            {opt.option}{deltaText}
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  );
+                                }
+                              } catch (e) {
+                                return null;
+                              }
+                              return null;
+                            })()}
                           </li>
                         ))}
                       </ul>
@@ -595,12 +632,13 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         </div>
                       </div>
                       
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button className="w-full mt-6 shadow-sm" size="lg" onClick={() => setSelectedOrder(order)}>
-                            {t("payment.processPayment")}
-                          </Button>
-                        </DialogTrigger>
+                      <div className="flex gap-2 mt-6">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button className="flex-1 shadow-sm" size="lg" onClick={() => setSelectedOrder(order)}>
+                              {t("payment.processPayment")}
+                            </Button>
+                          </DialogTrigger>
                         <DialogContent className="sm:max-w-[425px]">
                           <DialogHeader>
                             <DialogTitle>{t("payment.processPayment")}</DialogTitle>
@@ -716,6 +754,19 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                           </div>
                         </DialogContent>
                       </Dialog>
+                      <Button 
+                        variant="outline" 
+                        size="lg" 
+                        onClick={() => {
+                          setPosModalParentOrder(order);
+                          setPosModalInitialType(order.order_type as any || "TAKEAWAY");
+                          setPosModalOpen(true);
+                        }}
+                        className="flex-none font-medium bg-white hover:bg-gray-50 border-gray-200"
+                      >
+                        {t("payment.addOnBtn")}
+                      </Button>
+                    </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -795,11 +846,17 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
       <PosOrderModal 
         isOpen={posModalOpen} 
-        onOpenChange={setPosModalOpen} 
+        onOpenChange={(open) => {
+          setPosModalOpen(open);
+          if (!open) {
+            setPosModalParentOrder(null);
+          }
+        }} 
         initialOrderType={posModalInitialType}
         menuItems={menuItems} 
         qrCode={qrCode} 
         notify={notify} 
+        parentOrder={posModalParentOrder}
         onOrderCreated={async (order) => {
            const unpaid = await loadData();
            if (unpaid) {
