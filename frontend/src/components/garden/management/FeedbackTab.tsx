@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -656,6 +657,9 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
             <>
               <DialogHeader>
                 <DialogTitle>{selected.sender_name}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Full details of the selected customer feedback
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 text-sm">
                 {selected.sender_email && <p><strong>{t("manager.feedback.email")}:</strong> {selected.sender_email}</p>}
@@ -733,6 +737,9 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t("manager.feedback.deleteConfirm")}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirm deletion of this analysis finding
+            </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-gray-600">{t("manager.feedback.deleteFindingConfirm")}</p>
           <div className="flex gap-2 mt-4">
@@ -751,6 +758,9 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t("manager.feedback.deleteConfirm")}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Confirm permanent deletion of this customer feedback
+            </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-gray-600">{t("manager.feedback.deleteConfirm")}</p>
           <div className="flex gap-2 mt-4">
@@ -767,6 +777,8 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
       {/* Image Preview Dialog */}
       <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
         <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
+          <DialogDescription className="sr-only">A larger view of the uploaded feedback photo</DialogDescription>
           {previewImage && (
             <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4">
               <img

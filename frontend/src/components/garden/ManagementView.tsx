@@ -306,7 +306,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-3 sm:p-6">
       <style>{`
         @keyframes redFlashPulseThreeTimes {
           0% { opacity: 0; }
@@ -350,25 +350,25 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         <div className="fixed inset-0 bg-red-600 z-[9999] pointer-events-none red-flash-overlay" />
       )}
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-8 gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <SettingsModal restrictLanguages={true} />
             {activeTab !== "overview" && (
-              <Button variant="outline" size="icon" onClick={() => goToTab("overview")} className="rounded-full shadow-sm">
+              <Button variant="outline" size="icon" onClick={() => goToTab("overview")} className="rounded-full shadow-sm shrink-0">
                 <ArrowLeft className="h-5 w-5 text-gray-600" />
               </Button>
             )}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Settings className="h-8 w-8 text-green-700" />
-                {t("manager.dashboardTitle")}
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3 management-header-title">
+                <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-green-700 shrink-0" />
+                <span className="truncate">{t("manager.dashboardTitle")}</span>
               </h1>
-              <p className="text-gray-500 mt-1">{t("manager.subtitle")}</p>
+              <p className="text-gray-500 mt-1 text-sm sm:text-base">{t("manager.subtitle")}</p>
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm">
-            <span className="text-sm font-semibold text-gray-800">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 bg-white/60 px-3 py-2 sm:px-4 rounded-2xl sm:rounded-full shadow-sm">
+            <span className="text-xs sm:text-sm font-semibold text-gray-800">
               {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
             </span>
             <span className="text-sm font-medium text-gray-700 hidden sm:inline border-l border-gray-300 pl-4">
@@ -425,8 +425,8 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         </div>
         
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer" onClick={() => goToTab("settings")}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-6">
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("settings")}>
               <CardContent className="pt-6">
                 <Settings className="h-10 w-10 text-green-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.settings")}</CardTitle>
@@ -434,7 +434,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer" onClick={() => goToTab("employees")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("employees")}>
               <CardContent className="pt-6">
                 <Users className="h-10 w-10 text-blue-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.employees")}</CardTitle>
@@ -442,7 +442,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer" onClick={() => goToTab("inventory")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("inventory")}>
               <CardContent className="pt-6">
                 <PackageOpen className="h-10 w-10 text-orange-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.inventory")}</CardTitle>
@@ -450,7 +450,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer" onClick={() => goToTab("tables")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("tables")}>
               <CardContent className="pt-6">
                 <Grid3X3 className="h-10 w-10 text-emerald-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.tables")}</CardTitle>
@@ -458,7 +458,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer" onClick={() => goToTab("logs")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("logs")}>
               <CardContent className="pt-6">
                 <FileText className="h-10 w-10 text-purple-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.logs")}</CardTitle>
@@ -466,7 +466,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer" onClick={() => goToTab("menu")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("menu")}>
               <CardContent className="pt-6">
                 <Utensils className="h-10 w-10 text-yellow-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.menu")}</CardTitle>
@@ -474,7 +474,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer" onClick={() => goToTab("finance")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("finance")}>
               <CardContent className="pt-6">
                 <DollarSign className="h-10 w-10 text-rose-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.finance")}</CardTitle>
@@ -482,7 +482,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-teal-500 cursor-pointer" onClick={() => goToTab("feedback")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-teal-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("feedback")}>
               <CardContent className="pt-6">
                 <MessageSquare className="h-10 w-10 text-teal-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.feedback.title")}</CardTitle>
@@ -490,7 +490,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer" onClick={() => goToTab("ai-chatbot")}>
+            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("ai-chatbot")}>
               <CardContent className="pt-6">
                 <Bot className="h-10 w-10 text-emerald-500 mb-4" />
                 <CardTitle className="mb-2">DragonBot AI</CardTitle>

@@ -20,8 +20,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, applyDefaultCardSize, fetchPatterns, BackupFile } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle, Percent } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle, Percent, AlertTriangle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
 
 export const SettingsTab = () => {
@@ -53,6 +54,10 @@ export const SettingsTab = () => {
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
 
+  // In-app restore confirmation & result dialogs
+  const [restoreConfirmFile, setRestoreConfirmFile] = useState<string | null>(null);
+  const [restoreResult, setRestoreResult] = useState<{ message: string; isError: boolean } | null>(null);
+
   // Tax & service charge settings
   const [sstEnabled, setSstEnabled] = useState(true);
   const [sstPercent, setSstPercent] = useState("6");
@@ -77,8 +82,9 @@ export const SettingsTab = () => {
   });
 
   const loadAll = async () => {
+    let data: Awaited<ReturnType<typeof fetchSettings>> | null = null;
     try {
-      const data = await fetchSettings();
+      data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
       if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
@@ -260,17 +266,23 @@ export const SettingsTab = () => {
   };
 
   const handleRestoreBackup = async (filename: string) => {
-    if (!window.confirm(`Are you sure you want to restore the system to "${filename}"?\n\nWARNING: All current data will be overwritten and lost immediately. This cannot be undone.`)) {
-      return;
-    }
+    // Show in-app confirmation dialog instead of window.confirm
+    setRestoreConfirmFile(filename);
+  };
+
+  const executeRestore = async () => {
+    const filename = restoreConfirmFile;
+    if (!filename) return;
+    setRestoreConfirmFile(null);
     
     setRestoreLoading(filename);
     try {
       await restoreBackup(filename);
-      window.alert(t("m.restoreSuccess"));
-      window.location.reload();
+      setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
+      // Reload after a brief delay so the user sees the success message
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
-      window.alert(t("m.restoreFailed", { message: err.message || "Unknown error" }));
+      setRestoreResult({ message: t("m.restoreFailed", { message: err.message || "Unknown error" }), isError: true });
       setRestoreLoading(null);
     }
   };
@@ -278,11 +290,12 @@ export const SettingsTab = () => {
   if (hoursLoading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingSettings")}</div>;
 
   return (
+    <>
     <Accordion type="single" collapsible className="space-y-6">
 
       {/* ── Tax & Service Charge ─────────────────────────── */}
       <AccordionItem value="tax" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg flex items-center gap-2">
               <Percent className="h-5 w-5 text-green-700" />
@@ -293,18 +306,18 @@ export const SettingsTab = () => {
             </p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-5">
 
             {/* SST row */}
-            <div className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-muted/30">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border bg-muted/30">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <Switch
                   id="sst-toggle"
                   checked={sstEnabled}
                   onCheckedChange={setSstEnabled}
                 />
-                <div>
+                <div className="min-w-0">
                   <label htmlFor="sst-toggle" className="font-semibold text-sm cursor-pointer">SST (Sales &amp; Service Tax)</label>
                   <p className="text-xs text-muted-foreground">{sstEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
                 </div>
@@ -326,14 +339,14 @@ export const SettingsTab = () => {
             </div>
 
             {/* Service Charge row */}
-            <div className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-muted/30">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border bg-muted/30">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <Switch
                   id="sc-toggle"
                   checked={scEnabled}
                   onCheckedChange={setScEnabled}
                 />
-                <div>
+                <div className="min-w-0">
                   <label htmlFor="sc-toggle" className="font-semibold text-sm cursor-pointer">Service Charge</label>
                   <p className="text-xs text-muted-foreground">{scEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
                 </div>
@@ -368,13 +381,13 @@ export const SettingsTab = () => {
 
       {/* ── Card Size Defaults ───────────────────────────────────────────── */}
       <AccordionItem value="cardsize" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">Card Size Defaults</h3>
             <p className="text-sm text-muted-foreground font-normal">Set the default card size for new items and optionally apply to all existing items.</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>Default Card Size</Label>
@@ -399,13 +412,13 @@ export const SettingsTab = () => {
 
       {/* ── Menu Pattern Defaults ───────────────────────────────────────────── */}
       <AccordionItem value="patterns" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">Menu Pattern Defaults</h3>
             <p className="text-sm text-muted-foreground font-normal">Set a global default pattern overlay for all menu items without a custom pattern.</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>Default Pattern</Label>
@@ -431,13 +444,13 @@ export const SettingsTab = () => {
 
       {/* ── Working Hours ───────────────────────────────────── */}
       <AccordionItem value="hours" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.restHours")}</h3>
             <p className="text-sm text-muted-foreground font-normal">{t("m.hoursDesc")}</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
@@ -460,13 +473,13 @@ export const SettingsTab = () => {
 
       {/* ── Kitchen Passcode ────────────────────────────────── */}
       <AccordionItem value="kitchen" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.kitchenPass")}</h3>
             <p className="text-sm text-muted-foreground font-normal">{t("m.kitchenPassDesc")}</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="kitchen-passcode">{t("m.passcodeLabel")}</Label>
@@ -494,13 +507,13 @@ export const SettingsTab = () => {
 
       {/* ── Manager Profile ─────────────────────────────────── */}
       <AccordionItem value="profile" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.mgrProfile")}</h3>
             <p className="text-sm text-muted-foreground font-normal">{t("m.profileDesc")}</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
@@ -567,13 +580,13 @@ export const SettingsTab = () => {
 
       {/* ── Password Recovery ───────────────────────────────── */}
       <AccordionItem value="recovery" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.passwordRecovery")}</h3>
             <p className="text-sm text-muted-foreground font-normal">{t("m.forgotDesc")}</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="flex gap-3">
               <Input
@@ -595,7 +608,7 @@ export const SettingsTab = () => {
 
       {/* ── System Backups ──────────────────────────────────── */}
       <AccordionItem value="backups" className="border rounded-xl bg-card text-card-foreground shadow-sm border-blue-200">
-        <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-blue-50/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-blue-50/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg text-blue-900 flex items-center gap-2">
               <Database className="h-5 w-5 text-blue-600" /> {t("m.sysBackup")}
@@ -603,7 +616,7 @@ export const SettingsTab = () => {
             <p className="text-sm text-blue-700/70 font-normal">{t("m.backupDesc")}</p>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="px-6 pt-4 pb-6 border-t border-blue-100 bg-blue-50/20">
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t border-blue-100 bg-blue-50/20">
           <div className="space-y-8">
             {/* Create Backup */}
             <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
@@ -695,5 +708,58 @@ export const SettingsTab = () => {
       </AccordionItem>
 
     </Accordion>
+
+      {/* ── In-app Restore Confirmation Dialog ───────────────── */}
+      <Dialog open={!!restoreConfirmFile} onOpenChange={(open) => { if (!open) setRestoreConfirmFile(null); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Restore
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm text-gray-600">
+              Are you sure you want to restore the system to <strong className="text-gray-900">"{restoreConfirmFile}"</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 mt-2">
+            <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4 shrink-0" /> WARNING
+            </p>
+            <p className="text-sm text-red-700 mt-1">
+              All current data will be overwritten and lost immediately. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex gap-3 mt-4 justify-end">
+            <Button variant="outline" onClick={() => setRestoreConfirmFile(null)}>
+              Cancel
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={executeRestore}>
+              <UploadCloud className="h-4 w-4 mr-1.5" /> Yes, Restore
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── In-app Restore Result Dialog ──────────────────────── */}
+      <Dialog open={!!restoreResult} onOpenChange={(open) => { if (!open) setRestoreResult(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${restoreResult?.isError ? 'text-red-700' : 'text-green-700'}`}>
+              {restoreResult?.isError
+                ? <><AlertCircle className="h-5 w-5" /> Restore Failed</>
+                : <><CheckCircle2 className="h-5 w-5" /> Restore Successful</>}
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm">
+              {restoreResult?.message}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => setRestoreResult(null)}>
+              {restoreResult?.isError ? 'Close' : 'OK'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

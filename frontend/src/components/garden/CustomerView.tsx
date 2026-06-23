@@ -689,7 +689,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground animate-fade-in" dir={i18n.dir()}>
-      <aside className="basis-1/5 sm:basis-[23%] md:basis-1/5 lg:basis-[11%] xl:basis-[10%] max-w-[5rem] sm:max-w-[7rem] md:max-w-none h-full border-e border-border/60 bg-card/30 flex flex-col shrink-0 overflow-y-auto px-1.5 pt-[max(0.75rem,var(--safe-top))] pb-[max(0.75rem,var(--safe-bottom))] sm:px-2 sm:pt-4 sm:pb-4 md:pt-5 md:pb-5 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
+      <aside className="basis-1/5 sm:basis-[23%] md:basis-1/5 lg:basis-[11%] xl:basis-[10%] min-w-[3.25rem] max-w-[5rem] sm:max-w-[7rem] md:max-w-none h-full border-e border-border/60 bg-card/30 flex flex-col shrink-0 overflow-y-auto px-1 pt-[max(0.75rem,var(--safe-top))] pb-[max(0.75rem,var(--safe-bottom))] sm:px-2 sm:pt-4 sm:pb-4 md:pt-5 md:pb-5 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
         <nav className="flex flex-col gap-1 sm:gap-1.5">
           {([
             { id: "home", label: t("customer.home"), icon: Home },
@@ -856,11 +856,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       {tab !== "orders" && tab !== "feedback" && (
       <div
         id="customer-sticky-header"
-        className={`sticky top-0 z-30 px-5 cream-frost transition-[padding] duration-300 ${
+        className={`sticky top-0 z-30 px-3 sm:px-5 cream-frost transition-[padding] duration-300 ${
           headerCollapsed ? "pt-2 pb-2" : "pt-4 pb-3"
         }`}
       >
-        <div className={`absolute left-5 z-40 transition-[top] duration-300 ${headerCollapsed ? "top-2" : "top-4"}`}>
+        <div className={`absolute left-3 sm:left-5 z-40 transition-[top] duration-300 ${headerCollapsed ? "top-2" : "top-4"}`}>
           <SettingsModal />
         </div>
 
@@ -1015,7 +1015,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       {/* ============ HERO (app banner) ============ */}
       <header
         ref={heroRef}
-        className="relative mx-5 mt-3 mb-6 rounded-[28px] p-5 text-primary-foreground"
+        className="relative mx-3 mt-2 mb-4 rounded-[28px] p-4 text-primary-foreground sm:mx-5 sm:mt-3 sm:mb-6 sm:p-5"
         style={{
           background: "var(--gradient-hero)",
           boxShadow: "var(--shadow-deep)",
@@ -1034,7 +1034,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
           <Leaf className="h-3 w-3 text-accent-soft" /> {t("customer.farmToTable")}
         </span>
 
-        <h1 className="mt-3 font-1 text-[2.3rem] font-bold leading-[0.95] tracking-tight text-balance"
+        <h1 className="mt-3 font-1 text-[1.6rem] sm:text-[2.3rem] font-bold leading-[0.95] tracking-tight text-balance"
           style={{ fontVariationSettings: '"opsz" 144, "SOFT" 50' }}>
           {t("customer.goodnessOf")}<br />
           <span className="italic" style={{
@@ -1050,7 +1050,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
         <button
           onClick={scrollToMenu}
-          className="btn-gold mt-4 inline-flex items-center gap-2 rounded-full px-6 py-3 text-[1rem]"
+          className="btn-gold mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[0.9rem] sm:px-6 sm:py-3 sm:text-[1rem]"
         >
           {t("customer.exploreMenu")} <ArrowRight className="h-4 w-4" />
         </button>
@@ -1067,7 +1067,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <h2 className="mt-1">{t("customer.chefsFav")}</h2>
             </div>
           </div>
-          <section className="relative mx-5 mb-7 rounded-[28px] text-primary-foreground animate-fade-up"
+          <section className="relative mx-3 mb-5 sm:mx-5 sm:mb-7 rounded-[28px] text-primary-foreground animate-fade-up"
             style={{ background: "var(--gradient-spotlight)", boxShadow: "var(--shadow-deep)" }}>
             {/* shimmer */}
             <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
@@ -1077,7 +1077,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
             <div className="flex items-start gap-4 p-5">
               {spotlight.image_url && (
-                <div className="relative h-28 w-28 shrink-0 rounded-2xl ring-2 ring-accent/60 shadow-2xl">
+                <div className="relative h-20 w-20 sm:h-28 sm:w-28 shrink-0 rounded-2xl ring-2 ring-accent/60 shadow-2xl">
                   <img src={spotlight.image_url} alt={spotlight.name} className="h-full w-full object-cover rounded-2xl" />
                 </div>
               )}
@@ -1085,13 +1085,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <span className="inline-flex items-center gap-1 rounded-full bg-accent/95 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-accent-foreground">
                   <Flame className="h-3 w-3" /> {t("customer.popular")}
                 </span>
-                <h3 className="mt-2 font-1 text-2xl font-bold leading-[1.05] text-balance">{spotlight.name}</h3>
+                <h3 className="mt-2 font-1 text-lg sm:text-2xl font-bold leading-[1.05] text-balance">{spotlight.name}</h3>
                 <p className="mt-1.5 line-clamp-2 text-[0.78rem] text-primary-foreground/75">
                   {spotlight.description}
                 </p>
                 <div className="mt-3 flex items-end justify-between">
                   <div>
-                    <span className="font-1 text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
+                    <span className="font-1 text-xl sm:text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
                     <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
                   </div>
                   <button
@@ -1118,11 +1118,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             </div>
             <span className="text-xs text-foreground/50">{promos.length} {t("customer.live")}</span>
           </div>
-          <div className="mb-7 -mx-0 flex snap-x-mandatory gap-3 overflow-x-auto px-5 pb-3 no-scrollbar">
+          <div className="mb-5 sm:mb-7 -mx-0 flex snap-x-mandatory gap-3 overflow-x-auto px-3 sm:px-5 pb-3 no-scrollbar">
             {promos.map((p) => (
               <article
                 key={p.id}
-                className="snap-start relative flex w-[78%] shrink-0 rounded-[22px] text-primary-foreground shadow-[var(--shadow-pop)]"
+                className="snap-start relative flex w-[88%] sm:w-[78%] shrink-0 rounded-[22px] text-primary-foreground shadow-[var(--shadow-pop)]"
                 style={{ background: "var(--gradient-berry)" }}
               >
                 {/* winged accent removed per request */}
@@ -1166,7 +1166,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
             </div>
             <button onClick={scrollToMenu}>{t("customer.viewAll")} <ChevronRight className="h-3 w-3" /></button>
           </div>
-          <div className="mb-8 flex snap-x-mandatory gap-3 overflow-x-auto px-5 pb-3 no-scrollbar">
+          <div className="mb-6 sm:mb-8 flex snap-x-mandatory gap-3 overflow-x-auto px-3 sm:px-5 pb-3 no-scrollbar">
             {recommended.map((item) => (
               <article
                 key={`rec-${item.id}`}
@@ -1201,11 +1201,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       )}
 
       {/* ============ FULL MENU ============ */}
-      <div id="menu-anchor" className="scroll-mt-40 px-5">
+      <div id="menu-anchor" className="scroll-mt-40 px-3 sm:px-5">
         <div className="mb-3 flex items-end justify-between">
           <div>
             <span className="eyebrow">{t("customer.farmMenu")}</span>
-            <h2 className="mt-1 font-1 text-[1.6rem] font-bold leading-tight">{t("customer.allGoodness")}</h2>
+            <h2 className="mt-1 font-1 text-[1.3rem] sm:text-[1.6rem] font-bold leading-tight">{t("customer.allGoodness")}</h2>
           </div>
           <span className="text-xs font-medium text-foreground/50">{filtered.length} {t("customer.items")}</span>
         </div>
@@ -1286,7 +1286,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               )}
                             </div>
                           )}
-                          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
+                          <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
                             {item.image_url ? (
                               <img src={item.image_url} alt={item.name} loading="lazy"
                                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />

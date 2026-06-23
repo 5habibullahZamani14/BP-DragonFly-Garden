@@ -681,6 +681,27 @@
 }
 
 
+/* ============== Narrow-screen responsive overrides ============== */
+/* Prevent any text from causing horizontal overflow */
+body { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Very narrow phones (iPhone SE, slim aspect ratios ≤ 374px) */
+@media (max-width: 374px) {
+  /* Scale down management dashboard */
+  .management-header-title { font-size: 1.5rem !important; }
+
+  /* Ensure flex children don't force overflow */
+  .min-w-0 { min-width: 0 !important; }
+
+  /* Reduce section paddings globally */
+  .section-head { padding-left: 0.75rem; padding-right: 0.75rem; }
+}
+
+/* Extremely narrow screens (≤ 319px) */
+@media (max-width: 319px) {
+  .management-header-title { font-size: 1.25rem !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

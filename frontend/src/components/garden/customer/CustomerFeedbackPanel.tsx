@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -226,13 +227,13 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
       className="animate-fade-up pb-10"
     >
       <header
-        className="relative mx-5 mt-3 mb-6 rounded-[28px] p-5 text-primary-foreground"
+        className="relative mx-3 mt-2 mb-4 rounded-[28px] p-4 text-primary-foreground sm:mx-5 sm:mt-3 sm:mb-6 sm:p-5"
         style={{ background: "var(--gradient-hero)", boxShadow: "var(--shadow-deep)" }}
       >
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.18em] backdrop-blur">
           <MessageSquare className="h-3 w-3 text-accent-soft" /> {t("customer.feedback.badge")}
         </span>
-        <h1 className="mt-3 font-1 text-[2rem] font-bold leading-[0.95] tracking-tight">
+        <h1 className="mt-3 font-1 text-[1.5rem] sm:text-[2rem] font-bold leading-[0.95] tracking-tight">
           {t("customer.feedback.title")}
         </h1>
         <p className="mt-2 max-w-[20rem] text-[0.85rem] leading-snug text-primary-foreground/80">
@@ -240,7 +241,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
         </p>
       </header>
 
-      <div className="mx-5 space-y-5">
+      <div className="mx-3 space-y-4 sm:mx-5 sm:space-y-5">
         {/* Quick suggestions */}
         <section className="rounded-[24px] border border-border/60 bg-card/90 p-4 shadow-[var(--shadow-soft)]">
           <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-foreground/50 mb-2">
@@ -325,7 +326,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
 
           {showRatings && (
             <div className="space-y-2">
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-1.5 sm:gap-2 sm:grid-cols-2">
                 {RATING_KEYS.map(({ key, labelKey }) => (
                   <RatingPicker
                     key={key}
@@ -426,6 +427,9 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
                 <DialogTitle className="font-1 text-xl font-bold text-primary">
                   {selectedSub.sender_name || t("customer.feedback.badge")}
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Full details of your submitted feedback
+                </DialogDescription>
                 <p className="text-xs text-foreground/50">
                   {new Date(selectedSub.created_at).toLocaleString()}
                 </p>
@@ -497,6 +501,8 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
 
       <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
         <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
+          <DialogDescription className="sr-only">A larger view of the uploaded feedback photo</DialogDescription>
           {previewImage && (
             <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4">
               <img
