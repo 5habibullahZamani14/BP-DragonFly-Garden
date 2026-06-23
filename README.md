@@ -122,8 +122,48 @@ frontend and serves it as static files alongside the API.
 
 ```
 cd frontend && npm install && npm run build
-cd ../restaurant-system/backend && node src/server.js
+cd ../restaurant-system/backend && npm install && npm run start
 ```
 
-Access the application from any device connected to the cafe's Wi-Fi by navigating to the
-Raspberry Pi's local IP address on port 5000.
+On the Pi, make sure backend config allows the local hotspot origin:
+
+- `HOST=0.0.0.0`
+- `PORT=5000`
+- `CORS_ALLOWED_ORIGINS=http://10.42.0.1:5000`
+
+If you want development access from the Vite dev server as well, you can include:
+
+- `http://localhost:5173`
+
+### systemd service example
+
+Create `/etc/systemd/system/dragonfly-garden.service` on the Raspberry Pi with:
+
+```ini
+[Unit]
+Description=Dragonfly Garden Backend
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/BP-DragonFly-Garden/restaurant-system/backend
+EnvironmentFile=/home/pi/BP-DragonFly-Garden/restaurant-system/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start it:
+
+```
+sudo systemctl daemon-reload
+sudo systemctl enable --now dragonfly-garden.service
+sudo systemctl status dragonfly-garden.service
+```
+
+Access the app from any device on the Pi network at `http://10.42.0.1:5000`.
