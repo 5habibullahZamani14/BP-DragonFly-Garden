@@ -12,6 +12,48 @@ const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
+const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
+
+const normalizeUrl = (value) => {
+  if (!value || typeof value !== "string") return DEFAULT_CAPTIVE_PORTAL_TARGET;
+  const trimmed = value.trim();
+  if (!trimmed) return DEFAULT_CAPTIVE_PORTAL_TARGET;
+  return trimmed.replace(/\/+$|\s+$/g, "").replace(/\/$/, "") + "/";
+};
+
+const normalizeBaseUrl = (value) => normalizeUrl(value).replace(/\/$/, "");
+
+const getRestaurantSetting = (key) =>
+  new Promise((resolve, reject) => {
+    db.get("SELECT value FROM restaurant_settings WHERE key = ?", [key], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.value : null);
+    });
+  });
+
+/*
+ * resolveOrderingBaseUrl returns a stable base URL used for printed table
+ * QR codes. It prefers the Raspberry Pi captive portal target set via the
+ * backend environment or runtime settings. Falling back to the incoming
+ * request host is only used for development or when no captive portal target
+ * is configured.
+ */
+const resolveOrderingBaseUrl = async (req) => {
+  if (process.env.CAPTIVE_PORTAL_TARGET) {
+    return normalizeBaseUrl(process.env.CAPTIVE_PORTAL_TARGET);
+  }
+
+  try {
+    const rawValue = await getRestaurantSetting("captive_portal_target");
+    if (rawValue) {
+      return normalizeBaseUrl(rawValue);
+    }
+  } catch (err) {
+    console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
+  }
+
+  return `${req.protocol}://${req.get("host")}`;
+};
 
 /*
  * In-memory SVG cache keyed by ordering URL. Generating SVG QR images is
@@ -50,28 +92,19 @@ const setBroadcast = (fn) => { broadcastFn = fn; };
 const getBroadcast = () => broadcastFn;
 
 /*
- * getBaseUrl resolves the correct origin for ordering links. In production
- * FRONTEND_BASE_URL is set to the Raspberry Pi's LAN address. In development
- * it is derived from the incoming request so local testing works without any
- * env configuration.
- */
-const getBaseUrl = (req) => {
-  if (process.env.FRONTEND_BASE_URL) {
-    return process.env.FRONTEND_BASE_URL.replace(/\/$/, "");
-  }
-  return `${req.protocol}://${req.get("host")}`;
-};
-
-/*
  * buildOrderingUrl embeds both the numeric table ID and the QR code string in
  * the URL so the frontend has both values without a second lookup after loading.
+ * In Raspberry Pi hotspot deployments, the captive portal target is used as a
+ * stable host for printed table QR codes and captive portal redirects.
  */
-const buildOrderingUrl = (req, table) =>
-  `${getBaseUrl(req)}/?table=${table.id}&qr=${encodeURIComponent(table.qr_code)}`;
+const buildOrderingUrl = async (req, table) => {
+  const baseUrl = await resolveOrderingBaseUrl(req);
+  return `${baseUrl}/?table=${table.id}&qr=${encodeURIComponent(table.qr_code)}`;
+};
 
 /* withQrCode appends the ordering URL and cached SVG to any table object. */
 const withQrCode = async (req, table) => {
-  const orderingUrl = buildOrderingUrl(req, table);
+  const orderingUrl = await buildOrderingUrl(req, table);
   let qrSvg = qrSvgCache.get(orderingUrl);
 
   if (!qrSvg) {

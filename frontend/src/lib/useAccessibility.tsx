@@ -56,25 +56,35 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const { i18n } = useTranslation();
 
+  const UI_SCALE_BASELINE = 0.9;
+
   /* Apply font theme changes to CSS variables and persist to localStorage. */
   useEffect(() => {
     localStorage.setItem("a11y-font-theme", fontTheme);
 
     let selectedFont = "'Baskervville', serif";
-    let bodyWeight = "400";
+    let bodyWeight = "500";
 
     const lng = i18n.language || "en";
 
     if (lng === "zh") {
       selectedFont = "'Noto Serif SC', serif";
+      bodyWeight = "400";
     } else if (lng === "ar" || lng === "fa") {
       selectedFont = "'Amiri', serif";
+      bodyWeight = "400";
     } else if (lng === "hi") {
       selectedFont = "'Noto Serif Devanagari', serif";
+      bodyWeight = "400";
     } else if (fontTheme === "font-2") {
       selectedFont = "'Merriweather', serif";
+      bodyWeight = "400";
     } else if (fontTheme === "font-3") {
       selectedFont = "'Montserrat', sans-serif";
+      bodyWeight = "500";
+    } else {
+      selectedFont = "'Baskervville', serif";
+      bodyWeight = "600";
     }
 
     document.documentElement.style.setProperty("--font-1", selectedFont);
@@ -83,10 +93,10 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     document.documentElement.style.setProperty("--body-weight", bodyWeight);
   }, [fontTheme, i18n.language]);
 
-  /* Apply UI scale and persist. */
+  /* Apply UI scale and persist. Have 100% shown in settings map to a slightly smaller actual layout. */
   useEffect(() => {
     localStorage.setItem("a11y-ui-scale", uiScale.toString());
-    document.documentElement.style.setProperty("--ui-scale", uiScale.toString());
+    document.documentElement.style.setProperty("--ui-scale", (UI_SCALE_BASELINE * uiScale).toString());
   }, [uiScale]);
 
   /* Apply font scale and persist. */

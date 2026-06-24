@@ -16,8 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchTables, createTable, updateTable, deleteTable } from "@/lib/api";
+import { fetchTables, createTable, updateTable, deleteTable, fetchSettings } from "@/lib/api";
 import type { TableRecord } from "@/lib/api";
+import { buildWifiQrValue } from "@/lib/hotspotQr";
 import { Grid3X3, Plus, QrCode, Edit2, Trash2, Printer, Download } from "lucide-react";
 import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
@@ -55,9 +56,14 @@ export const TablesTab = () => {
   
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
   const [editTable, setEditTable] = useState({ table_number: "", qr_code: "" });
+  const [hotspotSsid, setHotspotSsid] = useState("");
+  const [hotspotPassword, setHotspotPassword] = useState("");
+  const [hotspotSecurity, setHotspotSecurity] = useState<"WPA" | "WEP" | "nopass">("WPA");
+  const [hotspotLoading, setHotspotLoading] = useState(true);
 
   useEffect(() => {
     loadTables();
+    loadHotspotSettings();
   }, []);
 
   // WebSocket listener for real-time table updates
@@ -74,6 +80,26 @@ export const TablesTab = () => {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadHotspotSettings = async () => {
+    try {
+      const settings = await fetchSettings();
+      if (settings?.hotspot_ssid) setHotspotSsid(String(settings.hotspot_ssid));
+      if (settings?.hotspot_password) setHotspotPassword(String(settings.hotspot_password));
+      if (settings?.hotspot_security) {
+        const security = String(settings.hotspot_security).toUpperCase();
+        if (security === "WEP" || security === "NOPASS") {
+          setHotspotSecurity(security as "WEP" | "nopass");
+        } else {
+          setHotspotSecurity("WPA");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load hotspot settings", e);
+    } finally {
+      setHotspotLoading(false);
     }
   };
 
@@ -109,6 +135,8 @@ export const TablesTab = () => {
       console.error(e);
     }
   };
+
+  const hotspotQrValue = buildWifiQrValue(hotspotSsid, hotspotPassword, hotspotSecurity);
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingTables")}</div>;
 
@@ -177,7 +205,10 @@ export const TablesTab = () => {
           <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group cursor-pointer" onClick={() => setViewQRCodeTable(table)}>
             <CardContent className="pt-6 pb-4">
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                <button 
+                <button
+                  type="button"
+                  aria-label={`Edit ${table.table_number}`}
+                  title={`Edit ${table.table_number}`}
                   onClick={() => {
                     setEditingTableId(table.id);
                     setEditTable({ table_number: table.table_number, qr_code: table.qr_code });
@@ -186,7 +217,10 @@ export const TablesTab = () => {
                 >
                   <Edit2 className="h-4 w-4" />
                 </button>
-                <button 
+                <button
+                  type="button"
+                  aria-label={`Delete ${table.table_number}`}
+                  title={`Delete ${table.table_number}`}
                   onClick={() => handleDelete(table.id)}
                   className="p-1 text-red-500 hover:bg-red-50 rounded"
                 >
@@ -211,26 +245,67 @@ export const TablesTab = () => {
             {/* Printable Area */}
             <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-sm border border-gray-100 w-full mb-2">
               {/* The QR Code Container */}
-              <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md mt-4">
-                <QRCode 
-                  value={`${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
-                  size={190} 
-                  ecLevel="H"
-                  fgColor="#444444"
-                  bgColor="#ffffff"
-                  qrStyle="dots"
-                  eyeRadius={10}
-                />
-                
-                {/* The SCAN ME Center Badge */}
-                <div className="absolute inset-0 flex items-center justify-center z-20">
-                  <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                    <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
-                    <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+              {hotspotSsid && !hotspotLoading ? (
+                <>
+                  <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex flex-col items-center justify-center z-10 shadow-md mt-4">
+                    <QRCode
+                      value={hotspotQrValue}
+                      size={220}
+                      ecLevel="H"
+                      fgColor="#444444"
+                      bgColor="#ffffff"
+                      qrStyle="dots"
+                      eyeRadius={10}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                      <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                        <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                        <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 w-full rounded-3xl bg-slate-50 p-4 border border-slate-200 text-left">
+                    <h3 className="text-sm font-semibold text-slate-900">Ordering Menu QR</h3>
+                    <p className="text-xs text-slate-500 mb-3">If your device does not open the ordering portal automatically after connecting, scan this code or visit the text link below.</p>
+                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md">
+                      <QRCode
+                        value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
+                        size={150}
+                        ecLevel="H"
+                        fgColor="#444444"
+                        bgColor="#ffffff"
+                        qrStyle="dots"
+                        eyeRadius={10}
+                      />
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500 break-all">
+                      {viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md mt-4">
+                  <QRCode 
+                    value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
+                    size={190} 
+                    ecLevel="H"
+                    fgColor="#444444"
+                    bgColor="#ffffff"
+                    qrStyle="dots"
+                    eyeRadius={10}
+                  />
+                  
+                  {/* The SCAN ME Center Badge */}
+                  <div className="absolute inset-0 flex items-center justify-center z-20">
+                    <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                      <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                      <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              
+              )}
+
               <p className="mt-6 text-2xl font-bold text-gray-800 uppercase tracking-widest">{viewQRCodeTable.table_number}</p>
             </div>
 

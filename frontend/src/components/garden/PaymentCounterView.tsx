@@ -125,6 +125,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   };
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [workHours, setWorkHours] = useState<{ start: string; end: string } | null>(null);
+  const [isWithinWorkHours, setIsWithinWorkHours] = useState<boolean>(true);
   const unacknowledgedAssistanceCount = assistanceRequests.filter((request) => !request.acknowledged_at).length;
 
   const formatAssistanceTime = (value: string) => {
@@ -132,6 +134,39 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     const normalized = hasTimezone ? value : `${value.replace(" ", "T")}Z`;
     return new Date(normalized).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   };
+
+  const parseTimeToMinutes = (time: string) => {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const isTimeInRange = (current: string, start: string, end: string) => {
+    const currentMinutes = parseTimeToMinutes(current);
+    const startMinutes = parseTimeToMinutes(start);
+    const endMinutes = parseTimeToMinutes(end);
+
+    if (startMinutes <= endMinutes) {
+      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    }
+
+    return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+  };
+
+  const getOperationStatus = () => {
+    const currentHour = currentTime.getHours();
+    const currentMinute = currentTime.getMinutes();
+    const currentTimeStr = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
+
+    if (workHours) {
+      return isTimeInRange(currentTimeStr, workHours.start, workHours.end) ? "workingTime" : "outsideWorking";
+    }
+
+    if (currentHour >= 9 && currentHour < 18) return "workingTime";
+    if (currentHour >= 18 && currentHour < 22) return "overTime";
+    return "outsideWorking";
+  };
+
+  const operationStatus = getOperationStatus();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -199,14 +234,16 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       try {
         const settings = await fetchPublicSettings();
         if (settings && settings.work_hours) {
-          const { start, end } = settings.work_hours;
+          setWorkHours(settings.work_hours);
           const now = new Date();
           const currentHour = now.getHours();
           const currentMinute = now.getMinutes();
-          const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
-          
-          if (currentTimeStr < start || currentTimeStr > end) {
-            notify("error", t("payment.systemLockedHours", { start, end }));
+          const currentTimeStr = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
+          const inside = isTimeInRange(currentTimeStr, settings.work_hours.start, settings.work_hours.end);
+          setIsWithinWorkHours(inside);
+
+          if (!inside) {
+            notify("error", t("payment.systemLockedHours", { start: settings.work_hours.start, end: settings.work_hours.end }));
             handleLogout();
           }
         }
@@ -464,29 +501,29 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       )}
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between mb-4 gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 min-w-0">
             <SettingsModal />
-            <h1 className="text-3xl font-bold text-gray-900 mr-2">{t("payment.title")}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mr-2 min-w-0 truncate">{t("payment.title")}</h1>
           </div>
-          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 bg-white/60 px-4 py-2 rounded-full shadow-sm w-full xl:w-auto overflow-x-auto">
-            <div className="flex items-center gap-3 mr-2 shrink-0">
-              <span className="text-sm font-semibold text-gray-800">
+          <div className="flex flex-wrap items-center gap-3 bg-white/60 px-4 py-3 rounded-2xl shadow-sm w-full xl:w-auto">
+            <div className="flex flex-wrap items-center gap-3 shrink-0 min-w-0">
+              <span className="text-sm font-semibold text-gray-800 min-w-0">
                 {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
               </span>
               <Badge variant="outline" className={
-                currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? "bg-green-100 text-green-700 border-green-200" :
-                currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? "bg-orange-100 text-orange-700 border-orange-200" :
+                operationStatus === "workingTime" ? "bg-green-100 text-green-700 border-green-200" :
+                operationStatus === "overTime" ? "bg-orange-100 text-orange-700 border-orange-200" :
                 "bg-gray-100 text-gray-600 border-gray-200"
               }>
-                {currentTime.getHours() >= 9 && currentTime.getHours() < 18 ? t("payment.workingTime") :
-                 currentTime.getHours() >= 18 && currentTime.getHours() < 22 ? t("payment.overTime") :
-                 t("payment.outsideWorking")}
+                {operationStatus === "workingTime" && t("payment.workingTime")}
+                {operationStatus === "overTime" && t("payment.overTime")}
+                {operationStatus === "outsideWorking" && t("payment.outsideWorking")}
               </Badge>
             </div>
-            <span className="text-sm font-medium text-gray-700 border-l border-gray-300 pl-4 shrink-0">
+            <span className="text-sm font-medium text-gray-700 border-l border-gray-300 pl-4 shrink-0 min-w-0">
               {t("payment.shift")}: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title={t("payment.staffAssistance")}>

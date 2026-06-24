@@ -106,57 +106,86 @@ export const useWebSocket = (
   useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let reconnectAttempts = 0;
+    let cleanupRequested = false;
+    let currentWs: WebSocket | null = null;
 
     const connect = () => {
+      if (authParamGetter && !authValue) {
+        setIsConnected(false);
+        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
+        reconnectAttempts++;
+        reconnectTimeout = setTimeout(connect, delay);
+        return;
+      }
+
       const sep = WS_BASE.includes("?") ? "&" : "?";
       const url = authValue
         ? `${WS_BASE}${sep}${encodeURIComponent(authParamName)}=${encodeURIComponent(authValue)}`
         : WS_BASE;
 
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
+      try {
+        const ws = new WebSocket(url);
+        currentWs = ws;
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        reconnectAttempts = 0; // Reset attempts on successful connection
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (typeof data?.type === "string" && eventTypesRef.current.includes(data.type as WSEventType)) {
-            callbackRef.current(data as WSEvent);
+        ws.onopen = () => {
+          if (cleanupRequested) {
+            ws.close();
+            return;
           }
-        } catch (e) {
-          console.error("Failed to parse WebSocket message", e);
-        }
-      };
+          setIsConnected(true);
+          reconnectAttempts = 0; // Reset attempts on successful connection
+        };
 
-      ws.onclose = () => {
-        setIsConnected(false);
-        /* Exponential backoff with jitter */
-        const base = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
-        const jitter = Math.floor(Math.random() * 3000);
-        const delay = base + jitter;
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (typeof data?.type === "string" && eventTypesRef.current.includes(data.type as WSEventType)) {
+              callbackRef.current(data as WSEvent);
+            }
+          } catch (e) {
+            console.error("Failed to parse WebSocket message", e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (cleanupRequested || currentWs !== ws) return;
+          setIsConnected(false);
+          const base = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
+          const jitter = Math.floor(Math.random() * 3000);
+          const delay = base + jitter;
+          reconnectAttempts++;
+          reconnectTimeout = setTimeout(connect, delay);
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          // Let onclose handle reconnects. Avoid manually closing a socket
+          // that is still in CONNECTING state to prevent the browser warning.
+        };
+      } catch (error) {
+        console.error("Failed to create WebSocket connection", error);
+        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
         reconnectTimeout = setTimeout(connect, delay);
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        ws.close();
-      };
+      }
     };
 
     connect();
 
     /* Cleanup: cancel the reconnect timer and close the socket on unmount. */
     return () => {
+      cleanupRequested = true;
       clearTimeout(reconnectTimeout);
-      if (wsRef.current) {
-        /* Nullify onclose before closing to suppress the reconnect attempt. */
-        wsRef.current.onclose = null;
-        wsRef.current.close();
+      if (currentWs && currentWs.readyState !== WebSocket.CLOSED) {
+        currentWs.onclose = null;
+        currentWs.onerror = null;
+        currentWs.onmessage = null;
+        try {
+          currentWs.close();
+        } catch (error) {
+          console.warn("WebSocket close failed during cleanup", error);
+        }
       }
     };
   }, [authValue, authParamName]); // Reconnect only when the actual auth value or auth param name changes

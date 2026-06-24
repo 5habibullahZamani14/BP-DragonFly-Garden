@@ -75,6 +75,12 @@ export const SettingsTab = () => {
   const [defaultPatternId, setDefaultPatternId] = useState<number | null>(null);
   const [defaultPatternSaved, setDefaultPatternSaved] = useState(false);
 
+  const [hotspotSsid, setHotspotSsid] = useState("");
+  const [hotspotPassword, setHotspotPassword] = useState("");
+  const [hotspotSecurity, setHotspotSecurity] = useState<"WPA"|"WEP"|"nopass">("WPA");
+  const [hotspotSaved, setHotspotSaved] = useState(false);
+  const [hotspotSaving, setHotspotSaving] = useState(false);
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -92,6 +98,16 @@ export const SettingsTab = () => {
       if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
       if (data?.captive_portal_target) setCaptivePortalTarget(data.captive_portal_target);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
+      if (data?.hotspot_ssid) setHotspotSsid(String(data.hotspot_ssid));
+      if (data?.hotspot_password) setHotspotPassword(String(data.hotspot_password));
+      if (data?.hotspot_security) {
+        const security = String(data.hotspot_security).toUpperCase();
+        if (security === "WEP" || security === "NOPASS") {
+          setHotspotSecurity(security as "WPA"|"WEP"|"nopass");
+        } else {
+          setHotspotSecurity("WPA");
+        }
+      }
       // Load tax settings
       setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
       setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
@@ -210,6 +226,21 @@ export const SettingsTab = () => {
       console.error("Failed to save captive portal target", e);
     } finally {
       setCaptivePortalSaving(false);
+    }
+  };
+
+  const saveHotspotSettings = async () => {
+    setHotspotSaving(true);
+    try {
+      await updateSetting("hotspot_ssid", hotspotSsid.trim());
+      await updateSetting("hotspot_password", hotspotPassword);
+      await updateSetting("hotspot_security", hotspotSecurity);
+      setHotspotSaved(true);
+      setTimeout(() => setHotspotSaved(false), 2500);
+    } catch (e) {
+      console.error("Failed to save hotspot settings", e);
+    } finally {
+      setHotspotSaving(false);
     }
   };
 
@@ -547,6 +578,62 @@ export const SettingsTab = () => {
               {captivePortalSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
                 : captivePortalSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
                 : "Save Captive Portal Target"}
+            </Button>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="hotspot" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg">Hotspot Wi-Fi QR</h3>
+            <p className="text-sm text-muted-foreground font-normal">Configure the wireless network details used when printing table hotspot QR codes.</p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="hotspot-ssid">Wi-Fi SSID</Label>
+                <Input
+                  id="hotspot-ssid"
+                  type="text"
+                  value={hotspotSsid}
+                  onChange={(e) => setHotspotSsid(e.target.value)}
+                  placeholder="Dragonfly Garden"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hotspot-security">Security</Label>
+                <Select value={hotspotSecurity} onValueChange={(value) => setHotspotSecurity(value as "WPA" | "WEP" | "nopass") }>
+                  <SelectTrigger id="hotspot-security">
+                    <SelectValue placeholder="Security" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="WPA">WPA/WPA2</SelectItem>
+                    <SelectItem value="WEP">WEP</SelectItem>
+                    <SelectItem value="nopass">Open network</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {hotspotSecurity !== "nopass" && (
+              <div className="space-y-2">
+                <Label htmlFor="hotspot-password">Wi-Fi Password</Label>
+                <Input
+                  id="hotspot-password"
+                  type="password"
+                  value={hotspotPassword}
+                  onChange={(e) => setHotspotPassword(e.target.value)}
+                  placeholder="Enter network password"
+                />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">This information is used to generate a secondary hotspot QR code for customers to scan and join the local network before ordering.</p>
+            <Button onClick={saveHotspotSettings} disabled={hotspotSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
+              {hotspotSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                : hotspotSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
+                : "Save Hotspot Settings"}
             </Button>
           </div>
         </AccordionContent>

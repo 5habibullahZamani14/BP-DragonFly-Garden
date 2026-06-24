@@ -330,19 +330,25 @@ app.get('/ready', async (req, res) => {
   }
 });
 
-/* Captive Portal Routes for Apple and Android */
-app.get("/hotspot-detect.html", async (req, res) => {
+/* Captive Portal Routes for Apple, Android, and common connectivity checks */
+const redirectToCaptiveTarget = async (req, res) => {
   const target = await resolveCaptivePortalTarget();
-  res.redirect(target);
-});
-app.get("/generate_204", async (req, res) => {
-  const target = await resolveCaptivePortalTarget();
-  res.status(302).redirect(target);
-});
-app.get("/gen_204", async (req, res) => {
-  const target = await resolveCaptivePortalTarget();
-  res.status(302).redirect(target);
-});
+  return res.status(302).redirect(target);
+};
+
+app.get(
+  [
+    "/hotspot-detect.html",
+    "/generate_204",
+    "/gen_204",
+    "/ncsi.txt",
+    "/connecttest.txt",
+    "/success.txt",
+    "/library/test/success.html",
+    "/connectivity-check",
+  ],
+  async (req, res) => redirectToCaptiveTarget(req, res)
+);
 
 /* Global error handlers — these must be registered last. */
 app.use(notFoundHandler);

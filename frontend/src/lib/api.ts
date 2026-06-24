@@ -248,6 +248,8 @@ export type TableRecord = {
   id: number;
   table_number: string;
   qr_code: string;
+  ordering_url?: string;
+  qr_svg?: string;
 };
 
 export type TablePayload = {
