@@ -44,7 +44,7 @@ import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
 import {
   fetchMenu,
   fetchTable,
-  fetchSettings,
+  fetchPublicSettings,
   fetchCategories,
   placeOrder,
   refreshOrder,
@@ -53,7 +53,7 @@ import {
   fetchCustomerArchivedOrders,
   fetchRecommendations,
   callStaff,
-  fetchPatterns,
+  fetchPublicPatterns,
   fetchMyFeedback,
   type MenuItem,
   type Order,
@@ -282,7 +282,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     (async () => {
       setLoading(true);
       try {
-        const [m, t, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchSettings(), fetchCategories(), fetchPatterns()]);
+        const [m, t, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchPublicSettings(), fetchCategories(), fetchPublicPatterns()]);
         if (!alive) return;
         setMenu(m);
         setTableInfo(t);
@@ -323,7 +323,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Real-time WebSocket listener for order updates
   // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
   // ORDER_STATUS_UPDATE fires when the whole order status changes (e.g. direct status patch)
-  useWebSocket(["ORDER_STATUS_UPDATE", "ITEM_STATUS_UPDATE", "NEW_PAYMENT", "FEEDBACK_RESPONSE"], (event) => {
+  useWebSocket([
+    "ORDER_STATUS_UPDATE",
+    "ITEM_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "FEEDBACK_RESPONSE"
+  ], (event) => {
     if (event.type === "FEEDBACK_RESPONSE") {
       loadFeedbackList();
       return;
@@ -349,7 +354,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
       return cur;
     });
-  });
+  }, () => qrCode, "qr");
 
   const switchTab = (next: CustomerTab, animate = true) => {
     const prev = tabRef.current;

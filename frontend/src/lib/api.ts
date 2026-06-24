@@ -378,6 +378,12 @@ export const applyDefaultCardSize = async (card_size: "normal" | "large" | "extr
 export const fetchPatterns = async (): Promise<Pattern[]> =>
   safeFetch<Pattern[]>("/management/patterns");
 
+export const fetchPublicPatterns = async (): Promise<Pattern[]> =>
+  safeFetch<Pattern[]>("/menu/patterns");
+
+export const fetchPublicSettings = async (): Promise<ManagementSettings> =>
+  safeFetch<ManagementSettings>("/management/settings/public");
+
 export const uploadMenuItemPatternImage = async (id: number, file: Blob, name?: string) => {
   const formData = new FormData();
   formData.append("image", file, name || "pattern.jpg");

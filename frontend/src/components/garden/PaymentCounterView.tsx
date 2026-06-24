@@ -49,7 +49,7 @@ import {
   addOrderItem,
   fetchMenuItems,
   verifyEmployeeCredentials,
-  fetchSettings,
+  fetchPublicSettings,
   printFinalBill,
   fetchStaffAssistanceRequests,
   acknowledgeStaffAssistanceRequest,
@@ -197,7 +197,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     const checkWorkingHours = async () => {
       if (!loggedInEmployee) return;
       try {
-        const settings = await fetchSettings();
+        const settings = await fetchPublicSettings();
         if (settings && settings.work_hours) {
           const { start, end } = settings.work_hours;
           const now = new Date();

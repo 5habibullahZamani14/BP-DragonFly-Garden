@@ -210,6 +210,21 @@ const getSettings = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const getPublicSettings = async (req, res, next) => {
+  try {
+    const settings = await all(
+      "SELECT key, value FROM restaurant_settings WHERE key IN (?, ?, ?, ?, ?)",
+      ["work_hours", "sst_enabled", "sst_rate", "service_charge_enabled", "service_charge_rate"]
+    );
+    const result = {};
+    settings.forEach((s) => {
+      try { result[s.key] = JSON.parse(s.value); }
+      catch (e) { result[s.key] = s.value; }
+    });
+    res.json(result);
+  } catch (error) { next(error); }
+};
+
 /*
  * updateSetting uses SQLite's INSERT OR REPLACE (upsert) syntax to set a
  * setting value. Objects are serialised to JSON; primitives are stored as
@@ -756,6 +771,7 @@ module.exports = {
   getLogs,
   getFinanceData,
   getSettings,
+  getPublicSettings,
   updateSetting,
   getEmployees,
   createEmployee,

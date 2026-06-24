@@ -7,7 +7,7 @@
  */
 
 const express = require("express");
-const { getMenu, getCategories, recomputePopular, getRecommendations, getItemOptions } = require("../controllers/menuController");
+const { getMenu, getCategories, recomputePopular, getRecommendations, getItemOptions, getPatterns } = require("../controllers/menuController");
 
 const { asyncHandler } = require("../middleware/validation");
 
@@ -27,6 +27,7 @@ router.get("/", asyncHandler(getMenu));
  * this to build the category filter tabs at the top of the menu.
  */
 router.get("/categories", asyncHandler(getCategories));
+router.get("/patterns", asyncHandler(getPatterns));
 
 /*
  * POST /menu/popular/recompute

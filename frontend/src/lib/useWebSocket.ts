@@ -84,7 +84,8 @@ type EventCallback = (event: WSEvent) => void;
 export const useWebSocket = (
   eventTypes: WSEventType[],
   callback: EventCallback,
-  tokenGetter?: () => string | null
+  authParamGetter?: () => string | null,
+  authParamName: string = "token"
 ) => {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -92,6 +93,7 @@ export const useWebSocket = (
   /* Store the latest callback and eventTypes in refs so the effect stays stable. */
   const callbackRef = useRef(callback);
   const eventTypesRef = useRef(eventTypes);
+  const authValue = authParamGetter ? authParamGetter() : null;
 
   useEffect(() => {
     callbackRef.current = callback;
@@ -106,9 +108,10 @@ export const useWebSocket = (
     let reconnectAttempts = 0;
 
     const connect = () => {
-      const token = tokenGetter ? tokenGetter() : null;
       const sep = WS_BASE.includes("?") ? "&" : "?";
-      const url = token ? `${WS_BASE}${sep}token=${encodeURIComponent(token)}` : WS_BASE;
+      const url = authValue
+        ? `${WS_BASE}${sep}${encodeURIComponent(authParamName)}=${encodeURIComponent(authValue)}`
+        : WS_BASE;
 
       const ws = new WebSocket(url);
       wsRef.current = ws;
@@ -156,7 +159,7 @@ export const useWebSocket = (
         wsRef.current.close();
       }
     };
-  }, [tokenGetter]); // Reconnect if tokenGetter reference changes
+  }, [authValue, authParamName]); // Reconnect only when the actual auth value or auth param name changes
 
   return isConnected;
 };

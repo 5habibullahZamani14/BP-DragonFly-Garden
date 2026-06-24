@@ -57,8 +57,10 @@ const verifyToken = (req, res, next) => {
   // Allow open routes that are needed before a manager login session exists.
   const openRoutes = new Set([
     '/auth',
+    '/employees/verify',
     '/send-reset-email',
     '/manager-profile/reset',
+    '/settings/public',
   ]);
 
   if (openRoutes.has(req.path)) {
@@ -173,6 +175,13 @@ router.delete("/menu/options/:optionId", deleteOption);
 router.get("/finance", managementController.getFinanceData);
 
 // ── System settings ───────────────────────────────────────────────────────────
+
+/*
+ * GET /management/settings/public
+ * Returns only the public subset of settings required by customer and payment
+ * counter flows: work_hours, SST/service charge toggles, and their rates.
+ */
+router.get("/settings/public", managementController.getPublicSettings);
 
 /*
  * GET /management/settings
