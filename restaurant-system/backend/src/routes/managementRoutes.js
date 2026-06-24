@@ -10,11 +10,8 @@
  * WebSocket events.
  *
  * Note on authentication: the manager authenticates via POST /management/auth
- * which returns a success flag that the frontend stores in session. The routes
- * themselves do not use the requireRole middleware because the manager's QR code
- * is handled at the frontend level — the backend trusts any request that arrives
- * with a manager QR code attached. This is acceptable because the system runs
- * on a private local network with no public internet exposure.
+ * which returns a JWT. All management routes except the open auth/reset/passcode
+ * helpers require that manager JWT bearer token in the Authorization header.
  */
 
 const express = require("express");
@@ -32,7 +29,7 @@ const {
 
 
 const feedbackController = require("../controllers/feedbackController");
-const jwt = require("jsonwebtoken");
+const { requireManagerToken } = require("../middleware/jwt-auth");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const path = require("path");
@@ -57,27 +54,20 @@ const authLimiter = rateLimit({
 });
 
 const verifyToken = (req, res, next) => {
-  // Allow open routes
-  if (req.path === '/auth' || req.path === '/send-reset-email' || req.path === '/manager-profile/reset' || req.path === '/kitchen-passcode' || req.path === '/employees/verify') {
+  // Allow open routes that are needed before a manager login session exists.
+  const openRoutes = new Set([
+    '/auth',
+    '/send-reset-email',
+    '/manager-profile/reset',
+    '/kitchen-passcode',
+    '/employees/verify'
+  ]);
+
+  if (openRoutes.has(req.path)) {
     return next();
   }
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: "Unauthorized: Missing Token" });
-  }
-  const token = authHeader.split(' ')[1];
-  try {
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET not configured. Management token validation unavailable.");
-      return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'manager') throw new Error("Invalid role");
-    req.managerId = decoded.id;
-    next();
-  } catch (err) {
-    return res.status(401).json({ success: false, message: "Unauthorized: Invalid Token" });
-  }
+
+  return requireManagerToken(req, res, next);
 };
 
 router.use(verifyToken);

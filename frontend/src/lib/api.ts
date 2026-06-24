@@ -55,12 +55,14 @@ const apiUrl = (path: string, qrCode?: string) => {
  * Response object.
  */
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
-  // Management endpoints must use JWT-based auth; ignore any QR argument for them.
-  const isManagement = path.startsWith("/management");
-  const url = isManagement ? `${API_BASE}${path}` : apiUrl(path, qr);
+  // Management and table-management endpoints must use JWT-based auth;
+  // ignore any QR argument for these admin routes. The table lookup route
+  // /tables/qr/:qrCode is public and should remain accessible without JWT.
+  const isAdminRoute = path.startsWith("/management") || (path.startsWith("/tables") && !path.startsWith("/tables/qr"));
+  const url = isAdminRoute ? `${API_BASE}${path}` : apiUrl(path, qr);
 
   const headers = new Headers(init?.headers);
-  if (isManagement) {
+  if (isAdminRoute) {
     const savedLogin = localStorage.getItem("managerLogin");
     if (savedLogin) {
       try {

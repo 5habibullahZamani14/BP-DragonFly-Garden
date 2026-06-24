@@ -30,7 +30,7 @@ const {
   validateAddItem,
   validateOrderIdParam
 } = require("../middleware/validation");
-const { requirePaymentCounter } = require("../middleware/role-based-access");
+const { requirePaymentToken } = require("../middleware/jwt-auth");
 
 const paymentRoutes = (broadcast) => {
   const router = express.Router();
@@ -48,14 +48,14 @@ const paymentRoutes = (broadcast) => {
    * Returns all orders that have not been fully paid yet. The payment counter
    * uses this to build its main working list of pending orders.
    */
-  router.get("/unpaid", requirePaymentCounter, asyncHandler(getUnpaidOrders));
+  router.get("/unpaid", requirePaymentToken, asyncHandler(getUnpaidOrders));
 
   /*
    * GET /payments/paid
    * Returns orders that have been fully paid during the current working session.
    * The payment counter uses this to review completed transactions.
    */
-  router.get("/paid", requirePaymentCounter, asyncHandler(getPaidOrders));
+  router.get("/paid", requirePaymentToken, asyncHandler(getPaidOrders));
 
   /*
    * POST /payments/:orderId/payments
@@ -63,7 +63,7 @@ const paymentRoutes = (broadcast) => {
    * payment_method_id, amount_paid, employee_id, and employee_name.
    * A NEW_PAYMENT WebSocket event is broadcast after a successful payment.
    */
-  router.post("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, validatePaymentCreation, asyncHandler(async (req, res) => {
+  router.post("/:orderId/payments", requirePaymentToken, validateOrderIdParam, validatePaymentCreation, asyncHandler(async (req, res) => {
     const payment = await processPayment(req.params.orderId, req.body);
     broadcast({ type: "NEW_PAYMENT", payload: payment });
     res.status(201).json(payment);
@@ -74,14 +74,14 @@ const paymentRoutes = (broadcast) => {
    * Returns all payment transactions recorded against a specific order.
    * Used to show the payment history panel for an order at the counter.
    */
-  router.get("/:orderId/payments", requirePaymentCounter, validateOrderIdParam, asyncHandler(getOrderPayments));
+  router.get("/:orderId/payments", requirePaymentToken, validateOrderIdParam, asyncHandler(getOrderPayments));
 
   /*
    * PATCH /payments/:orderId/vat
    * Adjusts the VAT rate applied to a specific order. The body must include
    * vat_rate (0–1), employee_id, and employee_name. This action is logged.
    */
-  router.patch("/:orderId/vat", requirePaymentCounter, validateOrderIdParam, validateVATEdit, asyncHandler(editOrderVAT));
+  router.patch("/:orderId/vat", requirePaymentToken, validateOrderIdParam, validateVATEdit, asyncHandler(editOrderVAT));
 
   /*
    * POST /payments/:orderId/items
@@ -89,20 +89,20 @@ const paymentRoutes = (broadcast) => {
    * if a customer decides to order dessert after the original order was placed.
    * Inventory is deducted automatically when the item is added.
    */
-  router.post("/:orderId/items", requirePaymentCounter, validateOrderIdParam, validateAddItem, asyncHandler(addOrderItem));
+  router.post("/:orderId/items", requirePaymentToken, validateOrderIdParam, validateAddItem, asyncHandler(addOrderItem));
 
   /*
    * POST /payments/archive
    * Moves all fully-paid orders from the live orders table into archived_orders.
    * The payment counter calls this at the end of each shift to clear the board.
    */
-  router.post("/archive", requirePaymentCounter, asyncHandler(archivePaidOrders));
+  router.post("/archive", requirePaymentToken, asyncHandler(archivePaidOrders));
 
   /*
    * GET /payments/archived
    * Returns the list of archived (completed and paid) orders for review.
    */
-  router.get("/archived", requirePaymentCounter, asyncHandler(getArchivedOrders));
+  router.get("/archived", requirePaymentToken, asyncHandler(getArchivedOrders));
 
   return router;
 };

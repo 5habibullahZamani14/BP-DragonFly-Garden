@@ -14,6 +14,7 @@
 const express = require("express");
 const { getTables, getTableByQrCode, createTable, updateTable, deleteTable, setBroadcast } = require("../controllers/tableController");
 const { asyncHandler, validateQrCodeParam } = require("../middleware/validation");
+const { requireManagerToken } = require("../middleware/jwt-auth");
 
 const router = express.Router();
 
@@ -26,28 +27,28 @@ router.setBroadcast = setBroadcast;
  * pre-rendered SVG QR code images. The management dashboard uses this to
  * display and manage the table list.
  */
-router.get("/", asyncHandler(getTables));
+router.get("/", requireManagerToken, asyncHandler(getTables));
 
 /*
  * POST /tables
  * Creates a new table. Body must include table_number and qr_code.
  * The controller generates and caches the QR code SVG automatically.
  */
-router.post("/", asyncHandler(createTable));
+router.post("/", requireManagerToken, asyncHandler(createTable));
 
 /*
  * PUT /tables/:id
  * Updates an existing table's number or QR code. The SVG cache is invalidated
  * automatically when the ordering URL changes.
  */
-router.put("/:id", asyncHandler(updateTable));
+router.put("/:id", requireManagerToken, asyncHandler(updateTable));
 
 /*
  * DELETE /tables/:id
  * Removes a table from the database. The controller logs this action in
  * grand_archive_logs before deleting.
  */
-router.delete("/:id", asyncHandler(deleteTable));
+router.delete("/:id", requireManagerToken, asyncHandler(deleteTable));
 
 /*
  * GET /tables/qr/:qrCode
