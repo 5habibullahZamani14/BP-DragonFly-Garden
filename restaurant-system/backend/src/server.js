@@ -52,6 +52,40 @@ const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
 const { executeNightlyCloudBackup, ensureCloudBackupUpToDate } = require("./services/cloudBackupService");
 const { compressImagesInDirectory } = require("./utils/imageCompressor");
+const db = require("./database/db");
+
+const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
+const normalizeUrl = (value) => {
+  if (!value || typeof value !== "string") return DEFAULT_CAPTIVE_PORTAL_TARGET;
+  const trimmed = value.trim();
+  if (!trimmed) return DEFAULT_CAPTIVE_PORTAL_TARGET;
+  return trimmed.replace(/\/+$/, "") + "/";
+};
+
+const getRestaurantSetting = (key) =>
+  new Promise((resolve, reject) => {
+    db.get("SELECT value FROM restaurant_settings WHERE key = ?", [key], (err, row) => {
+      if (err) return reject(err);
+      resolve(row ? row.value : null);
+    });
+  });
+
+const resolveCaptivePortalTarget = async () => {
+  if (process.env.CAPTIVE_PORTAL_TARGET) {
+    return normalizeUrl(process.env.CAPTIVE_PORTAL_TARGET);
+  }
+
+  try {
+    const rawValue = await getRestaurantSetting("captive_portal_target");
+    if (rawValue) {
+      return normalizeUrl(rawValue);
+    }
+  } catch (err) {
+    console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
+  }
+
+  return DEFAULT_CAPTIVE_PORTAL_TARGET;
+};
 
 /*
  * I create the Express app and then wrap it in a plain Node.js HTTP server
@@ -297,14 +331,17 @@ app.get('/ready', async (req, res) => {
 });
 
 /* Captive Portal Routes for Apple and Android */
-app.get("/hotspot-detect.html", (req, res) => {
-  res.redirect("http://dragonfly.local/"); 
+app.get("/hotspot-detect.html", async (req, res) => {
+  const target = await resolveCaptivePortalTarget();
+  res.redirect(target);
 });
-app.get("/generate_204", (req, res) => {
-  res.status(302).redirect("http://dragonfly.local/");
+app.get("/generate_204", async (req, res) => {
+  const target = await resolveCaptivePortalTarget();
+  res.status(302).redirect(target);
 });
-app.get("/gen_204", (req, res) => {
-  res.status(302).redirect("http://dragonfly.local/");
+app.get("/gen_204", async (req, res) => {
+  const target = await resolveCaptivePortalTarget();
+  res.status(302).redirect(target);
 });
 
 /* Global error handlers — these must be registered last. */

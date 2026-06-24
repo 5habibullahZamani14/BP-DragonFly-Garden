@@ -130,6 +130,9 @@ On the Pi, make sure backend config allows the local hotspot origin:
 - `HOST=0.0.0.0`
 - `PORT=5000`
 - `CORS_ALLOWED_ORIGINS=http://10.42.0.1:5000`
+- `CAPTIVE_PORTAL_TARGET=http://10.42.0.1:5000/`
+
+If `CAPTIVE_PORTAL_TARGET` is set in the backend environment, it will take precedence over the runtime value stored in `restaurant_settings`.
 
 If you want development access from the Vite dev server as well, you can include:
 

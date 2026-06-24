@@ -111,8 +111,10 @@ const initializeDatabase = async () => {
       is_available INTEGER NOT NULL DEFAULT 1,
       image_url TEXT,
       pattern_id INTEGER,
+      repo_image_id INTEGER,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
-      FOREIGN KEY (pattern_id) REFERENCES patterns(id) ON DELETE SET NULL
+      FOREIGN KEY (pattern_id) REFERENCES patterns(id) ON DELETE SET NULL,
+      FOREIGN KEY (repo_image_id) REFERENCES repo_images(id) ON DELETE SET NULL
     )
   `);
 
@@ -130,6 +132,29 @@ const initializeDatabase = async () => {
       flip_vertical INTEGER NOT NULL DEFAULT 0,
       fade_direction TEXT NOT NULL DEFAULT 'none',
       fade_intensity REAL NOT NULL DEFAULT 0.5
+    )
+  `);
+
+  /* Repository sections allow managers to group reusable menu images. */
+  await run(`
+    CREATE TABLE IF NOT EXISTS image_repository_sections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      max_bytes INTEGER NOT NULL DEFAULT 102400,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS repo_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      section_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (section_id) REFERENCES image_repository_sections(id) ON DELETE CASCADE
     )
   `);
 
@@ -465,6 +490,27 @@ const initializeDatabase = async () => {
   await ensureColumn("patterns", "flip_vertical", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("patterns", "fade_direction", "TEXT NOT NULL DEFAULT 'none'");
   await ensureColumn("patterns", "fade_intensity", "REAL NOT NULL DEFAULT 0.5");
+  await ensureColumn("menu_items", "repo_image_id", "INTEGER");
+  await run(`
+    CREATE TABLE IF NOT EXISTS image_repository_sections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      max_bytes INTEGER NOT NULL DEFAULT 102400,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS repo_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      section_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (section_id) REFERENCES image_repository_sections(id) ON DELETE CASCADE
+    )
+  `);
 
   await run(`
     CREATE TABLE IF NOT EXISTS patterns (
@@ -643,6 +689,7 @@ const initializeDatabase = async () => {
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('sst_rate', '0.06')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_enabled', 'true')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_rate', '0.10')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('captive_portal_target', 'http://10.42.0.1:5000/')`);
 
   console.log("Database schema ready");
 };

@@ -34,6 +34,9 @@ export const SettingsTab = () => {
   const [kitchenPasscode, setKitchenPasscode] = useState("");
   const [passcodeSaved, setPasscodeSaved] = useState(false);
   const [showPasscode, setShowPasscode] = useState(false);
+  const [captivePortalTarget, setCaptivePortalTarget] = useState("http://10.42.0.1:5000/");
+  const [captivePortalSaving, setCaptivePortalSaving] = useState(false);
+  const [captivePortalSaved, setCaptivePortalSaved] = useState(false);
 
   const [profile, setProfile] = useState({ name: "", id: "", email: "", phone: "" });
   const [newPassword, setNewPassword] = useState("");
@@ -87,6 +90,7 @@ export const SettingsTab = () => {
       data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
       if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
+      if (data?.captive_portal_target) setCaptivePortalTarget(data.captive_portal_target);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
       // Load tax settings
       setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
@@ -193,6 +197,20 @@ export const SettingsTab = () => {
     await updateSetting("kitchen_passcode", kitchenPasscode.trim());
     setPasscodeSaved(true);
     setTimeout(() => setPasscodeSaved(false), 2500);
+  };
+
+  const saveCaptivePortalTarget = async () => {
+    if (!captivePortalTarget.trim()) return;
+    setCaptivePortalSaving(true);
+    try {
+      await updateSetting("captive_portal_target", captivePortalTarget.trim());
+      setCaptivePortalSaved(true);
+      setTimeout(() => setCaptivePortalSaved(false), 2500);
+    } catch (e) {
+      console.error("Failed to save captive portal target", e);
+    } finally {
+      setCaptivePortalSaving(false);
+    }
   };
 
   const saveProfile = async () => {
@@ -500,6 +518,35 @@ export const SettingsTab = () => {
             </div>
             <Button onClick={savePasscode} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
               {passcodeSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.updatePasscode")}
+            </Button>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="captive" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg">Captive Portal Redirect</h3>
+            <p className="text-sm text-muted-foreground font-normal">Configure the local hotspot landing URL for captive portal detection traffic.</p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="captive-portal-target">Landing URL</Label>
+              <Input
+                id="captive-portal-target"
+                type="url"
+                value={captivePortalTarget}
+                onChange={(e) => setCaptivePortalTarget(e.target.value)}
+                placeholder="http://10.42.0.1:5000/"
+              />
+              <p className="text-xs text-muted-foreground">Use the hotspot gateway address devices can reach after connecting. Defaults to the Raspberry Pi hotspot address.</p>
+            </div>
+            <Button onClick={saveCaptivePortalTarget} disabled={captivePortalSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
+              {captivePortalSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                : captivePortalSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
+                : "Save Captive Portal Target"}
             </Button>
           </div>
         </AccordionContent>

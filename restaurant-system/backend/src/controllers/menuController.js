@@ -86,6 +86,8 @@ const getMenu = async (req, res) => {
       menu_items.is_available,
       menu_items.image_url,
       menu_items.pattern_id,
+      menu_items.repo_image_id,
+      repo_images.image_url AS repo_image_url,
       patterns.image_url AS pattern_image_url,
       patterns.name AS pattern_name,
       menu_items.is_popular,
@@ -103,6 +105,7 @@ const getMenu = async (req, res) => {
       categories.name as category_name
     FROM menu_items
     LEFT JOIN patterns ON menu_items.pattern_id = patterns.id
+    LEFT JOIN repo_images ON menu_items.repo_image_id = repo_images.id
     INNER JOIN categories ON menu_items.category_id = categories.id
     ${showAll ? "" : "WHERE menu_items.is_available = 1"}
     ORDER BY categories.display_order ASC, menu_items.name ASC
@@ -338,12 +341,12 @@ const getRecommendations = async (req, res) => {
 };
 
 const createMenuItem = async (req, res) => {
-  const { name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
   try {
     const result = await run(
-      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description || '', price, category_id, image_url || '', pattern_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal']
+      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description || '', price, category_id, image_url || '', pattern_id || null, repo_image_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal']
     );
     
     // Emit WebSocket event for menu update
@@ -360,13 +363,13 @@ const createMenuItem = async (req, res) => {
 
 const updateMenuItem = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, image_url, pattern_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
   try {
     await run(
       `UPDATE menu_items 
-       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size)
+       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), repo_image_id = COALESCE(?, repo_image_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size)
        WHERE id = ?`,
-      [name, description, price, category_id, image_url, pattern_id !== undefined ? pattern_id : null, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, card_size, id]
+      [name, description, price, category_id, image_url, pattern_id !== undefined ? pattern_id : null, repo_image_id !== undefined ? repo_image_id : null, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, card_size, id]
     );
     
     // Emit WebSocket event for menu update
@@ -423,15 +426,34 @@ const uploadMenuItemImage = async (req, res) => {
   }
 
   try {
+    const sections = await all(`SELECT id, max_bytes FROM image_repository_sections ORDER BY max_bytes DESC`);
+    if (sections.length === 0) {
+      return res.status(400).json({ success: false, message: "No repository sections exist. Create a repository section before uploading item images." });
+    }
+
+    const sectionId = sections[0].id;
+    const imageUrl = `/menu-images/${req.file.filename}`;
+    const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+    await compressImage(filePath, Number(sections[0].max_bytes) || 102400);
+
+    const stats = await fs.promises.stat(filePath);
+    if (stats.size > Number(sections[0].max_bytes)) {
+      await fs.promises.unlink(filePath).catch(() => {});
+      return res.status(413).json({ error: `Image exceeds maximum allowed size of ${sections[0].max_bytes} bytes even after compression.` });
+    }
+
+    const repoName = req.body.name ? String(req.body.name).trim() : `item-image-${Date.now()}`;
+    const result = await run(
+      `INSERT INTO repo_images (section_id, name, image_url, size_bytes) VALUES (?, ?, ?, ?)`,
+      [sectionId, repoName, imageUrl, stats.size]
+    );
+
     const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
     const oldImageUrl = existing.length > 0 ? existing[0].image_url : null;
 
-      const newImageUrl = `/menu-images/${req.file.filename}`;
-    const filePath = path.join(__dirname, "../../../../frontend/public", newImageUrl);
-    await compressImage(filePath);
-    await run(`UPDATE menu_items SET image_url = ? WHERE id = ?`, [newImageUrl, id]);
+    await run(`UPDATE menu_items SET repo_image_id = ?, image_url = NULL WHERE id = ?`, [result.lastID, id]);
 
-    if (oldImageUrl && oldImageUrl !== newImageUrl) {
+    if (oldImageUrl && oldImageUrl !== imageUrl) {
       await deleteMenuImageIfUnused(oldImageUrl, id);
     }
 
@@ -440,7 +462,7 @@ const uploadMenuItemImage = async (req, res) => {
       broadcast({ type: "MENU_UPDATE", payload: { id } });
     }
 
-    res.json({ success: true, image_url: newImageUrl });
+    res.json({ success: true, image_url: imageUrl, repo_image_id: result.lastID });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -555,6 +577,202 @@ const deletePattern = async (req, res) => {
     await run(`DELETE FROM patterns WHERE id = ?`, [id]);
     if (oldImageUrl) {
       await deletePatternImageIfUnused(oldImageUrl, id);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteRepoImageFileIfUnused = async (imageUrl, excludeRepoImageId = null) => {
+  if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
+
+  const params = [imageUrl];
+  let sql = `SELECT id FROM repo_images WHERE image_url = ?`;
+  if (excludeRepoImageId != null) {
+    sql += ` AND id != ?`;
+    params.push(excludeRepoImageId);
+  }
+
+  const stillUsed = await all(sql, params);
+  if (stillUsed.length > 0) return;
+
+  const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
+      console.error("Error deleting repo image:", e);
+    }
+  }
+};
+
+const getRepoSections = async (req, res) => {
+  try {
+    const sections = await all(`SELECT id, name, display_order, max_bytes, created_at FROM image_repository_sections ORDER BY display_order ASC`);
+    if (sections.length === 0) {
+      return res.json([]);
+    }
+
+    const sectionIds = sections.map(section => section.id);
+    const placeholders = sectionIds.map(() => '?').join(',');
+    const repoImages = await all(
+      `SELECT id, section_id, name, image_url, size_bytes, created_at FROM repo_images WHERE section_id IN (${placeholders}) ORDER BY created_at DESC`,
+      sectionIds
+    );
+
+    const sectionsWithImages = sections.map(section => ({
+      ...section,
+      images: repoImages.filter(image => image.section_id === section.id)
+    }));
+
+    res.json(sectionsWithImages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const createRepoSection = async (req, res) => {
+  const { name, max_bytes } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Section name is required." });
+  }
+  const normalizedMaxBytes = Number(max_bytes) || 102400;
+  if (normalizedMaxBytes <= 0) {
+    return res.status(400).json({ error: "max_bytes must be greater than zero." });
+  }
+
+  try {
+    const maxRow = await all(`SELECT MAX(display_order) as maxOrder FROM image_repository_sections`);
+    const nextOrder = (maxRow[0]?.maxOrder ?? 0) + 1;
+    const result = await run(
+      `INSERT INTO image_repository_sections (name, display_order, max_bytes) VALUES (?, ?, ?)`,
+      [name.trim(), nextOrder, normalizedMaxBytes]
+    );
+    res.json({ id: result.lastID, name: name.trim(), display_order: nextOrder, max_bytes: normalizedMaxBytes, created_at: new Date().toISOString(), images: [] });
+  } catch (error) {
+    if (error.message.includes("UNIQUE")) {
+      return res.status(409).json({ error: "A repository section with that name already exists." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateRepoSection = async (req, res) => {
+  const { id } = req.params;
+  const { name, display_order, max_bytes } = req.body;
+
+  try {
+    if (name !== undefined) {
+      await run(`UPDATE image_repository_sections SET name = ? WHERE id = ?`, [name.trim(), id]);
+    }
+    if (display_order !== undefined) {
+      await run(`UPDATE image_repository_sections SET display_order = ? WHERE id = ?`, [display_order, id]);
+    }
+    if (max_bytes !== undefined) {
+      const normalized = Number(max_bytes);
+      if (Number.isNaN(normalized) || normalized <= 0) {
+        return res.status(400).json({ error: "max_bytes must be a positive number." });
+      }
+      await run(`UPDATE image_repository_sections SET max_bytes = ? WHERE id = ?`, [normalized, id]);
+    }
+
+    const updated = await all(`SELECT id, name, display_order, max_bytes, created_at FROM image_repository_sections WHERE id = ?`, [id]);
+    res.json({ success: true, section: updated[0] });
+  } catch (error) {
+    if (error.message.includes("UNIQUE")) {
+      return res.status(409).json({ error: "A repository section with that name already exists." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteRepoSection = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const images = await all(`SELECT id, image_url FROM repo_images WHERE section_id = ?`, [id]);
+    await run(`UPDATE menu_items SET repo_image_id = NULL WHERE repo_image_id IN (SELECT id FROM repo_images WHERE section_id = ?)`, [id]);
+    await run(`DELETE FROM repo_images WHERE section_id = ?`, [id]);
+    await run(`DELETE FROM image_repository_sections WHERE id = ?`, [id]);
+
+    for (const image of images) {
+      await deleteRepoImageFileIfUnused(image.image_url, image.id);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const uploadRepoImage = async (req, res) => {
+  const { id: sectionId } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No repository image provided." });
+  }
+
+  try {
+    const sectionRows = await all(`SELECT max_bytes FROM image_repository_sections WHERE id = ?`, [sectionId]);
+    if (sectionRows.length === 0) {
+      return res.status(404).json({ error: "Repository section not found." });
+    }
+    const maxBytes = Number(sectionRows[0].max_bytes) || 102400;
+
+    const imageUrl = `/menu-images/${req.file.filename}`;
+    const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+    await compressImage(filePath, maxBytes);
+
+    const stats = await fs.promises.stat(filePath);
+    if (stats.size > maxBytes) {
+      await fs.promises.unlink(filePath).catch(() => {});
+      return res.status(413).json({ error: `Image exceeds maximum allowed size of ${maxBytes} bytes even after compression.` });
+    }
+
+    const result = await run(
+      `INSERT INTO repo_images (section_id, name, image_url, size_bytes) VALUES (?, ?, ?, ?)`,
+      [sectionId, req.body.name ? String(req.body.name).trim() : `repo-image-${Date.now()}`, imageUrl, stats.size]
+    );
+
+    const repoImage = {
+      id: result.lastID,
+      section_id: Number(sectionId),
+      name: req.body.name ? String(req.body.name).trim() : `repo-image-${Date.now()}`,
+      image_url: imageUrl,
+      size_bytes: stats.size,
+      created_at: new Date().toISOString()
+    };
+
+    res.json({ success: true, repo_image: repoImage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteRepoImage = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await all(`SELECT image_url FROM repo_images WHERE id = ?`, [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: "Repository image not found." });
+    }
+    const imageUrl = existing[0].image_url;
+    await run(`UPDATE menu_items SET repo_image_id = NULL WHERE repo_image_id = ?`, [id]);
+    await run(`DELETE FROM repo_images WHERE id = ?`, [id]);
+    await deleteRepoImageFileIfUnused(imageUrl, Number(id));
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const assignMenuItemRepoImage = async (req, res) => {
+  const { id } = req.params;
+  const { repo_image_id } = req.body;
+  try {
+    await run(`UPDATE menu_items SET repo_image_id = ? WHERE id = ?`, [repo_image_id || null, id]);
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { id } });
     }
     res.json({ success: true });
   } catch (error) {
@@ -1050,6 +1268,8 @@ module.exports = {
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
   createPattern, getPatterns, updatePattern, deletePattern,
   uploadMenuItemPatternImage, updateMenuItemPattern,
+  getRepoSections, createRepoSection, updateRepoSection, deleteRepoSection,
+  uploadRepoImage, deleteRepoImage, assignMenuItemRepoImage,
   setBroadcast,
   createCategory, updateCategory, deleteCategory, reorderCategories,
   // Global modifier library

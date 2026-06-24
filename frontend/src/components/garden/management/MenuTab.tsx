@@ -22,12 +22,13 @@ import {
   fetchMenu, fetchCategories,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
   fetchPatterns, uploadMenuItemPatternImage,
+  fetchRepoSections, createRepoSection, updateRepoSection, deleteRepoSection, uploadRepoImage, deleteRepoImage, assignMenuItemRepoImage,
   createCategory, updateCategory, deleteCategory, reorderCategories,
   fetchAllModifierGroups, fetchItemModifiers,
   createGlobalModifierGroup, updateGlobalModifierGroup, deleteGlobalModifierGroup,
   createGlobalModifierOption, updateGlobalModifierOption, deleteGlobalModifierOption,
   assignModifierToItem, unassignModifierFromItem, setModifierDefault,
-  type MenuItem, type Category, type Pattern, type GlobalModifierGroup, type GlobalModifierOption,
+  type MenuItem, type Category, type Pattern, type RepoSection, type GlobalModifierGroup, type GlobalModifierOption,
 } from "@/lib/api";
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
@@ -563,20 +564,33 @@ export function MenuTab() {
   const cropperRef = useRef<ReactCropperElement>(null);
   const patternInputRef = useRef<HTMLInputElement | null>(null);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
-  const [showPatternRepository, setShowPatternRepository] = useState(false);
+  const [repoSections, setRepoSections] = useState<RepoSection[]>([]);
+  const [showRepoRepository, setShowRepoRepository] = useState(false);
+  const [repoRepositoryTab, setRepoRepositoryTab] = useState<"pattern" | "image">("pattern");
+  const [newRepoSectionName, setNewRepoSectionName] = useState("");
+  const [newRepoSectionMaxBytes, setNewRepoSectionMaxBytes] = useState("100");
+  const [repoSectionLoading, setRepoSectionLoading] = useState(false);
+  const [repoSectionSaveLoading, setRepoSectionSaveLoading] = useState(false);
+  const [repoSectionDeleteLoading, setRepoSectionDeleteLoading] = useState<number | null>(null);
+  const [repoImageUploadingSection, setRepoImageUploadingSection] = useState<number | null>(null);
+  const [repoImageDeletingId, setRepoImageDeletingId] = useState<number | null>(null);
+  const [repoImageBulkDeleting, setRepoImageBulkDeleting] = useState(false);
+  const [selectedRepoImageIds, setSelectedRepoImageIds] = useState<Set<number>>(new Set());
+  const [editingRepoSectionId, setEditingRepoSectionId] = useState<number | null>(null);
+  const [editingRepoSectionName, setEditingRepoSectionName] = useState("");
+  const [editingRepoSectionMaxBytes, setEditingRepoSectionMaxBytes] = useState("100");
 
   const selectedPattern = patterns.find(p => p.id === editingItem?.pattern_id);
   const selectedPatternImage = editingItem?.pattern_image_url
     || selectedPattern?.image_url
     || editingItem?.default_pattern_image_url || null;
-
-  // ── Sections state
-  const [openSection, setOpenSection] = useState<number | null>(null);
+  const selectedRepoImage = repoSections.flatMap(section => section.images || []).find(image => image.id === editingItem?.repo_image_id) || null;
   const [newSectionName, setNewSectionName] = useState("");
   const [addingSection, setAddingSection] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [openSection, setOpenSection] = useState<number | null>(null);
   const [assignDraft, setAssignDraft] = useState<Record<number, Set<number>>>({});
   const [assignSaving, setAssignSaving] = useState<number | null>(null);
 
@@ -586,7 +600,7 @@ export function MenuTab() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  useEffect(() => { loadData(); loadPatterns(); }, []);
+  useEffect(() => { loadData(); loadPatterns(); loadRepoSections(); }, []);
   useWebSocket(["MENU_UPDATE"], () => { loadData(); });
 
   const loadPatterns = async () => {
@@ -595,6 +609,155 @@ export function MenuTab() {
       setPatterns(data || []);
     } catch {
       toast.error(t("m.loadPatternsFailed"));
+    }
+  };
+
+  const loadRepoSections = async () => {
+    try {
+      const data = await fetchRepoSections();
+      setRepoSections(data || []);
+    } catch {
+      toast.error("Failed to load repository sections");
+    }
+  };
+
+  const handleCreateRepoSection = async () => {
+    if (!newRepoSectionName.trim()) return;
+    setRepoSectionLoading(true);
+    try {
+      await createRepoSection(newRepoSectionName.trim(), (Number(newRepoSectionMaxBytes) || 100) * 1024);
+      setNewRepoSectionName("");
+      setNewRepoSectionMaxBytes("100");
+      toast.success("Repository section created");
+      loadRepoSections();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to create repository section";
+      toast.error(msg.includes("409") ? "A repository section with that name already exists" : msg);
+    } finally {
+      setRepoSectionLoading(false);
+    }
+  };
+
+  const handleUploadRepoImage = async (sectionId: number, file: File | null) => {
+    if (!file) return;
+    setRepoImageUploadingSection(sectionId);
+    try {
+      await uploadRepoImage(sectionId, file, file.name);
+      toast.success("Repository image uploaded");
+      loadRepoSections();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to upload repository image";
+      toast.error(msg.includes("413") ? "Image exceeds section size limit" : msg);
+    } finally {
+      setRepoImageUploadingSection(null);
+    }
+  };
+
+  const startEditRepoSection = (section: RepoSection) => {
+    setEditingRepoSectionId(section.id);
+    setEditingRepoSectionName(section.name);
+    setEditingRepoSectionMaxBytes(String(Math.round(section.max_bytes / 1024)));
+  };
+
+  const cancelEditRepoSection = () => {
+    setEditingRepoSectionId(null);
+    setEditingRepoSectionName("");
+    setEditingRepoSectionMaxBytes("102400");
+  };
+
+  const handleSaveRepoSection = async (sectionId: number) => {
+    if (!editingRepoSectionName.trim()) return;
+    setRepoSectionSaveLoading(true);
+    try {
+      await updateRepoSection(sectionId, {
+        name: editingRepoSectionName.trim(),
+        max_bytes: (Number(editingRepoSectionMaxBytes) || 100) * 1024,
+      });
+      toast.success("Repository section updated");
+      cancelEditRepoSection();
+      loadRepoSections();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to update repository section";
+      toast.error(msg.includes("409") ? "A repository section with that name already exists" : msg);
+    } finally {
+      setRepoSectionSaveLoading(false);
+    }
+  };
+
+  const handleDeleteRepoSection = async (sectionId: number) => {
+    if (!confirm("Delete this repository section and all its images?")) return;
+    setRepoSectionDeleteLoading(sectionId);
+    try {
+      await deleteRepoSection(sectionId);
+      toast.success("Repository section deleted");
+      loadRepoSections();
+    } catch {
+      toast.error("Failed to delete repository section");
+    } finally {
+      setRepoSectionDeleteLoading(null);
+    }
+  };
+
+  const handleDeleteRepoImage = async (imageId: number) => {
+    if (!confirm("Delete this repository image?")) return;
+    setRepoImageDeletingId(imageId);
+    try {
+      await deleteRepoImage(imageId);
+      setSelectedRepoImageIds(prev => {
+        const next = new Set(prev);
+        next.delete(imageId);
+        return next;
+      });
+      toast.success("Repository image deleted");
+      loadRepoSections();
+    } catch {
+      toast.error("Failed to delete repository image");
+    } finally {
+      setRepoImageDeletingId(null);
+    }
+  };
+
+  const toggleSelectRepoImage = (imageId: number) => {
+    setSelectedRepoImageIds(prev => {
+      const next = new Set(prev);
+      if (next.has(imageId)) next.delete(imageId);
+      else next.add(imageId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllRepoImages = (section: RepoSection) => {
+    const sectionIds = section.images.map(image => image.id);
+    const allSelected = sectionIds.every(id => selectedRepoImageIds.has(id));
+    setSelectedRepoImageIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        sectionIds.forEach(id => next.delete(id));
+      } else {
+        sectionIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteSelectedRepoImages = async (section: RepoSection) => {
+    const selected = section.images.filter(image => selectedRepoImageIds.has(image.id));
+    if (selected.length === 0) return;
+    if (!confirm(`Delete ${selected.length} selected repository image${selected.length === 1 ? "" : "s"} from '${section.name}'? This cannot be undone.`)) return;
+    setRepoImageBulkDeleting(true);
+    try {
+      await Promise.all(selected.map(image => deleteRepoImage(image.id)));
+      setSelectedRepoImageIds(prev => {
+        const next = new Set(prev);
+        selected.forEach(image => next.delete(image.id));
+        return next;
+      });
+      toast.success(`Deleted ${selected.length} selected repository image${selected.length === 1 ? "" : "s"}`);
+      loadRepoSections();
+    } catch {
+      toast.error("Failed to delete selected repository images");
+    } finally {
+      setRepoImageBulkDeleting(false);
     }
   };
 
@@ -776,24 +939,180 @@ export function MenuTab() {
   return (
     <div className="space-y-8 animate-fade-up" dir={i18n.dir()}>
 
-      {/* ══ PATTERN REPOSITORY ════════════════════════════════════════════════════════ */}
+      {/* ══ REPO REPOSITORY ═══════════════════════════════════════════════════════ */}
       <div className="border rounded-xl bg-card shadow-sm overflow-hidden">
         <div
           className="px-6 py-4 border-b bg-muted/30 flex items-center justify-between gap-4 cursor-pointer hover:bg-muted/40 transition-colors"
-          onClick={() => setShowPatternRepository(!showPatternRepository)}
+          onClick={() => setShowRepoRepository(!showRepoRepository)}
         >
           <div className="flex items-center gap-2">
-            <ImageIcon className="h-5 w-5 text-primary" />
+            <Layers className="h-5 w-5 text-primary" />
             <div>
-              <h3 className="font-semibold text-lg leading-none">Pattern Repository</h3>
-              <p className="text-sm text-muted-foreground mt-1">Upload, edit, and manage pattern overlays for menu cards</p>
+              <h3 className="font-semibold text-lg leading-none">Repo</h3>
+              <p className="text-sm text-muted-foreground mt-1">Manage both Pattern and Image repositories in one place</p>
             </div>
           </div>
-          {showPatternRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {showRepoRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
-        {showPatternRepository && (
-          <div className="p-6 max-h-[400px] overflow-y-auto">
-            <PatternRepositoryTab />
+
+        {showRepoRepository && (
+          <div className="p-6 space-y-4">
+            <div className="flex flex-wrap gap-2 border-b border-border pb-4">
+              <Button
+                variant={repoRepositoryTab === "pattern" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setRepoRepositoryTab("pattern")}
+              >
+                Pattern repository
+              </Button>
+              <Button
+                variant={repoRepositoryTab === "image" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setRepoRepositoryTab("image")}
+              >
+                Image repository
+              </Button>
+            </div>
+
+            {repoRepositoryTab === "pattern" ? (
+              <div className="max-h-[400px] overflow-y-auto">
+                <PatternRepositoryTab />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end">
+                  <div className="grid gap-2">
+                    <Label>Section name</Label>
+                    <Input
+                      value={newRepoSectionName}
+                      onChange={e => setNewRepoSectionName(e.target.value)}
+                      placeholder="New repository section name…"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Max size (KB)</Label>
+                    <Input
+                      type="number"
+                      value={newRepoSectionMaxBytes}
+                      onChange={e => setNewRepoSectionMaxBytes(e.target.value)}
+                      placeholder="100"
+                    />
+                  </div>
+                  <Button size="sm" onClick={handleCreateRepoSection} disabled={!newRepoSectionName.trim() || repoSectionLoading}>
+                    {repoSectionLoading ? "Creating…" : "Create section"}
+                  </Button>
+                </div>
+
+                {repoSections.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                    No repository sections have been created yet. Use the form above to add one.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {repoSections.map(section => (
+                      <div key={section.id} className="rounded-2xl border p-4 bg-slate-50">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold">{section.name}</p>
+                            <p className="text-xs text-muted-foreground">Max {(section.max_bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KB · {section.images.length} image{section.images.length === 1 ? "" : "s"}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => startEditRepoSection(section)}>
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleDeleteRepoSection(section.id)} disabled={repoSectionDeleteLoading === section.id}>
+                              {repoSectionDeleteLoading === section.id ? "Deleting…" : "Delete section"}
+                            </Button>
+                            <label className="inline-flex">
+                              <input type="file" accept="image/*" className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0] ?? null;
+                                  handleUploadRepoImage(section.id, file);
+                                  if (e.target) e.target.value = "";
+                                }} />
+                              <Button size="sm" variant="outline" disabled={repoImageUploadingSection === section.id}>
+                                {repoImageUploadingSection === section.id ? "Uploading…" : "Upload image"}
+                              </Button>
+                            </label>
+                          </div>
+                        </div>
+
+                        {editingRepoSectionId === section.id ? (
+                          <div className="mt-4 rounded-xl border border-border bg-white p-4 space-y-3">
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="grid gap-2">
+                                <Label>Section name</Label>
+                                <Input value={editingRepoSectionName}
+                                  onChange={e => setEditingRepoSectionName(e.target.value)}
+                                  placeholder="Section name" />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>Max size (KB)</Label>
+                                <Input type="number" value={editingRepoSectionMaxBytes}
+                                  onChange={e => setEditingRepoSectionMaxBytes(e.target.value)}
+                                  placeholder="100" />
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" onClick={() => handleSaveRepoSection(section.id)} disabled={repoSectionSaveLoading}>
+                                {repoSectionSaveLoading ? "Saving…" : "Save changes"}
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={cancelEditRepoSection}>Cancel</Button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {section.images.length > 0 ? (
+                          <>
+                            <div className="flex flex-wrap items-center justify-between gap-2 mt-4">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button size="sm" variant="outline" onClick={() => toggleSelectAllRepoImages(section)}>
+                                  {section.images.every(image => selectedRepoImageIds.has(image.id)) ? "Clear all" : `Select all (${section.images.length})`}
+                                </Button>
+                                <span className="text-xs text-muted-foreground">{section.images.filter(image => selectedRepoImageIds.has(image.id)).length} selected</span>
+                              </div>
+                              <Button size="sm" variant="destructive"
+                                disabled={section.images.filter(image => selectedRepoImageIds.has(image.id)).length === 0 || repoImageBulkDeleting}
+                                onClick={() => handleDeleteSelectedRepoImages(section)}>
+                                {repoImageBulkDeleting ? "Deleting…" : "Delete selected"}
+                              </Button>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                              {section.images.map(image => (
+                                <div key={image.id} className={`relative overflow-hidden rounded-xl border bg-white shadow-sm ${selectedRepoImageIds.has(image.id) ? "ring-2 ring-primary" : ""}`}>
+                                  <label className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-700 shadow-sm">
+                                    <input type="checkbox" checked={selectedRepoImageIds.has(image.id)}
+                                      onChange={() => toggleSelectRepoImage(image.id)}
+                                      className="h-4 w-4 rounded border"
+                                    />
+                                    <span>Select</span>
+                                  </label>
+                                  <button
+                                    className="absolute right-2 top-2 z-10 rounded-full bg-white/90 p-1 text-destructive shadow-sm hover:bg-destructive/10"
+                                    onClick={() => handleDeleteRepoImage(image.id)}
+                                    disabled={repoImageDeletingId === image.id}
+                                    type="button"
+                                  >
+                                    {repoImageDeletingId === image.id ? "…" : <X className="h-3 w-3" />}
+                                  </button>
+                                  <img src={image.image_url} alt={image.name} className="h-24 w-full object-cover" />
+                                  <div className="p-2 text-xs">
+                                    <p className="font-medium truncate">{image.name}</p>
+                                    <p className="text-muted-foreground">{(image.size_bytes / 1024).toFixed(1)} KB</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-3">No images yet. Upload one to make it available for menu items.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -911,8 +1230,8 @@ export function MenuTab() {
                 {item.card_size === 'extra_large' ? (
                   <div className="flex flex-col sm:flex-row relative z-10">
                     <div className="w-full sm:w-1/2 h-64 bg-gray-100 relative overflow-hidden">
-                      {item.image_url
-                        ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      { (item.image_url || item.repo_image_url)
+                        ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-12 w-12 opacity-50" /></div>}
                     </div>
                     <CardContent className="p-6 w-full sm:w-1/2">
@@ -938,8 +1257,8 @@ export function MenuTab() {
                 ) : (
                   <>
                     <div className={`${item.card_size === 'large' ? 'h-64' : 'h-32'} bg-gray-100 relative overflow-hidden relative z-10`}>
-                      {item.image_url
-                        ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      { (item.image_url || item.repo_image_url)
+                        ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
                       <div className="absolute top-2 end-2 flex gap-1">
                         {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
@@ -1179,6 +1498,37 @@ export function MenuTab() {
                         <p className="text-xs text-muted-foreground">No pattern selected. If a default pattern is configured, it will be used on the card.</p>
                       )}
                     </div>
+                  </div>
+                  <div className="grid gap-2 pt-1">
+                    <Label>Repository image</Label>
+                    <Select value={editingItem?.repo_image_id ? String(editingItem.repo_image_id) : "none"}
+                      onValueChange={value => setEditingItem(p => ({ ...p, repo_image_id: value === "none" ? null : parseInt(value, 10) }))}>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {repoSections.flatMap(section => section.images.map(image => (
+                          <SelectItem key={image.id} value={String(image.id)}>{`${section.name}: ${image.name}`}</SelectItem>
+                        )))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingItem(p => ({ ...p, repo_image_id: null }))}>
+                        Clear
+                      </Button>
+                    </div>
+                    {selectedRepoImage ? (
+                      <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">
+                        <div className="h-20 w-20 overflow-hidden rounded-xl bg-white shadow-sm">
+                          <img src={selectedRepoImage.image_url} alt="Selected repository image" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">{selectedRepoImage.name}</p>
+                          <p className="text-xs text-muted-foreground">Section: {repoSections.find(s => s.id === selectedRepoImage.section_id)?.name ?? "Unknown"}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No repository image selected. Choose one to reuse managed image assets.</p>
+                    )}
                   </div>
                   <div className="grid gap-2 pt-1">
                     <Label>Card size</Label>

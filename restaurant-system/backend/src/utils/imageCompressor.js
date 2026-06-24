@@ -45,7 +45,12 @@ const saveCompressionCache = async (directoryPath, cache) => {
   }
 };
 
-const compressImage = async (filePath) => {
+const MAX_IMAGE_BYTES = 100 * 1024;
+const MIN_QUALITY = 30;
+const QUALITY_STEP = 10;
+const MIN_WIDTH = 300;
+
+const compressImage = async (filePath, maxBytes = MAX_IMAGE_BYTES) => {
   if (!sharp) return;
   if (!isCompressibleImage(filePath)) return;
 
@@ -56,23 +61,47 @@ const compressImage = async (filePath) => {
   }
 
   const tempPath = `${filePath}.tmp`;
-  let pipeline = sharp(filePath)
-    .rotate()
-    .resize({ width: targetWidth, withoutEnlargement: true, fit: "inside" });
+  let width = targetWidth;
+  let quality = ext === ".webp" ? 55 : 60;
+  let buffer;
 
-  if (ext === ".png") {
-    pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true, quality: 60 });
-  } else if (ext === ".webp") {
-    pipeline = pipeline.webp({ quality: 55 });
-  } else {
-    pipeline = pipeline.jpeg({ quality: 60, mozjpeg: true });
+  while (true) {
+    let pipeline = sharp(filePath)
+      .rotate()
+      .resize({ width, withoutEnlargement: true, fit: "inside" });
+
+    if (ext === ".png") {
+      pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true, quality });
+    } else if (ext === ".webp") {
+      pipeline = pipeline.webp({ quality });
+    } else {
+      pipeline = pipeline.jpeg({ quality, mozjpeg: true });
+    }
+
+    buffer = await pipeline.toBuffer();
+    if (buffer.length <= maxBytes) {
+      break;
+    }
+
+    if (quality > MIN_QUALITY) {
+      quality = Math.max(MIN_QUALITY, quality - QUALITY_STEP);
+      continue;
+    }
+
+    if (width > MIN_WIDTH) {
+      width = Math.max(MIN_WIDTH, Math.floor(width * 0.9));
+      continue;
+    }
+
+    // Reached the minimum thresholds. Accept the best result so far.
+    break;
   }
 
-  await pipeline.toFile(tempPath);
+  await fs.promises.writeFile(tempPath, buffer);
   await fs.promises.rename(tempPath, filePath);
 };
 
-const compressImagesInDirectory = async (directoryPath) => {
+const compressImagesInDirectory = async (directoryPath, maxBytes = MAX_IMAGE_BYTES) => {
   if (!sharp) return;
   if (!fs.existsSync(directoryPath)) return;
 

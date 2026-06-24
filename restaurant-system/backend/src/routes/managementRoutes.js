@@ -156,6 +156,15 @@ router.put("/categories/reorder", reorderCategories);   // must be before /:id
 router.put("/categories/:id", updateCategory);
 router.delete("/categories/:id", deleteCategory);
 
+// ── Repository sections and reusable images ───────────────────────────────────
+router.get("/repo-sections", menuController.getRepoSections);
+router.post("/repo-sections", menuController.createRepoSection);
+router.put("/repo-sections/:id", menuController.updateRepoSection);
+router.delete("/repo-sections/:id", menuController.deleteRepoSection);
+router.post("/repo-sections/:id/images", upload.single("image"), menuController.uploadRepoImage);
+router.delete("/repo-images/:id", menuController.deleteRepoImage);
+router.put("/menu/:id/repo-image", menuController.assignMenuItemRepoImage);
+
 // ── Item Modifications / Variations ──────────────────────────────────────────
 // Routes ordered carefully: specific paths before parameterised ones.
 

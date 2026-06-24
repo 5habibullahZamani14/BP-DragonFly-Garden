@@ -292,6 +292,8 @@ export interface MenuItem {
   image_url: string | null;
   pattern_id?: number | null;
   pattern_image_url?: string | null;
+  repo_image_id?: number | null;
+  repo_image_url?: string | null;
   default_pattern_image_url?: string | null;
   is_available: boolean;
   is_popular: boolean;
@@ -312,6 +314,24 @@ export interface Pattern {
   flip_vertical?: number;
   fade_direction?: 'none' | 'right-to-left' | 'left-to-right' | 'top-to-bottom' | 'bottom-to-top';
   fade_intensity?: number;
+}
+
+export interface RepoImage {
+  id: number;
+  section_id: number;
+  name: string;
+  image_url: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface RepoSection {
+  id: number;
+  name: string;
+  display_order: number;
+  max_bytes: number;
+  created_at: string;
+  images: RepoImage[];
 }
 
 export interface Recommendation {
@@ -335,6 +355,7 @@ export type MenuItemPayload = {
   category_id: number;
   image_url?: string;
   pattern_id?: number | null;
+  repo_image_id?: number | null;
   is_available?: boolean;
   is_popular?: boolean;
   is_promo?: boolean;
@@ -362,7 +383,7 @@ export const deleteMenuItem = async (id: number) =>
 export const uploadMenuItemImage = async (id: number, file: Blob) => {
   const formData = new FormData();
   formData.append("image", file, "image.jpg");
-  return safeFetch<{ success: boolean; image_url: string }>(`/management/menu/${id}/image`, {
+  return safeFetch<{ success: boolean; image_url: string; repo_image_id: number }>(`/management/menu/${id}/image`, {
     method: "POST",
     body: formData,
   });
@@ -405,6 +426,49 @@ export const createPattern = async (file: Blob, name?: string) => {
 
 export const deletePattern = async (id: number) =>
   safeFetch<{ success: boolean }>(`/management/patterns/${id}`, { method: "DELETE" });
+
+export const fetchRepoSections = async (): Promise<RepoSection[]> =>
+  safeFetch<RepoSection[]>(`/management/repo-sections`);
+
+export const createRepoSection = async (name: string, maxBytes: number) =>
+  safeFetch<RepoSection>(`/management/repo-sections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, max_bytes: maxBytes }),
+  });
+
+export const updateRepoSection = async (id: number, data: { name?: string; max_bytes?: number }) =>
+  safeFetch<RepoSection>(`/management/repo-sections/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteRepoSection = async (id: number) =>
+  safeFetch<{ success: boolean }>(`/management/repo-sections/${id}`, {
+    method: "DELETE",
+  });
+
+export const uploadRepoImage = async (sectionId: number, file: Blob, name?: string) => {
+  const formData = new FormData();
+  formData.append("image", file, name || "repo-image.jpg");
+  return safeFetch<{ success: boolean; repo_image: RepoImage }>(`/management/repo-sections/${sectionId}/images`, {
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const deleteRepoImage = async (id: number) =>
+  safeFetch<{ success: boolean }>(`/management/repo-images/${id}`, {
+    method: "DELETE",
+  });
+
+export const assignMenuItemRepoImage = async (itemId: number, repoImageId: number | null) =>
+  safeFetch<{ success: boolean }>(`/management/menu/${itemId}/repo-image`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo_image_id: repoImageId }),
+  });
 
 export const updatePattern = async (id: number, data: Partial<Pattern>) =>
   safeFetch<{ success: boolean; pattern: Pattern }>(`/management/patterns/${id}`, {

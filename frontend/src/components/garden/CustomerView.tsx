@@ -42,6 +42,12 @@ import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
 import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   fetchMenu,
   fetchTable,
   fetchPublicSettings,
@@ -174,6 +180,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [optionSheetItem, setOptionSheetItem] = useState<CartSource | null>(null);
   // Tracks pending selections while sheet is open: groupId → Set of optionIds
   const [pendingSelections, setPendingSelections] = useState<Record<number, Set<number>>>({});
+  const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
 
 
   // Tax settings from backend
@@ -1187,7 +1194,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </span>
                   )}
                   <button
-                    onClick={() => handleAddPress(item)}
+                    onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
                     className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition active:scale-90"
                     aria-label={t("customer.add")}
                   >
@@ -1261,6 +1268,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                         return (
                         <li
                           key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedMenuItem(item)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMenuItem(item); } }}
                           className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                           style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
                         >
@@ -1321,7 +1332,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                               <button
                                 disabled={item.is_sold_out}
-                                onClick={() => handleAddPress(item)}
+                                onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
                                 className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
                               >
                                 {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
@@ -1346,6 +1357,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               return (
               <li
                 key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedMenuItem(item)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMenuItem(item); } }}
                 className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
@@ -1409,7 +1424,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     </div>
                     <button
                       disabled={item.is_sold_out}
-                      onClick={() => handleAddPress(item)}
+                      onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
                       className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
                     >
                       {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
@@ -1430,6 +1445,73 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       </div>
       </div>
       )}
+
+      <Dialog open={!!selectedMenuItem} onOpenChange={(open) => { if (!open) setSelectedMenuItem(null); }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{selectedMenuItem?.name}</DialogTitle>
+            <p className="text-sm text-foreground/60 mt-1">{selectedMenuItem ? categoryLabel(selectedMenuItem.category_name) : ""}</p>
+          </DialogHeader>
+          <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
+            <div className="space-y-4">
+              {selectedMenuItem?.image_url ? (
+                <img src={selectedMenuItem.image_url} alt={selectedMenuItem.name} className="h-72 w-full rounded-3xl object-cover" />
+              ) : (
+                <div className="flex h-72 items-center justify-center rounded-3xl bg-primary/10">
+                  <Leaf className="h-14 w-14 text-leaf/60" />
+                </div>
+              )}
+              <div className="space-y-4 text-sm leading-relaxed text-foreground/80">
+                <p>{selectedMenuItem?.description || t("customer.descriptionFallback")}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Price</p>
+                    <p className="mt-2 text-lg font-semibold text-primary">{formatRM(selectedMenuItem?.price ?? 0)}</p>
+                  </div>
+                  <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Status</p>
+                    <p className={`mt-2 text-lg font-semibold ${selectedMenuItem?.is_sold_out ? "text-destructive" : "text-foreground"}`}>
+                      {selectedMenuItem?.is_sold_out ? t("customer.soldOut") : "Available"}
+                    </p>
+                  </div>
+                </div>
+                {selectedMenuItem?.option_groups?.length ? (
+                  <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
+                    <p className="font-semibold">Customizations</p>
+                    <p className="mt-1 text-sm text-foreground/70">This item has extra choices available when added to the cart.</p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-border/70 bg-card/80 p-4">
+                <p className="text-sm uppercase tracking-[0.24em] text-foreground/60">Quick view</p>
+                <ul className="mt-3 space-y-3 text-sm text-foreground/80">
+                  {selectedMenuItem?.is_promo && <li className="font-semibold text-accent">{t("customer.new")}</li>}
+                  {selectedMenuItem?.is_popular && <li className="font-semibold text-primary">{t("customer.popular")}</li>}
+                  {selectedMenuItem?.notes && <li>{selectedMenuItem.notes}</li>}
+                </ul>
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  disabled={selectedMenuItem?.is_sold_out}
+                  onClick={() => selectedMenuItem && handleAddPress(selectedMenuItem)}
+                  className={`inline-flex items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-white transition ${selectedMenuItem?.is_sold_out ? "bg-muted text-foreground/50 pointer-events-none" : "bg-primary hover:bg-primary-glow"}`}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {selectedMenuItem?.is_sold_out ? t("customer.soldOut") : t("customer.add")}
+                </button>
+                <button
+                  onClick={() => setSelectedMenuItem(null)}
+                  className="rounded-full border border-border bg-background px-4 py-3 text-sm font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ============ ORDERS STATUS SCREEN ============ */}
       {tab === "orders" && (
