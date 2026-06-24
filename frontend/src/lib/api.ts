@@ -980,10 +980,6 @@ export const sendPasswordResetEmail = async (email: string): Promise<{ success: 
   return res.json();
 };
 
-export const fetchKitchenPasscode = async (): Promise<string> => {
-  const data = await safeFetch<{ passcode: string }>("/management/kitchen-passcode");
-  return data.passcode;
-};
 
 // ── Database Backups ──────────────────────────────────────────────────────────
 

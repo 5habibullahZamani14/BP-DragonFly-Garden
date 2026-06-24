@@ -53,12 +53,10 @@ const requireJwtRole = (allowedRoles = []) => {
 
 const requireManagerToken = requireJwtRole([ROLES.MANAGER]);
 const requirePaymentToken = requireJwtRole([ROLES.PAYMENT_COUNTER]);
-const requireKitchenToken = requireJwtRole([ROLES.KITCHEN_CREW]);
 
 module.exports = {
   getBearerToken,
   verifyJwtToken,
   requireManagerToken,
   requirePaymentToken,
-  requireKitchenToken,
 };

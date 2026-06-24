@@ -28,7 +28,6 @@ const { createHttpError } = require("./validation");
  */
 const ROLES = {
   CUSTOMER_WAITER: "customer_waiter",
-  KITCHEN_CREW: "kitchen_crew",
   PAYMENT_COUNTER: "payment_counter",
   MANAGER: "manager"
 };
@@ -39,13 +38,11 @@ const ROLES = {
  * unknown QR code string does not accidentally grant access.
  *
  *   Table QR:      "table-1", "table-2", ...
- *   Kitchen QR:    "kitchen-crew-main", "kitchen-crew-secondary", ...
  *   Payment QR:    "payment-counter-main", "payment-counter-demo:1", ...
  *   Manager QR:    "manager-main", ...
  */
 const QR_PATTERNS = {
   TABLE_QR: /^table-\d+$/,
-  KITCHEN_QR: /^kitchen-crew-[\w:]+$/,
   PAYMENT_QR: /^payment-counter-[\w:]+$/,
   MANAGER_QR: /^manager-[\w:]+$/
 };
@@ -59,10 +56,6 @@ const QR_PATTERNS = {
 const getRoleFromQRCode = (qrCode) => {
   if (!qrCode) {
     return null;
-  }
-
-  if (QR_PATTERNS.KITCHEN_QR.test(qrCode)) {
-    return ROLES.KITCHEN_CREW;
   }
 
   if (QR_PATTERNS.MANAGER_QR.test(qrCode)) {
@@ -147,7 +140,6 @@ const requireRole = (requiredRole) => {
 };
 
 /* Pre-built middleware instances for each role — imported directly by route files. */
-const requireKitchenCrew = requireRole(ROLES.KITCHEN_CREW);
 const requirePaymentCounter = requireRole(ROLES.PAYMENT_COUNTER);
 
 /*
@@ -174,7 +166,6 @@ module.exports = {
   getTableNumberFromQR,
   attachRoleMiddleware,
   requireRole,
-  requireKitchenCrew,
   requirePaymentCounter,
   requireCustomerOrWaiter
 };

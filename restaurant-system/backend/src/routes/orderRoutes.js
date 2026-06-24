@@ -23,14 +23,9 @@ const {
   createOrder,
   getOrder,
   getOrders,
-  getKitchenOrders,
-  updateOrderStatus,
   getActiveTableOrders,
-  updateItemStatus,
   customerArchiveOrder,
   getCustomerArchivedOrdersForTable,
-  kitchenArchiveOrder,
-  getKitchenArchivedOrders,
 } = require("../controllers/orderController");
 const {
   asyncHandler,
@@ -39,8 +34,8 @@ const {
   validateOrderIdParam,
   validateOrderQuery,
 } = require("../middleware/validation");
-const { requireKitchenCrew, requirePaymentCounter, ROLES } = require("../middleware/role-based-access");
-const { verifyJwtToken, requireKitchenToken, requirePaymentToken } = require("../middleware/jwt-auth");
+const { requirePaymentCounter, ROLES } = require("../middleware/role-based-access");
+const { verifyJwtToken, requirePaymentToken } = require("../middleware/jwt-auth");
 const { createHttpError } = require("../middleware/validation");
 const printerService = require("../services/printerService");
 
@@ -288,35 +283,12 @@ const orderRoutes = (broadcast) => {
   }));
 
   /*
-   * GET /orders/kitchen-archived
-   * Returns orders that the kitchen crew has marked as done and removed from
-   * the active board. Used by the kitchen history panel.
-   */
-  router.get("/kitchen-archived", requireKitchenToken, asyncHandler(async (req, res) => {
-    res.json(await getKitchenArchivedOrders());
-  }));
-
-  /*
    * GET /orders/:id
    * Returns a single order by its ID with all its items and current status.
    * The customer view calls this periodically to refresh their order's status.
    */
   router.get("/:id", validateOrderIdParam, asyncHandler(async (req, res) => {
     res.json(await getOrder(req.params.id));
-  }));
-
-  /*
-   * PATCH /orders/:id/items/:itemId/status
-   * Updates the status of a single item within an order. This is a kitchen-only
-   * action (requireKitchenCrew). After the update an ITEM_STATUS_UPDATE event
-   * is broadcast so the customer's order tracker reflects the change immediately.
-   */
-  router.patch("/:id/items/:itemId/status", requireKitchenToken, asyncHandler(async (req, res) => {
-    const { id, itemId } = req.params;
-    const { status } = req.body;
-    const updatedOrder = await updateItemStatus(Number(id), Number(itemId), status);
-    broadcast({ type: "ITEM_STATUS_UPDATE", payload: updatedOrder });
-    res.json(updatedOrder);
   }));
 
   /*
@@ -327,30 +299,6 @@ const orderRoutes = (broadcast) => {
    */
   router.patch("/:id/customer-archive", asyncHandler(async (req, res) => {
     res.json(await customerArchiveOrder(req.params.id));
-  }));
-
-  /*
-   * PATCH /orders/:id/kitchen-archive
-   * Marks an order as done from the kitchen's perspective. The kitchen crew
-   * uses this to clear a completed order from their board. Kitchen-crew role
-   * is required.
-   */
-  router.patch("/:id/kitchen-archive", requireKitchenToken, asyncHandler(async (req, res) => {
-    res.json(await kitchenArchiveOrder(req.params.id));
-  }));
-
-  /*
-   * PATCH /orders/:id/status
-   * Updates the overall status of an order (queue → preparing → ready).
-   * This is a kitchen-only action. After a successful update an
-   * ORDER_STATUS_UPDATE event is broadcast to all connected clients.
-   */
-  router.patch("/:id/status", requireKitchenToken, validateOrderIdParam, validateStatusUpdate, asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-    const updatedOrder = await updateOrderStatus(id, status, req.userRole);
-    broadcast({ type: "ORDER_STATUS_UPDATE", payload: updatedOrder });
-    res.json(updatedOrder);
   }));
 
   return router;

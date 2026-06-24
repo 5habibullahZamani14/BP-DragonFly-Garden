@@ -156,11 +156,6 @@ const clientShouldReceive = (client, data) => {
     return false;
   }
 
-  // Kitchen crew: interested in new orders and order/item updates
-  if (client._role === 'kitchen_crew') {
-    return ['NEW_ORDER', 'ITEM_STATUS_UPDATE', 'ORDER_STATUS_UPDATE', 'ORDER_STATUS_CHANGED'].includes(type);
-  }
-
   // Payment counter: interested in payments and order status changes
   if (client._role === 'payment_counter') {
     return ['NEW_PAYMENT', 'ORDER_STATUS_CHANGED', 'ORDER_STATUS_UPDATE', 'CALL_WAITER', 'CALL_WAITER_ACK'].includes(type);

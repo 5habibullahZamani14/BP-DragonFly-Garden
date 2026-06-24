@@ -59,9 +59,6 @@ const verifyToken = (req, res, next) => {
     '/auth',
     '/send-reset-email',
     '/manager-profile/reset',
-    '/kitchen-passcode',
-    '/employees/verify'
-  ]);
 
   if (openRoutes.has(req.path)) {
     return next();
@@ -123,17 +120,6 @@ router.get("/manager-profile", managementController.getManagerProfileRoute);
  * it is stored and takes effect immediately.
  */
 router.put("/manager-profile", managementController.updateManagerProfile);
-
-// ── Kitchen passcode ──────────────────────────────────────────────────────────
-
-/*
- * GET /management/kitchen-passcode
- * Returns the kitchen crew's numeric passcode. This route is intentionally
- * public (no auth guard) because the kitchen login screen needs to fetch the
- * passcode before the crew member has authenticated — it needs the value to
- * validate the PIN they enter.
- */
-router.get("/kitchen-passcode", managementController.getKitchenPasscode);
 
 // ── Activity log ──────────────────────────────────────────────────────────────
 
