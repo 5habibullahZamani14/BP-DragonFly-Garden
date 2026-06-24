@@ -54,6 +54,17 @@ const apiUrl = (path: string, qrCode?: string) => {
  * so calling code can display or log the failure without inspecting the raw
  * Response object.
  */
+const getStaffToken = (): string | null => {
+  const savedLogin = localStorage.getItem("paymentCounterLogin");
+  if (!savedLogin) return null;
+  try {
+    const parsed = JSON.parse(savedLogin);
+    return typeof parsed.token === "string" ? parsed.token : null;
+  } catch {
+    return null;
+  }
+};
+
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
   // Management and table-management endpoints must use JWT-based auth;
   // ignore any QR argument for these admin routes. The table lookup route
@@ -71,6 +82,11 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
           headers.set("Authorization", `Bearer ${parsed.token}`);
         }
       } catch (e) { /* ignore malformed stored login */ }
+    }
+  } else {
+    const staffToken = getStaffToken();
+    if (staffToken) {
+      headers.set("Authorization", `Bearer ${staffToken}`);
     }
   }
 
@@ -867,7 +883,7 @@ export const fetchEmployees = async (includeArchived = false) =>
   safeFetch<EmployeeRecord[]>(`/management/employees?include_archived=${includeArchived}`);
 
 export const verifyEmployeeCredentials = async (employee_id: string, name: string) =>
-  safeFetch<{ success: boolean; employee: { id: string; name: string; department?: string } }>("/management/employees/verify", {
+  safeFetch<{ success: boolean; employee: { id: string; name: string; department?: string; role?: string }; token?: string }>("/management/employees/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ employee_id, name })

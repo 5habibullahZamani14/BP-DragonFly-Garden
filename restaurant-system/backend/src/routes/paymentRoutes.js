@@ -1,9 +1,10 @@
 /*
  * paymentRoutes.js — HTTP routes for the payment counter.
  *
- * All routes here are restricted to users holding a payment-counter QR code
- * (requirePaymentCounter), except GET /payments/methods which is public
- * because the frontend needs the list of payment options before login.
+ * All routes here are restricted to employees authenticated with a payment
+ * counter JWT token (requirePaymentToken). GET /payments/methods remains public
+ * so the payment counter UI can load the list of accepted payment options
+ * before the employee has authenticated.
  *
  * Like orderRoutes, this file is a factory that accepts the broadcast function
  * so it can push a NEW_PAYMENT WebSocket event whenever a payment is processed,

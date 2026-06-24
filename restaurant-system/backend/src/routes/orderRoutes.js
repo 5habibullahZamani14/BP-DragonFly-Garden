@@ -39,8 +39,9 @@ const {
   validateOrderIdParam,
   validateOrderQuery,
 } = require("../middleware/validation");
-const { requireKitchenCrew, requirePaymentCounter } = require("../middleware/role-based-access");
-const { requireKitchenToken, requirePaymentToken } = require("../middleware/jwt-auth");
+const { requireKitchenCrew, requirePaymentCounter, ROLES } = require("../middleware/role-based-access");
+const { verifyJwtToken, requireKitchenToken, requirePaymentToken } = require("../middleware/jwt-auth");
+const { createHttpError } = require("../middleware/validation");
 const printerService = require("../services/printerService");
 
 const run = (sql, params = []) =>
@@ -111,6 +112,10 @@ const orderRoutes = (broadcast) => {
    * in real time without polling.
    */
   router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
+    if (req.userRole !== ROLES.CUSTOMER_WAITER) {
+      verifyJwtToken(req, [ROLES.PAYMENT_COUNTER]);
+    }
+
     const { order, isAddOn, newItems } = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
     
@@ -216,7 +221,7 @@ const orderRoutes = (broadcast) => {
     res.json(request);
   }));
 
-  router.post("/:id/checkout", asyncHandler(async (req, res) => {
+  router.post("/:id/checkout", requirePaymentToken, asyncHandler(async (req, res) => {
     const { cashierName } = req.body;
     // We must use fetchOrderWithPayments from paymentController to get vat_rate, service_charge_rate, and total_with_vat
     const { fetchOrderWithPayments } = require("../controllers/paymentController");
@@ -235,7 +240,7 @@ const orderRoutes = (broadcast) => {
     res.json(order);
   }));
 
-  router.patch("/:id/pay", asyncHandler(async (req, res) => {
+  router.patch("/:id/pay", requirePaymentToken, asyncHandler(async (req, res) => {
     const { markOrderPaid, getOrder } = require("../controllers/orderController");
     await markOrderPaid(req.params.id);
     const order = await getOrder(req.params.id);
@@ -258,7 +263,7 @@ const orderRoutes = (broadcast) => {
    * that have not been kitchen-archived are included. The kitchen view polls
    * this (or listens via WebSocket) to keep its three-column board up to date.
    */
-  router.get("/kitchen", validateOrderQuery, asyncHandler(async (req, res) => {
+  router.get("/kitchen", requireKitchenToken, validateOrderQuery, asyncHandler(async (req, res) => {
     res.json(await getKitchenOrders(req.query));
   }));
 
@@ -287,7 +292,7 @@ const orderRoutes = (broadcast) => {
    * Returns orders that the kitchen crew has marked as done and removed from
    * the active board. Used by the kitchen history panel.
    */
-  router.get("/kitchen-archived", asyncHandler(async (req, res) => {
+  router.get("/kitchen-archived", requireKitchenToken, asyncHandler(async (req, res) => {
     res.json(await getKitchenArchivedOrders());
   }));
 

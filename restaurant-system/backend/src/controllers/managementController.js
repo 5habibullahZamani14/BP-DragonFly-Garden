@@ -125,6 +125,13 @@ const createLog = async (category, action, actorId, actorName, targetId, targetN
   );
 };
 
+const deriveEmployeeJwtRole = (department) => {
+  const normalized = String(department || "").trim().toLowerCase();
+  if (/kitchen/.test(normalized)) return "kitchen_crew";
+  if (/payment|cashier|counter/.test(normalized)) return "payment_counter";
+  return "payment_counter";
+};
+
 /* getFinanceData returns comprehensive financial data for the dashboard (P&L, Revenue, Cost of Goods Sold) */
 const getFinanceData = async (req, res, next) => {
   try {
@@ -321,13 +328,32 @@ const verifyEmployee = async (req, res, next) => {
     );
 
     if (employee) {
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET not configured. Refusing to issue employee auth token.");
+        return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
+      }
+
+      const role = deriveEmployeeJwtRole(employee.department);
+      const token = jwt.sign(
+        {
+          role,
+          id: employee.employee_id,
+          name: employee.name,
+          department: employee.department || null
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+
       res.json({
         success: true,
         employee: {
           id: employee.employee_id,
           name: employee.name,
-          department: employee.department
-        }
+          department: employee.department,
+          role
+        },
+        token
       });
     } else {
       res.status(401).json({ success: false, message: "Invalid employee credentials" });

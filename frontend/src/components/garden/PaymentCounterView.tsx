@@ -139,20 +139,25 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   }, []);
 
   // Check login state on mount
-  useEffect(() => {
+  const getSavedPaymentCounterLogin = () => {
     const savedLogin = localStorage.getItem("paymentCounterLogin");
+    if (!savedLogin) return null;
+    try {
+      const parsed = JSON.parse(savedLogin);
+      if (!parsed.token || !parsed.expiry || !parsed.name || !parsed.id) return null;
+      if (Date.now() >= parsed.expiry) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const savedLogin = getSavedPaymentCounterLogin();
     if (savedLogin) {
-      try {
-        const parsed = JSON.parse(savedLogin);
-        // 7-day expiry
-        if (parsed.expiry && Date.now() < parsed.expiry) {
-          setLoggedInEmployee({ name: parsed.name, id: parsed.id });
-        } else {
-          localStorage.removeItem("paymentCounterLogin");
-        }
-      } catch {
-        localStorage.removeItem("paymentCounterLogin");
-      }
+      setLoggedInEmployee({ name: savedLogin.name, id: savedLogin.id });
+    } else {
+      localStorage.removeItem("paymentCounterLogin");
     }
   }, []);
 
@@ -163,13 +168,14 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
     try {
       const result = await verifyEmployeeCredentials(loginInputId, loginInputName);
-      if (result.success && result.employee) {
+      if (result.success && result.employee && result.token) {
         setLoggedInEmployee({ name: result.employee.name, id: result.employee.id });
         localStorage.setItem(
           "paymentCounterLogin",
           JSON.stringify({
             id: result.employee.id,
             name: result.employee.name,
+            token: result.token,
             expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
           })
         );
@@ -298,6 +304,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   };
 
+  const getPaymentCounterToken = useCallback(() => {
+    const savedLogin = getSavedPaymentCounterLogin();
+    return savedLogin?.token || null;
+  }, [loggedInEmployee]);
+
   useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
     if (event.type === "CALL_WAITER") {
       const request = event.payload as StaffAssistanceRequest;
@@ -319,7 +330,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     if (loggedInEmployee) {
       loadData();
     }
-  });
+  }, getPaymentCounterToken);
 
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {

@@ -92,18 +92,23 @@ wss.on("connection", (ws, req) => {
       ws._role = decoded?.role || null;
       console.log('WS client connected (token):', ws._role || 'unknown');
     } else if (qr) {
-      // Allow QR-based connections for customer/kitchen/payment QR holders
       const role = getRoleFromQRCode(qr);
       if (!role) {
         ws.close(4003, 'Invalid QR code');
         return;
       }
+
+      // Only customer table WebSocket connections are allowed without JWT.
+      // Staff and management clients must authenticate using a bearer token.
+      if (role !== 'customer_waiter') {
+        ws.close(4003, 'Staff and management WebSocket connections must use auth tokens');
+        return;
+      }
+
       ws._role = role;
       ws._qr = qr;
-      if (role === 'customer_waiter') {
-        const tableNumber = getTableNumberFromQR(qr);
-        ws._tableNumber = tableNumber; // numeric table id
-      }
+      const tableNumber = getTableNumberFromQR(qr);
+      ws._tableNumber = tableNumber; // numeric table id
       console.log('WS client connected (qr):', role, qr);
     } else {
       ws.close(4001, 'Missing auth token or QR');
