@@ -253,16 +253,6 @@ const orderRoutes = (broadcast) => {
   }));
 
   /*
-   * GET /orders/kitchen
-   * Returns all active orders formatted for the kitchen board. Only orders
-   * that have not been kitchen-archived are included. The kitchen view polls
-   * this (or listens via WebSocket) to keep its three-column board up to date.
-   */
-  router.get("/kitchen", requireKitchenToken, validateOrderQuery, asyncHandler(async (req, res) => {
-    res.json(await getKitchenOrders(req.query));
-  }));
-
-  /*
    * GET /orders/by-table/:tableId
    * Returns all active (non-customer-archived) orders for a specific table.
    * The customer view calls this on load to restore any orders that were placed
