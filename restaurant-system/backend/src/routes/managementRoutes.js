@@ -59,6 +59,7 @@ const verifyToken = (req, res, next) => {
     '/auth',
     '/send-reset-email',
     '/manager-profile/reset',
+  ]);
 
   if (openRoutes.has(req.path)) {
     return next();
