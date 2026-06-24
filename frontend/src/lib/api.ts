@@ -5,9 +5,9 @@
  * way for two reasons:
  *   1. It keeps the base URL in one place. Changing VITE_API_BASE in the
  *      environment is enough to point the whole app at a different server.
- *   2. All role-authenticated requests need the qr_code query parameter
- *      appended. The apiUrl helper handles this so individual call sites
- *      do not have to remember to add it.
+ *   2. Role-specific requests append qr_code only when the caller passes it.
+ *      Generic management and public requests stay clean unless an explicit
+ *      QR context is required.
  *
  * The safeFetch function throws on any non-2xx HTTP status so callers can
  * use try/catch or let errors propagate to the component's error boundary.
@@ -606,9 +606,9 @@ export const fetchActiveOrdersForTable = async (tableId: number, qr: string): Pr
 export const markItemStatus = async (qrCode: string, orderId: number, itemId: number, status: string) => {
   return safeFetch<Order>(`/orders/${orderId}/items/${itemId}/status`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", "X-QR-Code": qrCode },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status })
-  });
+  }, qrCode);
 };
 
 export const callStaff = async (table_id: number) => {

@@ -22,6 +22,23 @@ const cors = require("cors");
 const { WebSocketServer } = require("ws");
 const helmet = require("helmet");
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const retryAsync = async (work, attempts = 3, initialDelayMs = 5000) => {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await work();
+    } catch (err) {
+      lastError = err;
+      console.error(`Retry attempt ${attempt} failed:`, err);
+      if (attempt < attempts) {
+        await wait(initialDelayMs * Math.pow(2, attempt - 1));
+      }
+    }
+  }
+  throw lastError;
+};
+
 const { errorHandler, notFoundHandler } = require("./middleware/validation");
 const { attachRoleMiddleware } = require("./middleware/role-based-access");
 const menuRoutes = require("./routes/menuRoutes");
@@ -34,6 +51,7 @@ const { archiveStaffAssistanceRequests } = require("./controllers/orderControlle
 const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
 const { executeNightlyCloudBackup, ensureCloudBackupUpToDate } = require("./services/cloudBackupService");
+const { compressImagesInDirectory } = require("./utils/imageCompressor");
 
 /*
  * I create the Express app and then wrap it in a plain Node.js HTTP server
@@ -320,6 +338,11 @@ const startServer = async () => {
       console.log(`[Startup] Archived ${archivedAssistanceCount} old staff assistance request(s).`);
     }
 
+    const menuImagesDir = path.resolve(__dirname, "../../../frontend/public/menu-images");
+    const feedbackImagesDir = path.resolve(__dirname, "../../../frontend/public/feedback-images");
+    await compressImagesInDirectory(menuImagesDir);
+    await compressImagesInDirectory(feedbackImagesDir);
+
     server.listen(PORT, HOST, () => {
       console.log(`Server running on http://${HOST}:${PORT}`);
 
@@ -340,12 +363,14 @@ const startServer = async () => {
 
         const runArchive = async () => {
           try {
-            const count = await executeArchive();
-            const leftoverCount = await forceArchiveLeftovers();
-            const assistanceCount = await archiveStaffAssistanceRequests();
-            console.log(`Scheduled archive completed. Archived ${count} paid orders, ${leftoverCount} leftover orders, and ${assistanceCount} staff assistance requests.`);
+            await retryAsync(async () => {
+              const count = await executeArchive();
+              const leftoverCount = await forceArchiveLeftovers();
+              const assistanceCount = await archiveStaffAssistanceRequests();
+              console.log(`Scheduled archive completed. Archived ${count} paid orders, ${leftoverCount} leftover orders, and ${assistanceCount} staff assistance requests.`);
+            }, 3, 10000);
           } catch (err) {
-            console.error("Scheduled archive failed:", err);
+            console.error("Scheduled archive permanently failed after retries:", err);
           }
         };
 
@@ -367,9 +392,11 @@ const startServer = async () => {
 
         const runCloudBackup = async () => {
           try {
-            await executeNightlyCloudBackup();
+            await retryAsync(async () => {
+              await executeNightlyCloudBackup();
+            }, 3, 15000);
           } catch (err) {
-            console.error("Scheduled cloud backup failed:", err);
+            console.error("Scheduled cloud backup permanently failed after retries:", err);
           }
         };
 

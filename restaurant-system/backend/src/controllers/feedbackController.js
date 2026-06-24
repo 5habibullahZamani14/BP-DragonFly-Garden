@@ -3,12 +3,15 @@
  */
 
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const { validateFeedbackText } = require("../utils/profanityFilter");
 const { analyzeFeedback, RATING_DIMS } = require("../services/feedbackAnalyzer");
 const { generateAIAnalysis, generateAIFindings, generateChatResponse } = require("../services/aiFeedbackAnalyzer");
 const { trackRequest, getUsage } = require("../services/usageTracker");
+const { compressImage } = require("../utils/imageCompressor");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -163,6 +166,14 @@ exports.submitFeedback = async (req, res) => {
   const files = req.files || [];
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    const filePath = file.path || path.join(file.destination || "", file.filename || "");
+    if (filePath) {
+      try {
+        await compressImage(filePath);
+      } catch (err) {
+        console.warn("Failed to compress feedback image, keeping original file:", err);
+      }
+    }
     const imageUrl = `/feedback-images/${file.filename}`;
     await run(
       `INSERT INTO customer_feedback_images (feedback_id, image_url, display_order) VALUES (?, ?, ?)`,

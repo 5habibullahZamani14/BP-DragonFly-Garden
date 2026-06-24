@@ -37,6 +37,7 @@ const run = (sql, params = []) =>
 
 const fs = require("fs");
 const path = require("path");
+const { compressImage } = require("../utils/imageCompressor");
 
 // Broadcast function for WebSocket events
 let broadcastFn = null;
@@ -425,7 +426,9 @@ const uploadMenuItemImage = async (req, res) => {
     const existing = await all(`SELECT image_url FROM menu_items WHERE id = ?`, [id]);
     const oldImageUrl = existing.length > 0 ? existing[0].image_url : null;
 
-    const newImageUrl = `/menu-images/${req.file.filename}`;
+      const newImageUrl = `/menu-images/${req.file.filename}`;
+    const filePath = path.join(__dirname, "../../../../frontend/public", newImageUrl);
+    await compressImage(filePath);
     await run(`UPDATE menu_items SET image_url = ? WHERE id = ?`, [newImageUrl, id]);
 
     if (oldImageUrl && oldImageUrl !== newImageUrl) {
@@ -450,6 +453,8 @@ const createPattern = async (req, res) => {
 
   try {
     const imageUrl = `/menu-images/${req.file.filename}`;
+    const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+    await compressImage(filePath);
     const patternName = req.body.name ? String(req.body.name).trim() : `pattern-${Date.now()}`;
     const opacity = parseFloat(req.body.opacity) || 0.4;
     const zoom = parseFloat(req.body.zoom) || 1.0;
@@ -567,6 +572,8 @@ const uploadMenuItemPatternImage = async (req, res) => {
     const existing = await all(`SELECT pattern_id FROM menu_items WHERE id = ?`, [id]);
     const oldPatternId = existing.length > 0 ? existing[0].pattern_id : null;
     const imageUrl = `/menu-images/${req.file.filename}`;
+    const filePath = path.join(__dirname, "../../../../frontend/public", imageUrl);
+    await compressImage(filePath);
 
     const patternResult = await run(
       `INSERT INTO patterns (name, image_url) VALUES (?, ?)`,

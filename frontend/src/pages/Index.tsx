@@ -21,9 +21,6 @@
  *   If the QR code is present but does not match any pattern, the landing
  *   view is shown — a simple "please scan your table QR" instruction screen.
  *
- * The ?view= override parameter lets developers switch views in the browser
- * without needing to generate real QR codes, which is useful for demoing.
- *
  * Toast notifications:
  *   I implemented a lightweight custom toast system here (the toast state
  *   and notify callback) rather than importing a library, because I only
@@ -96,16 +93,15 @@ const Index = () => {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  /*
   const role: Role = initial.role;
-  const qr = role === "manager" ? "manager-demo" : role === "payment" ? "payment-counter-demo" : initial.qrCode;
+  const qr = initial.qrCode;
 
   return (
     <main className="relative min-h-screen overflow-x-hidden">
       {/*
        * GardenAtmosphere renders the floating leaf and flower particles in the
-       * background. It is disabled for the staff views (kitchen, payment,
-       * manager) because those views need a clean, distraction-free interface.
+       * background. It is disabled for the staff views (payment and manager)
+       * because those views need a clean, distraction-free interface.
        */}
       <GardenAtmosphere disableEffects={role === "payment" || role === "manager"} />
 
