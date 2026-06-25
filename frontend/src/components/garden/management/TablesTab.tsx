@@ -22,7 +22,7 @@ import { buildWifiQrValue } from "@/lib/hotspotQr";
 import { Grid3X3, Plus, QrCode, Edit2, Trash2, Printer, Download } from "lucide-react";
 import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
 
@@ -243,6 +243,10 @@ export const TablesTab = () => {
         <DialogContent className="sm:max-w-[340px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
           {viewQRCodeTable && (
             <div className="bg-gradient-to-b from-gray-50 to-gray-100 p-6 flex flex-col items-center justify-center relative">
+              <DialogHeader>
+                <DialogTitle>{t("m.tableQrCode")}</DialogTitle>
+                <DialogDescription>{t("m.tableQrCodeDescription")}</DialogDescription>
+              </DialogHeader>
             {/* Printable Area */}
             <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-sm border border-gray-100 w-full mb-2">
               {/* The QR Code Container */}

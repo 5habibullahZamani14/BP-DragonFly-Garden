@@ -157,6 +157,8 @@ export default {
     "manager.inventoryDesc": "原材料，库存水平和食谱",
     "manager.tables": "餐桌",
     "manager.tablesDesc": "管理桌号和二维码",
+    "m.tableQrCode": "餐桌二维码",
+    "m.tableQrCodeDescription": "扫描或下载此餐桌二维码以访问点餐页面。",
     "manager.logs": "大档案",
     "manager.logsDesc": "审计日志，活动历史和报告",
     "manager.menu": "菜单",

@@ -1,11 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { createHttpError } = require("./validation");
 const { ROLES } = require("./role-based-access");
-
 const db = require("../database/db");
-const jwt = require("jsonwebtoken");
-const { createHttpError } = require("./validation");
-const { ROLES } = require("./role-based-access");
 
 const getBearerToken = (req) => {
   const authHeader = req.headers.authorization;

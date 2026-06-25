@@ -30,6 +30,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const backupsDir = path.join(__dirname, "../../backups");
 if (!fs.existsSync(backupsDir)) {
@@ -349,15 +350,27 @@ const verifyEmployee = async (req, res, next) => {
       }
 
       const role = deriveEmployeeJwtRole(employee.department);
+      const sessionId = crypto.randomBytes(16).toString("hex");
       const token = jwt.sign(
         {
           role,
           id: employee.employee_id,
           name: employee.name,
-          department: employee.department || null
+          department: employee.department || null,
+          sessionId,
         },
         process.env.JWT_SECRET,
         { expiresIn: "7d" }
+      );
+
+      const sessionPayload = {
+        sessionId,
+        employee_id: employee.employee_id,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      };
+      await run(
+        "INSERT INTO restaurant_settings (key, value) VALUES ('payment_counter_session', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [JSON.stringify(sessionPayload)]
       );
 
       res.json({
@@ -552,7 +565,17 @@ const managerAuth = async (req, res, next) => {
         console.error("JWT_SECRET not configured. Refusing to issue auth token.");
         return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
       }
-      const token = jwt.sign({ role: "manager", id: profile.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+      const sessionId = crypto.randomBytes(16).toString("hex");
+      const token = jwt.sign({ role: "manager", id: profile.id, sessionId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+      const sessionPayload = {
+        sessionId,
+        managerId: profile.id,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      };
+      await run(
+        "INSERT INTO restaurant_settings (key, value) VALUES ('manager_session', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [JSON.stringify(sessionPayload)]
+      );
       res.json({ success: true, name: profile.name, token });
     } else {
       res.status(401).json({ success: false, message: "Invalid credentials" });

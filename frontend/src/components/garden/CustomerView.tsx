@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Sparkles, Leaf, Star, Plus, Minus, ShoppingBag, Check, Flame, X,
+  Sparkles, Leaf, Star, Plus, Minus, ShoppingCart, Check, Flame, X,
   Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight, Bell, Smile, MessageSquare
 } from "lucide-react";
 import { CustomerFeedbackPanel } from "./customer/CustomerFeedbackPanel";
@@ -1873,42 +1873,36 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         {/* Floating cart summary */}
         {cart.length > 0 && !cartOpen && tab !== "orders" && tab !== "feedback" && (
           <div className="absolute bottom-[max(1rem,var(--safe-bottom))] left-3 right-3 z-50 mx-auto max-w-sm pointer-events-none">
-            <div
-              className="absolute -inset-1 rounded-[1.4rem] opacity-90 blur-lg animate-pulse"
-              style={{ background: "linear-gradient(90deg, #a855f7, #ec4899, #fbbf24)" }}
-              aria-hidden
-            />
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className="pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[1.25rem] border-[3px] border-white px-4 py-4 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.35)_inset,0_20px_40px_-12px_rgba(109,40,217,0.65),0_8px_24px_rgba(236,72,153,0.45)] transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background: "linear-gradient(125deg, #4c1d95 0%, #be185d 48%, #ea580c 100%)",
-              }}
+              className="checkout-button pointer-events-auto w-full"
             >
-              <span
-                className="pointer-events-none absolute inset-0 opacity-30"
-                style={{ background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.55) 50%, transparent 60%)" }}
-                aria-hidden
-              />
-              <span className="relative flex min-w-0 flex-1 items-center gap-3">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/95 text-violet-700 shadow-lg ring-2 ring-white/90">
-                  <ShoppingBag className="h-5 w-5" strokeWidth={2.25} />
+              <span className="checkout-button__content relative flex min-w-0 flex-1 items-center gap-4 px-4 py-4">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-rose-700 shadow ring-1 ring-white/90">
+                  <svg viewBox="0 0 200 150" className="h-11 w-11 -translate-y-1" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" aria-hidden="true">
+                    <path d="M 50 100 A 50 50 0 0 1 150 100" />
+                    <line x1="100" y1="50" x2="100" y2="40" />
+                    <circle cx="100" cy="35" r="5" fill="currentColor" />
+                    <line x1="45" y1="100" x2="155" y2="100" />
+                    <rect x="20" y="115" width="160" height="30" rx="15" ry="15" />
+                  </svg>
                 </span>
-                <span className="flex min-w-0 flex-col items-start leading-tight">
-                  <span className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-amber-200/95">
+                <span className="flex min-w-0 flex-1 flex-col items-center leading-tight gap-2">
+                  <span className="text-[0.88rem] font-black uppercase tracking-[0.22em] text-slate-950">
                     {t("customer.viewCart")}
                   </span>
-                  <span className="flex items-center gap-2">
-                    <span className="rounded-md bg-black/25 px-2 py-0.5 text-sm font-black tabular-nums">
+                  <span className="h-px w-full max-w-[150px] bg-white/25" />
+                  <span className="flex items-center gap-2 pt-1">
+                    <span className="rounded-full bg-white/15 px-3 py-1 text-sm font-black tabular-nums text-slate-950 shadow-sm ring-1 ring-white/15">
                       {cart.reduce((a, b) => a + b.quantity, 0)}
                     </span>
-                    <span className="truncate text-sm font-semibold text-white/90">{t("customer.items")}</span>
+                    <span className="truncate text-sm font-semibold text-slate-950/80">{t("customer.items")}</span>
                   </span>
                 </span>
-              </span>
-              <span className="relative shrink-0 rounded-xl bg-white px-3 py-2 font-1 text-lg font-black text-violet-900 shadow-md ring-2 ring-amber-300/80">
-                {formatRM(total)}
+                <span className="checkout-total-badge shrink-0">
+                  {formatRM(total)}
+                </span>
               </span>
             </button>
           </div>

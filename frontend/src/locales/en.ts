@@ -157,6 +157,8 @@ export default {
     "manager.inventoryDesc": "Raw materials, stock levels, and recipes",
     "manager.tables": "Tables",
     "manager.tablesDesc": "Manage table numbers and QR codes",
+    "m.tableQrCode": "Table QR Code",
+    "m.tableQrCodeDescription": "Scan or download this table QR code to access the ordering portal.",
     "manager.logs": "Grand Archive",
     "manager.logsDesc": "Audit logs, activity history, and reports",
     "manager.menu": "Menu",
