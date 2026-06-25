@@ -24,7 +24,7 @@ export const FinanceTab = () => {
         const res = await fetchFinanceData();
         setData(res);
       } catch (err) {
-        console.error(err);
+        safeConsoleError("Failed to load finance data", err);
       } finally {
         setLoading(false);
       }

@@ -32,6 +32,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { safeConsoleError, safeConsoleWarn } from "@/lib/safeConsole";
 
 /*
  * getWsBase determines the WebSocket server address. In production this comes
@@ -144,7 +145,7 @@ export const useWebSocket = (
               callbackRef.current(data as WSEvent);
             }
           } catch (e) {
-            console.error("Failed to parse WebSocket message", e);
+            safeConsoleError("Failed to parse WebSocket message", e);
           }
         };
 
@@ -159,7 +160,7 @@ export const useWebSocket = (
         };
 
         ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
+          safeConsoleError("WebSocket error", error);
           // Let onclose handle reconnects. Avoid manually closing a socket
           // that is still in CONNECTING state to prevent the browser warning.
         };
@@ -184,7 +185,7 @@ export const useWebSocket = (
         try {
           currentWs.close();
         } catch (error) {
-          console.warn("WebSocket close failed during cleanup", error);
+          safeConsoleWarn("WebSocket close failed during cleanup", error);
         }
       }
     };

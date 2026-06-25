@@ -8,6 +8,7 @@
  */
 
 const QRCode = require("qrcode");
+const os = require("os");
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 
@@ -22,6 +23,38 @@ const normalizeUrl = (value) => {
 };
 
 const normalizeBaseUrl = (value) => normalizeUrl(value).replace(/\/$/, "");
+
+const isLocalHostHeader = (host) =>
+  typeof host === "string" && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i.test(host);
+
+const getLocalNetworkAddress = () => {
+  const nets = os.networkInterfaces();
+  for (const ifaceList of Object.values(nets)) {
+    if (!ifaceList) continue;
+    for (const iface of ifaceList) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+};
+
+const getServerBaseUrlFromRequest = (req) => {
+  const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
+  const hostHeader = req.get("host");
+  if (hostHeader && !isLocalHostHeader(hostHeader)) {
+    return `${proto}://${hostHeader}`;
+  }
+
+  const localIp = getLocalNetworkAddress();
+  const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
+  if (localIp) {
+    return `http://${localIp}:${port}`;
+  }
+
+  return null;
+};
 
 const getRestaurantSetting = (key) =>
   new Promise((resolve, reject) => {
@@ -52,7 +85,12 @@ const resolveOrderingBaseUrl = async (req) => {
     console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
   }
 
-  return `${req.protocol}://${req.get("host")}`;
+  const requestHostUrl = getServerBaseUrlFromRequest(req);
+  if (requestHostUrl) {
+    return requestHostUrl;
+  }
+
+  return DEFAULT_CAPTIVE_PORTAL_TARGET.replace(/\/$/, "");
 };
 
 /*

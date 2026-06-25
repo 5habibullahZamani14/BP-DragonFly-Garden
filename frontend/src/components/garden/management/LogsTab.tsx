@@ -48,7 +48,7 @@ export const LogsTab = () => {
       const data = await fetchLogs(categoryFilter);
       setLogs(data || []);
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Failed to load logs", e);
     } finally {
       setLoading(false);
     }

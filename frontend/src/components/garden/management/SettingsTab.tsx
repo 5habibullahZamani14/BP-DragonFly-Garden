@@ -24,6 +24,7 @@ import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, Uplo
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 
 export const SettingsTab = () => {
   const { t } = useTranslation();
@@ -113,7 +114,7 @@ export const SettingsTab = () => {
       setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
       setScEnabled(data?.service_charge_enabled !== false && data?.service_charge_enabled !== 'false');
       setScPercent(data?.service_charge_rate !== undefined ? String(Math.round(parseFloat(String(data.service_charge_rate)) * 100)) : "10");
-    } catch (e) { console.error("Settings load failed", e); }
+    } catch (e) { safeConsoleError("Settings load failed", e); }
     finally { setHoursLoading(false); }
 
     try {
@@ -123,13 +124,13 @@ export const SettingsTab = () => {
         setDefaultPatternId(Number(data.default_pattern_id));
       }
     } catch (e) {
-      console.error("Failed to load default patterns", e);
+      safeConsoleError("Failed to load default patterns", e);
     }
 
     try {
       const p = await fetchManagerProfile();
       setProfile({ name: p.name || "", id: p.id || "", email: p.email || "", phone: p.phone || "" });
-    } catch (e) { console.error("Profile load failed", e); }
+    } catch (e) { safeConsoleError("Profile load failed", e); }
 
     loadBackups();
   };
@@ -143,7 +144,7 @@ export const SettingsTab = () => {
       const dateStr = new Date().toISOString().split('T')[0];
       setBackupName(`backup_${dateStr}`);
     } catch (e) {
-      console.error("Failed to load backups", e);
+      safeConsoleError("Failed to load backups", e);
     }
   };
 
@@ -166,7 +167,7 @@ export const SettingsTab = () => {
       await updateSetting("default_card_size", defaultCardSize);
       setCardSizeSaved(true);
       setTimeout(() => setCardSizeSaved(false), 2500);
-    } catch (e) { console.error(e); }
+    } catch (e) { safeConsoleError("Failed to create backup", e); }
   };
 
   const saveDefaultPattern = async () => {
@@ -198,7 +199,7 @@ export const SettingsTab = () => {
       await updateSetting("default_card_size", defaultCardSize);
       setCardSizeSaved(true);
       setTimeout(() => setCardSizeSaved(false), 2500);
-    } catch (e) { console.error(e); alert("Failed to apply card size"); }
+    } catch (e) { safeConsoleError("Failed to apply card size", e); alert("Failed to apply card size"); }
     finally { setApplyingCardSize(false); }
   };
 
@@ -223,7 +224,7 @@ export const SettingsTab = () => {
       setCaptivePortalSaved(true);
       setTimeout(() => setCaptivePortalSaved(false), 2500);
     } catch (e) {
-      console.error("Failed to save captive portal target", e);
+      safeConsoleError("Failed to save captive portal target", e);
     } finally {
       setCaptivePortalSaving(false);
     }
@@ -238,7 +239,7 @@ export const SettingsTab = () => {
       setHotspotSaved(true);
       setTimeout(() => setHotspotSaved(false), 2500);
     } catch (e) {
-      console.error("Failed to save hotspot settings", e);
+      safeConsoleError("Failed to save hotspot settings", e);
     } finally {
       setHotspotSaving(false);
     }

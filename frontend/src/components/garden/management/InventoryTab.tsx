@@ -29,6 +29,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { fetchInventory, createInventoryItem, updateInventoryStock, fetchRecipes, updateRecipe, fetchMenuItems } from "@/lib/api";
 import type { InventoryItem, MenuItem, Recipe, RecipeIngredient } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 import { INV_CATEGORY_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
@@ -113,7 +114,7 @@ export const InventoryTab = ({
       const recipeData = await fetchRecipes();
       setRecipes(recipeData || []);
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Failed to load inventory data", e);
     } finally {
       setLoading(false);
     }

@@ -34,6 +34,7 @@ import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 
 export const EmployeesTab = () => {
   const { t } = useTranslation();
@@ -68,7 +69,7 @@ export const EmployeesTab = () => {
       const data = await fetchEmployees(false);
       setEmployees(data || []);
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Failed to load employee data", e);
     } finally {
       setLoading(false);
     }
@@ -96,7 +97,7 @@ export const EmployeesTab = () => {
       });
       loadEmployees();
     } catch (e) {
-      console.error("Failed to save employee", e);
+      safeConsoleError("Failed to save employee", e);
     }
   };
 
@@ -122,7 +123,7 @@ export const EmployeesTab = () => {
         await updateEmployee(id, { is_archived: 1 });
         loadEmployees();
       } catch (e) {
-        console.error(e);
+        safeConsoleError("Failed to archive employee", e);
       }
     }
   };

@@ -51,6 +51,7 @@ import { SettingsModal } from "./SettingsModal";
 import { managerAuth, sendPasswordResetEmail, fetchInventory } from "@/lib/api";
 import type { InventoryItem } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Bell, AlertTriangle } from "lucide-react";
 
@@ -135,7 +136,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       })));
       return lowStock.length > 0;
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Failed to load manager notifications", e);
       return false;
     }
   };

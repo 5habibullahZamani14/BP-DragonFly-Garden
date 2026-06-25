@@ -24,6 +24,7 @@ import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 
 export const TablesTab = () => {
   const { t } = useTranslation();
@@ -50,7 +51,7 @@ export const TablesTab = () => {
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      console.error("Failed to generate QR Code image", err);
+      safeConsoleError("Failed to generate QR Code image", err);
     }
   };
   
@@ -77,7 +78,7 @@ export const TablesTab = () => {
       const data = await fetchTables();
       setTables(data || []);
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Failed to load table data", e);
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export const TablesTab = () => {
         }
       }
     } catch (e) {
-      console.error("Failed to load hotspot settings", e);
+      safeConsoleError("Failed to load hotspot settings", e);
     } finally {
       setHotspotLoading(false);
     }
@@ -248,6 +249,10 @@ export const TablesTab = () => {
               {hotspotSsid && !hotspotLoading ? (
                 <>
                   <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex flex-col items-center justify-center z-10 shadow-md mt-4">
+                    <div className="mb-4 text-center">
+                      <p className="text-sm font-semibold text-slate-900">Wi-Fi hotspot QR</p>
+                      <p className="text-xs text-slate-500">Scan this code to join the local network. Captive portal detection should then redirect the customer to the ordering page.</p>
+                    </div>
                     <QRCode
                       value={hotspotQrValue}
                       size={220}
@@ -266,20 +271,9 @@ export const TablesTab = () => {
                   </div>
 
                   <div className="mt-6 w-full rounded-3xl bg-slate-50 p-4 border border-slate-200 text-left">
-                    <h3 className="text-sm font-semibold text-slate-900">Ordering Menu QR</h3>
-                    <p className="text-xs text-slate-500 mb-3">If your device does not open the ordering portal automatically after connecting, scan this code or visit the text link below.</p>
-                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md">
-                      <QRCode
-                        value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
-                        size={150}
-                        ecLevel="H"
-                        fgColor="#444444"
-                        bgColor="#ffffff"
-                        qrStyle="dots"
-                        eyeRadius={10}
-                      />
-                    </div>
-                    <div className="mt-3 text-xs text-slate-500 break-all">
+                    <h3 className="text-sm font-semibold text-slate-900">Ordering Portal Backup</h3>
+                    <p className="text-xs text-slate-500 mb-3">This is the fallback link customers can use if their device does not automatically open the ordering page after joining the hotspot.</p>
+                    <div className="rounded-2xl bg-white p-3 border border-slate-200 text-xs text-slate-700 break-all">
                       {viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
                     </div>
                   </div>

@@ -15,6 +15,7 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const express = require("express");
 const http = require("http");
@@ -70,7 +71,39 @@ const getRestaurantSetting = (key) =>
     });
   });
 
-const resolveCaptivePortalTarget = async () => {
+const isLocalHostHeader = (host) =>
+  typeof host === "string" && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i.test(host);
+
+const getLocalNetworkAddress = () => {
+  const nets = os.networkInterfaces();
+  for (const ifaceList of Object.values(nets)) {
+    if (!ifaceList) continue;
+    for (const iface of ifaceList) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+};
+
+const getServerBaseUrlFromRequest = (req) => {
+  const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
+  const hostHeader = req.get("host");
+  if (hostHeader && !isLocalHostHeader(hostHeader)) {
+    return `${proto}://${hostHeader}`;
+  }
+
+  const localIp = getLocalNetworkAddress();
+  const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
+  if (localIp) {
+    return `http://${localIp}:${port}`;
+  }
+
+  return null;
+};
+
+const resolveCaptivePortalTarget = async (req) => {
   if (process.env.CAPTIVE_PORTAL_TARGET) {
     return normalizeUrl(process.env.CAPTIVE_PORTAL_TARGET);
   }
@@ -82,6 +115,11 @@ const resolveCaptivePortalTarget = async () => {
     }
   } catch (err) {
     console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
+  }
+
+  const requestHostUrl = getServerBaseUrlFromRequest(req);
+  if (requestHostUrl) {
+    return requestHostUrl;
   }
 
   return DEFAULT_CAPTIVE_PORTAL_TARGET;
@@ -124,7 +162,7 @@ wss.on("connection", (ws, req) => {
       const decoded = jwtLib.verify(token, process.env.JWT_SECRET);
       ws._auth = decoded; // attach decoded JWT for use elsewhere
       ws._role = decoded?.role || null;
-      console.log('WS client connected (token):', ws._role || 'unknown');
+      console.log(`WS client connected via token (${ws._role || 'unknown'})`);
     } else if (qr) {
       const role = getRoleFromQRCode(qr);
       if (!role) {
@@ -143,7 +181,7 @@ wss.on("connection", (ws, req) => {
       ws._qr = qr;
       const tableNumber = getTableNumberFromQR(qr);
       ws._tableNumber = tableNumber; // numeric table id
-      console.log('WS client connected (qr):', role, qr);
+      console.log(`WS client connected via QR (${role})`);
     } else {
       ws.close(4001, 'Missing auth token or QR');
       return;
@@ -332,7 +370,7 @@ app.get('/ready', async (req, res) => {
 
 /* Captive Portal Routes for Apple, Android, and common connectivity checks */
 const redirectToCaptiveTarget = async (req, res) => {
-  const target = await resolveCaptivePortalTarget();
+  const target = await resolveCaptivePortalTarget(req);
   return res.status(302).redirect(target);
 };
 

@@ -56,6 +56,7 @@ import {
 } from "@/lib/api";
 import type { MenuItem, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
 import { PosOrderModal } from "./PosOrderModal";
@@ -248,7 +249,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           }
         }
       } catch (e) {
-        console.error("Failed to check hours", e);
+        safeConsoleError("Failed to check hours", e);
       }
     };
     
@@ -305,7 +306,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       const requests = await fetchStaffAssistanceRequests(qrCode);
       setAssistanceRequests(requests || []);
     } catch (error) {
-      console.error("Failed to load assistance requests", error);
+      safeConsoleError("Failed to load assistance requests", error);
     }
   }, [loggedInEmployee, qrCode]);
 

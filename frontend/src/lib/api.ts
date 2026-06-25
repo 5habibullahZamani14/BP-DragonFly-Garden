@@ -170,6 +170,10 @@ export type ManagementSettings = {
     start: string;
     end: string;
   };
+  captive_portal_target?: string;
+  hotspot_ssid?: string;
+  hotspot_password?: string;
+  hotspot_security?: string;
   [key: string]: unknown;
 };
 
