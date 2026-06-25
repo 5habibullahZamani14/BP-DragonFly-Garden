@@ -276,7 +276,14 @@ if (process.env.VITE_DEV_MODE === '1') {
 }
 
 // Apply basic security headers
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    originAgentCluster: false,
+  }),
+);
 
 /* Parse incoming JSON request bodies, capped at 100 KB to prevent abuse. */
 app.use(express.json({ limit: "100kb" }));

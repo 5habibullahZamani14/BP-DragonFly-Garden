@@ -406,8 +406,12 @@ export const FeedbackRatingScale = ({
   return (
     <div className="w-full">
       <div
-        className="flex items-center justify-center gap-1.5 rounded-full px-2 py-2"
-        style={{ background: TRACK_BG, boxShadow: TRACK_INSET }}
+        className="flex items-center justify-center rounded-full px-2 py-2"
+        style={{
+          background: TRACK_BG,
+          boxShadow: TRACK_INSET,
+          gap: "0.28rem",
+        }}
       >
         {SCALE.map((n) => (
           <StarSlotButton
