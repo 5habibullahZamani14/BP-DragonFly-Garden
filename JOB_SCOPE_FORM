@@ -1,0 +1,395 @@
+# JOB SCOPE FORM
+
+## Project Information
+
+- Project Name: BP DragonFly Garden Cafe Ordering and Management System
+- Project Type: Internship Project / Solo Developer Development
+- Project Objective: Design, develop, and deliver a complete restaurant operations platform for a cafe environment, including customer ordering, payment processing, and management administration.
+- Project Environment: Local network deployment with a Raspberry Pi-based setup, supporting web-based access through QR codes.
+- Project Status: 90% implementation complete; remaining work focuses on final completion, validation, and handover readiness.
+
+## 1\. Purpose of This Job Scope Form
+
+This document serves as the official job scope for the BP DragonFly Garden project. It defines the sequential tasks, responsibilities, and deliverables required to complete the system from the initial concept stage to full project delivery. It is structured as a professional implementation guide for the developer to follow during the internship period.
+
+## 2\. Project Completion Status
+
+The project is currently at approximately 90% completion. The remaining work must focus on finishing the final implementation details, validating the full system, and ensuring the application is fully operational, stable, and ready for handover.
+
+## 3\. Chronological Job Scope
+
+### Phase 1: Project Initiation and Discovery
+
+Task 1.1: Understand the business need
+
+The business need is to create a practical cafe ordering and management system that supports customers, payment staff, and managers through a shared local network experience. The solution must address the need for fast ordering, clear order flow, secure administration, and simple deployment in a cafe environment.
+
+- Identify the restaurant's operational workflow. This has been addressed by defining a workflow in which customers place orders, staff process payments, and managers oversee operations through a centralized system.
+- Understand how customers, payment staff, and managers interact with the system. The current application is structured around three main user areas: the customer ordering experience, the payment counter view, and the manager dashboard.
+- Define the core problems the solution must solve. The system is intended to simplify ordering, improve operational visibility, and support day-to-day restaurant control from a single platform.
+
+Task 1.2: Define project scope and objectives
+
+The scope is to build a complete restaurant management platform that can be used locally and accessed through web-based interfaces. The objective is to deliver a system that is functional, organized, and suitable for practical use in a cafe setting.
+
+- Determine the system's primary goals. The main goals are to allow customers to order efficiently, to support staff in payment handling, and to give managers control over system administration.
+- Establish the required features and user roles. The implemented structure focuses on customer, payment counter, and manager roles rather than a kitchen-management module.
+- Define the project boundaries and deliverables. The project scope is centered on ordering, payment processing, management administration, and deployment readiness.
+
+Deliverables:
+
+- Project goals
+- Functional requirements
+- Initial project scope definition
+
+### Phase 2: Planning and Solution Design
+
+Task 2.1: Create the overall project plan
+
+The project plan has been organized around building the frontend experience, backend services, local data handling, and deployment readiness in a structured sequence. This approach allows the system to be developed in a manageable and professional way.
+
+- Break the project into major development stages. The implementation has been divided into phases covering frontend creation, backend setup, workflow development, administrative features, security, and deployment.
+- Plan frontend, backend, database, and deployment work. The current project structure clearly separates the React-based frontend from the Node-based backend and prepares both for local deployment.
+- Prepare a roadmap for implementation and delivery. The project is now positioned as a complete system with a clear path from core features to final validation and handover.
+
+Task 2.2: Design the system architecture
+
+The system architecture is based on a client-server model in which the frontend communicates with a backend service and the backend manages the application logic and local data storage. This design keeps the user experience simple while ensuring that business logic is handled centrally.
+
+- Define the frontend and backend structure. The frontend is built as a Vite React TypeScript application, while the backend is built as a Node.js Express service with separate folders for routes, controllers, middleware, database logic, and utilities.
+- Plan the communication between client and server. The current implementation uses HTTP-based API requests for core operations and real-time messaging where needed to keep the interface updated.
+- Decide on the database approach and data flow. The application uses a local SQLite database approach for persistent data storage, with the backend acting as the main processing layer and the frontend accessing data through the API. The data flow is centered on customer requests being submitted from the frontend, processed by the backend, stored in the local database, and then reflected back to the relevant interface.
+
+Task 2.3: Define key user journeys
+
+The main user journeys have been defined around three core experiences: ordering as a customer, processing payments as counter staff, and managing the system as a manager. These journeys guide how each interface is built and how information is presented.
+
+- Customer ordering flow. The customer view supports browsing the menu, placing an order, and confirming the submission through the system.
+- Payment handling flow. The payment counter workflow allows outstanding orders to be reviewed and marked as paid after processing.
+- Manager dashboard operations. The management interface provides access to administration, settings, and system oversight tasks.
+
+Deliverables:
+
+- Project roadmap
+- System architecture plan
+- Functional workflow definitions
+
+### Phase 3: Environment Setup and Development Foundation
+
+Task 3.1: Set up the development workspace
+
+The development workspace has been established with separate frontend and backend folders so that the application can be built and managed as a full-stack project. This separation makes the system easier to organize and maintain.
+
+- Initialize the frontend application. The frontend has been set up as a Vite-based React application with TypeScript support and a structured source folder.
+- Initialize the backend service. The backend has been initialized as a Node.js service with its own source structure and runtime configuration.
+- Organize the repository structure for maintainability. The project is already arranged into clear directories for frontend code, backend code, scripts, and supporting files.
+
+Task 3.2: Configure the development tools
+
+The development environment has been configured to support both local development and practical project execution. The toolchain is aligned with the needs of a modern web application and a server-side backend.
+
+- Set up a modern frontend toolchain. The frontend uses Vite, React, TypeScript, Tailwind CSS, and supporting libraries to provide a responsive and maintainable interface.
+- Configure backend runtime and dependency management. The backend uses Node.js with Express and relevant libraries for routing, configuration, authentication, and data handling.
+- Prepare the environment for local development and testing. The system is organized so that it can be started, tested, and refined during development before final delivery.
+
+Deliverables:
+
+- Working development environment
+- Project folder structure
+- Initial codebase foundation
+
+### Phase 4: Backend Development and Core Server Setup
+
+Task 4.1: Build the backend foundation
+
+The backend foundation is already in place. It includes a Node-based project setup, a source folder, and supporting files for running server-side logic, which means the project already has the basic structure for backend functionality.
+
+- Create the server entry point. A backend entry module is already present, providing the starting point for launching the application and handling runtime operations.
+- Set up routing and request handling. The backend structure supports routing and request processing through organized route and controller files.
+- Prepare the API structure for all major modules. The backend is already organized around major functional areas, which provides a strong base for building and extending the application logic.
+
+Task 4.2: Implement backend configuration and environment handling
+
+The backend configuration layer has been established to support environment-based settings and deployment readiness. This is important because the application needs to run consistently across development and runtime environments.
+
+- Configure runtime variables. Environment configuration is already part of the backend setup and is used to control runtime behavior.
+- Manage secure configuration for authentication and service integrations. The backend includes support for secret-based configuration and external service integration, which helps the system remain secure and flexible.
+- Prepare the backend for deployment. The backend has been structured with deployment in mind, including configuration points that support running the application in a local network environment.
+
+Task 4.3: Build database structure
+
+The database structure has been implemented using a local SQLite-based approach. This choice matches the project’s need for a lightweight, self-contained system that can run locally without requiring a complex external database setup.
+
+- Create the main database schema. The backend includes database logic for storing core application data such as orders, settings, and user-related records.
+- Define entities for orders, menu items, users, settings, and logs. The current data model is organized around the main information the system must manage in daily operation.
+- Implement initial seed data. The database setup includes initial data support so that the application can be started with a usable baseline state.
+
+Task 4.4: Implement core business logic
+
+The core business logic has been developed around the main restaurant workflow. This includes order processing, status management, and administrative handling, which are the essential functions of the system.
+
+- Process orders. The backend supports the creation and handling of customer orders as part of the app workflow.
+- Manage order statuses. The system is designed to track orders through their lifecycle and update their current state as needed.
+- Handle restaurant operational workflows. The backend logic reflects the main operational requirements of the cafe system, including ordering and management-related actions.
+
+Deliverables:
+
+- Functional backend server
+- Database schema and seed data
+- Core business logic modules
+
+### Phase 5: Frontend Development and User Interface Build
+
+Task 5.1: Build the main application interface
+
+The main frontend interface has been developed to provide a polished and organized experience for the three main user roles. The interface is designed to be easy to navigate and suitable for practical use.
+
+- Create the overall layout and navigation structure. The frontend contains a structured application layout with dedicated views and reusable interface components.
+- Develop reusable UI components and screen layouts. The project includes a component-based structure that supports consistent design and maintainability.
+- Ensure the interface is responsive and suitable for mobile and tablet usage. The frontend is built with modern UI practices to support accessible and practical interaction across devices.
+
+Task 5.2: Implement the customer-facing experience
+
+The customer-facing experience has been created to allow users to browse the menu and submit orders through a simple, guided flow. This part of the system is central to the overall value of the project.
+
+- Create the menu browsing experience. The customer interface supports viewing the menu and selecting items in a clear way.
+- Implement item selection and cart functions. The app includes ordering interactions that allow users to add items and prepare their selection for submission.
+- Provide a smooth checkout process. The customer flow is designed to take the order from selection to submission in a straightforward manner.
+
+Task 5.3: Implement the QR-based access flow
+
+The QR-based access flow has been included so that the system can be used in a cafe environment without requiring users to manually enter long addresses or complex paths. This makes access easier and more practical for staff and customers.
+
+- Connect QR code entry points to the appropriate views. The application is designed to route users to the relevant customer, payment, or manager experience through QR-based entry.
+- Ensure each role has the correct interface and workflow. The frontend is organized so that each role receives the interface that matches its responsibilities.
+
+Deliverables:
+
+- Functional frontend application
+- Customer-facing order interface
+- Role-based app entry points
+
+### Phase 6: Ordering and Order Workflow Development
+
+Task 6.1: Implement customer order submission
+
+Customer order submission has been implemented as a key part of the system. The workflow allows users to place orders from the menu and send them into the application’s processing flow.
+
+- Allow users to place orders from the menu. The customer experience includes the ability to select menu items and submit them as an order.
+- Send orders to the backend for processing. The frontend sends customer requests to the backend so that the system can process and store them.
+- Provide confirmation of successful order placement. The workflow is designed to confirm that an order has been received and is moving through the system.
+
+Task 6.2: Support order lifecycle management
+
+The order lifecycle is supported so that orders can move through the workflow in an organized and traceable way. This is essential for keeping the overall restaurant process consistent and manageable.
+
+- Update order status as the workflow progresses. The system is designed to reflect order changes as the workflow advances.
+- Maintain order history and current activity. The current implementation keeps the relevant order state available for tracking and review.
+
+Deliverables:
+
+- Customer ordering workflow
+- Functional order lifecycle logic
+
+### Phase 7: Payment and Counter Operations Development
+
+Task 7.1: Build the payment counter interface
+
+The payment counter interface has been developed to support staff in reviewing outstanding orders and handling transactions efficiently. This view is a core part of the system’s operational workflow.
+
+- Create a view for staff to see outstanding orders. The payment interface provides access to the orders that are still pending completion.
+- Display order details clearly for payment processing. The interface is arranged to show the relevant information needed for payment handling.
+
+Task 7.2: Implement payment handling logic
+
+The payment handling logic has been included so that completed payments can be recorded and reflected in the system. This makes the counter workflow practical and consistent.
+
+- Mark orders as paid after successful processing. The system supports updating an order to a paid state after the transaction is completed.
+- Keep the order state synchronized across the system. The application logic helps ensure that the updated payment status is reflected in the shared workflow.
+
+Deliverables:
+
+- Payment workflow interface
+- Completed payment processing logic
+
+### Phase 8: Management Dashboard and Administrative Features
+
+Task 8.1: Create the management dashboard
+
+The management dashboard has been built as the main administrative interface for the system. It provides a central place for overseeing the application and its daily operations.
+
+- Build a central control panel for restaurant administrators. The dashboard is designed to serve as the main center for management tasks.
+- Provide access to operational and configuration tools. The interface includes features that support administration and system configuration.
+
+Task 8.2: Implement employee and access management
+
+The management area includes access-related functionality so that the system can be controlled in a secure and organized way. This helps ensure that administrative actions are limited to the appropriate users.
+
+- Manage staff roles and permissions. The application structure supports role-based administration.
+- Control access to sensitive actions and administrative features. The system is designed to separate management actions from general public usage.
+
+Task 8.3: Implement inventory and settings management
+
+The management module includes support for operational settings and configuration-related tasks. This allows the system to be adjusted based on the needs of the cafe.
+
+- Support menu and stock-related administration. The management features are intended to cover restaurant operational settings.
+- Enable restaurant configuration and operational customization. The system includes the ability to manage important operational preferences.
+
+Task 8.4: Implement logs and monitoring tools
+
+The system includes monitoring and logging support so that activity can be reviewed and tracked. This contributes to better oversight and easier maintenance.
+
+- Track system activity and operations. The app structure supports recording relevant activity for review.
+- Provide useful administrative visibility into app usage. The management views are intended to give supervisors enough visibility to monitor system behavior.
+
+Deliverables:
+
+- Manager dashboard
+- Administrative control features
+- Operational monitoring tools
+
+### Phase 9: Security, Reliability, and Data Protection
+
+Task 9.1: Implement authentication and authorization
+
+Authentication and authorization have been incorporated to protect the management side of the system and restrict access to appropriate users. This is essential for keeping the application secure.
+
+- Secure manager and admin features. The current design includes protected access for administrative functions.
+- Restrict access by role. The system uses role-based control to limit sensitive actions.
+- Protect sensitive backend routes. The backend is structured to support protected service access.
+
+Task 9.2: Secure data handling
+
+The system includes measures to protect sensitive information and reduce the risk of unauthorized exposure. This is especially important for login-related and administrative data.
+
+- Hash sensitive credentials. Secure handling practices are part of the application design.
+- Protect reset and login flows. The system includes support for secure account-related actions.
+- Prevent unauthorized action execution. The backend and access logic are designed to reduce the risk of misuse.
+
+Task 9.3: Improve stability and resilience
+
+The application has been structured to behave consistently under normal use and to support reliable operation as the system is used in practice. This helps reduce failures and makes the system easier to maintain.
+
+- Add robust error handling. The application is designed with error handling in mind as part of the overall implementation.
+- Ensure consistent system behavior under normal usage. The system is intended to provide stable operation during everyday use.
+- Prepare the platform for real-world operation. The architecture and configuration support practical deployment and day-to-day use.
+
+Deliverables:
+
+- Secure access controls
+- Protected user and admin flows
+- Stable application behavior
+
+### Phase 10: Advanced Features and User Experience Enhancements
+
+Task 10.1: Add real-time communication features
+
+Real-time communication has been included so that the system can keep key interfaces updated as activity occurs. This improves responsiveness and helps the overall workflow feel connected.
+
+- Enable live updates between client interfaces and backend services. The application supports synchronized interaction between the main user views.
+- Keep customer, counter, and manager views synchronized. The system is designed so that relevant updates are reflected across the main interfaces.
+
+Task 10.2: Implement localization and accessibility support
+
+The project includes support for multiple languages and a more inclusive user experience. This makes the application more usable for a wider audience.
+
+- Provide multi-language support. The frontend includes localization support for different languages.
+- Improve the experience for a wider range of users. The application structure supports a more accessible and user-friendly interface.
+
+Task 10.3: Add PWA and usability improvements
+
+The application has been prepared with progressive web app and usability improvements so that it can feel more like a modern installed experience rather than a basic webpage. This strengthens the practical value of the system.
+
+- Support installation-like web usage. The project includes PWA-related setup and service worker support.
+- Improve offline-friendly and device-friendly experience. The frontend has been prepared with capabilities that improve overall usability.
+
+Task 10.4: Integrate supporting services
+
+The project includes supporting services that extend the basic functionality of the system. These services improve communication, security, and operational flexibility.
+
+- Connect email-based reset functionality. The backend includes support for email-based reset capability.
+- Integrate optional printing and operational support features. The system includes support for printing-related and operational integrations where relevant.
+
+Deliverables:
+
+- Enhanced real-time experience
+- Improved accessibility and usability
+- Extended operational features
+
+### Phase 11: Deployment and Local Network Readiness
+
+Task 11.1: Prepare the application for deployment
+
+The application has been prepared for deployment in a local network environment, which is essential for a cafe-based system. The project is structured so that it can be run on a Raspberry Pi or similar device without requiring a complex external hosting setup.
+
+- Configure the app for local network operation. The application is designed to run within a local environment and support practical in-store use.
+- Ensure the system is suitable for use on a Raspberry Pi or similar device. The project documentation and structure support simple deployment on lightweight hardware.
+
+Task 11.2: Set up production-style runtime procedures
+
+The runtime workflow has been organized so that the app can be launched and maintained in a professional and repeatable way. This includes clear setup details and operational expectations.
+
+- Prepare run instructions. The project includes clear instructions for starting the backend and frontend services.
+- Ensure environment variables and service configuration are in place. The application setup includes environment-based configuration for proper runtime operation.
+- Make the application usable in a cafe environment. The deployment concept is aligned with the practical needs of the restaurant setting.
+
+Deliverables:
+
+- Deployed or deployment-ready application
+- Local system setup instructions
+- Operational readiness documentation
+
+### Phase 12: Testing, Refinement, and Final Delivery
+
+Task 12.1: Perform functional testing
+
+The final stage includes validating that the main workflows work properly and that the system behaves as expected in real use. This is necessary to confirm that the project is both complete and dependable.
+
+- Verify customer ordering. The main customer ordering flow should be confirmed as working end to end.
+- Verify payment and administration workflows. The payment and management flows should be validated to ensure they operate correctly.
+
+Task 12.2: Perform integration and end-to-end validation
+
+The system should be tested as a full solution so that all modules work together smoothly. This confirms that data flows correctly between the frontend, backend, and database.
+
+- Ensure all modules work together smoothly. The completed system should be checked for consistency across interface, logic, and storage layers.
+- Confirm that data flows correctly across the full system. The order, payment, and management information should be verified as it moves through the application.
+
+Task 12.3: Final refinement and documentation
+
+The final stage includes polishing the project and preparing it for handover. The goal is to deliver a solution that is documented, complete, and ready for practical use.
+
+- Improve clarity and polish where needed. The system should be refined so that it is consistent and professional in presentation and behavior.
+- Prepare final documentation and usage instructions. The project should include clear guidance for use and deployment.
+- Deliver the completed project in a stable state. The final output should be ready for handover with confidence in its functionality.
+
+Deliverables:
+
+- Verified application
+- Final documentation
+- Handover-ready project output
+
+## 4\. Summary of Deliverables
+
+The completed project must include:
+
+- A complete cafe ordering system for customers
+- A payment counter workflow
+- A manager dashboard for administration
+- Secure authentication and access handling
+- A local-network deployment setup
+- Documentation and operational guidance
+
+## 5\. Final Acceptance Criteria
+
+The project will be considered complete when:
+
+- All major functional workflows operate correctly.
+- The application is stable and reliable.
+- The system can be used by customers, staff, and managers without operational issues.
+- The project is documented and ready for handover.
+- The implementation reflects the full intended scope of the internship project.
+
+## 6\. Closing Statement
+
+This job scope form defines the required professional development path from project inception to final completion of the BP DragonFly Garden system. It captures the step-by-step work that must be completed by the developer to deliver the application as a complete, stable, and fully operational solution.
