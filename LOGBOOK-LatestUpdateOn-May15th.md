@@ -5,7 +5,7 @@
 **Host organisation:** BP DragonFly Garden  
 **Degree programme:** Bachelor's in computer science / software engineering  
 **Project:** QR-code-based table ordering and restaurant management system  
-**Current progress (as of 14 May 2026):** ~40% complete - core ordering system functional and hardware printer integration established
+**Current progress (as of 29 June 2026):** ~90% complete - core ordering, payment, management, security, deployment, and UI enhancement features are now substantially implemented and documented
 
 ## March 2026
 
@@ -71,6 +71,29 @@
 | 12 May 2026 | Tuesday   | Troubleshooting | Investigated and resolved critical system crashes that emerged during the heavy refactoring process, ensuring core ordering stability.                                                                                                                                                                                                              |
 | 13 May 2026 | Wednesday | Maintenance     | A planned meeting was delayed as I was heavily focused on fixing a system crash and stabilising the architecture rather than adding new features.                                                                                                                                                                                                   |
 | 14 May 2026 | Thursday  | Development     | Huge milestone reached: Finalized POS receipt and kitchen checklist printing integration using a custom C# GDI engine (print_gdi.exe) specifically adapted for 58mm thermal printers. Handled character cutoff, implemented word-wrapping, automated the payment lifecycle (auto-dismissal via WebSockets), and ran a secure database purge script. |
+| 15 May 2026 | Friday    | Documentation   | Continued documentation and project record refinement, improving the clarity and structure of the project materials as development progressed. |
+| 16 May 2026 | Saturday  | Maintenance     | Removed outdated progress-report documentation and cleaned up project records so that the repository remained more focused and easier to navigate. |
+| 17 May 2026 | Sunday    | Development     | Implemented role-based routing for the main application entry, allowing the system to present a unified customer experience while preparing the platform for different access roles. |
+| 18 May 2026 | Monday    | Development     | Built the core infrastructure for centralized API communication and management-side functionality, laying the groundwork for finance, logging, and operations modules. |
+| 20 May 2026 | Wednesday | Development     | Expanded the management module with audit logging, system settings, database management features, and printer-related support to strengthen daily operations. |
+| 21 May 2026 | Thursday  | Development     | Implemented the Payment Counter View with staff authentication, real-time billing support, and localized interfaces, while also introducing the initial management dashboard experience. |
+| 23 May 2026 | Saturday  | Development     | Finalised the Customer View experience with live order tracking, menu browsing, and persisted session behavior to improve usability across customer interactions. |
+| 24 May 2026 | Sunday    | UI Refinement   | Refined the app layout and interface positioning, improved notification handling, fixed timestamp issues, and enhanced navigation for the management and payment-related views. |
+| 25 May 2026 | Monday    | AI Integration  | Added and improved AI-powered feedback analysis features, introduced a chatbot experience, and improved responsiveness for feedback-related workflows. |
+| 26 May 2026 | Tuesday   | Feature Expansion | Improved the feedback and AI experience by refining the analysis output, separating the chatbot into its own tab, and improving the presentation of feedback-related content. |
+| 31 May 2026 | Sunday    | UI Polish       | Improved the visual quality of several frontend components and polished the interface to make the overall experience more consistent and professional. |
+
+## June 2026
+
+| **Date**    | **Day**   | **Phase**           | **Log Entry**                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------- | --------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 11 Jun 2026 | Thursday  | Deployment Prep     | Focused on deployment reliability and local network readiness by fixing API base configuration, resolving SQLite initialization crashes on fresh setups, and improving database file management for smoother startup behavior. |
+| 16 Jun 2026 | Tuesday   | Feature Expansion   | Implemented significant menu and design enhancements, including global default pattern overlays, item variation systems, manager-editable menu sections, and improved menu management controls. |
+| 17 Jun 2026 | Wednesday | UI & Pattern System | Expanded the pattern and visual editing experience by introducing a repository-based pattern system, advanced editing tools, improved dialog layouts, updated font options, and a more flexible feedback star system. |
+| 23 Jun 2026 | Tuesday   | Security & Access   | Strengthened the management and payment-side security model by introducing authentication for protected routes, improving management dashboard access, and tightening the overall application security structure. |
+| 24 Jun 2026 | Wednesday | Security & Performance | Implemented stronger security and performance measures, including password hashing, JWT-based protection for management and payment endpoints, image compression support, and improved backend setup documentation. |
+| 25 Jun 2026 | Thursday  | Deployment & UX     | Added hotspot configuration support, QR code generation for tables, improved checkout button styling, safer error handling, and better support for local deployment and network usage. |
+| 29 Jun 2026 | Monday    | Documentation & Handover | Finalised project documentation by adding the job scope form and logbook update materials, consolidating the project’s structure and progress into a more formal and professional documentation set. |
 
 ## Upcoming - 15 May 2026 onwards
 
