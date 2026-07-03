@@ -310,11 +310,20 @@ The project includes supporting services that extend the basic functionality of 
 - Connect email-based reset functionality. The backend includes support for email-based reset capability.
 - Integrate optional printing and operational support features. The system includes support for printing-related and operational integrations where relevant.
 
+Task 10.5: Implement AI-powered feedback and chatbot support
+
+The system has been enhanced with AI-assisted feedback analysis and a chatbot-style interface to make user feedback more actionable and easier to use.
+
+- Add feedback intelligence. Implement AI feedback processing that summarizes and analyzes user responses to improve insight quality.
+- Create a chatbot feedback experience. Build a dedicated feedback tab with conversational guidance and response summaries.
+- Improve feedback presentation. Refine the display of feedback results and ensure the experience feels responsive, useful, and user-friendly.
+
 Deliverables:
 
 - Enhanced real-time experience
 - Improved accessibility and usability
 - Extended operational features
+- AI-powered feedback analysis and chatbot support
 
 ### Phase 11: Deployment and Local Network Readiness
 
@@ -333,11 +342,40 @@ The runtime workflow has been organized so that the app can be launched and main
 - Ensure environment variables and service configuration are in place. The application setup includes environment-based configuration for proper runtime operation.
 - Make the application usable in a cafe environment. The deployment concept is aligned with the practical needs of the restaurant setting.
 
+Task 11.3: Configure the Raspberry Pi runtime environment
+
+The Raspberry Pi deployment has been handled from absolute zero, including OS installation, runtime environment setup, and local network configuration to make the device the primary host for the cafe system.
+
+- Install and configure Raspberry Pi OS. Set up the operating system, networking, and system utilities required for a stable Pi host.
+- Prepare the Node.js and SQLite runtime environment on ARM. Install dependencies, rebuild native modules for Pi architecture, and ensure file permissions and database access are configured correctly.
+- Configure local network addressing and app endpoint settings. Ensure `VITE_API_BASE` and backend endpoint URLs point to the Pi LAN address rather than localhost so client devices connect reliably in the cafe network.
+- Set up service-style startup behavior. Prepare repeatable runtime procedures, including clean startup, restart handling, and recovery from transient failures on the Pi.
+
+Task 11.4: Set up thermal printer and hardware integration
+
+Thermal printer hardware setup has been completed as part of the deployment readiness work, ensuring the system can print receipts and kitchen tickets reliably in the target environment.
+
+- Install and configure the thermal printer. Set up the physical printer, pair it with the target device, and verify the connection method (Bluetooth, USB, or local print service).
+- Validate POS receipt and checklist printing. Test receipt output, paper width, formatting, and line wrapping so print jobs are readable and reliable.
+- Integrate print logic with the backend. Ensure the application’s print flow is connected to the local runtime and that printer commands are delivered correctly from the system.
+- Confirm hardware readiness for cafe operation. Verify that the thermal printer is fully operational within the deployed environment and aligned with the local deployment model.
+
+Task 11.5: Configure hotspot and QR table deployment support
+
+The project includes support for a local hotspot and QR-based table access model to make the restaurant deployment easier for customers and staff.
+
+- Add hotspot networking support. Prepare the application to run with local network access through a Raspberry Pi-hosted hotspot.
+- Generate QR table access flows. Ensure tables can be accessed via QR codes that route customers to the right app experience without requiring manual URL entry.
+- Verify local network usability. Test the client device connection experience to confirm that network and QR access are reliable in the cafe environment.
+
 Deliverables:
 
 - Deployed or deployment-ready application
 - Local system setup instructions
 - Operational readiness documentation
+- Raspberry Pi runtime environment setup
+- Thermal printer hardware integration readiness
+- Hotspot and QR-based local access support
 
 ### Phase 12: Testing, Refinement, and Final Delivery
 
@@ -379,6 +417,95 @@ The completed project must include:
 - Secure authentication and access handling
 - A local-network deployment setup
 - Documentation and operational guidance
+
+## 4.1 Expanded Deliverables Inventory and Readiness Assessment
+
+The following section expands the original deliverables listed throughout this job scope form into a more complete, professional, and implementation-based record. Each item is described in practical terms, and each is assessed for whether it is ready for delivery as part of the current project output or whether it still requires final validation before handover.
+
+### Phase 1 Deliverables
+
+- Project goals — The project goals are clearly defined around creating a practical cafe ordering and management platform that supports customers, payment staff, and managers through a shared local-network experience. This deliverable is ready for delivery because the project purpose is documented, aligned with the business need, and reflected in the current system structure.
+- Functional requirements — The functional requirements are represented by the core journeys of menu browsing, order placement, payment handling, and administrative management. This deliverable is ready for delivery because the implemented application clearly supports these major workflows.
+- Initial project scope definition — The project scope is clearly bounded around a local cafe environment with QR-based user access, order processing, payment operations, and management oversight. This deliverable is ready for delivery because the system remains focused and purpose-driven rather than scattered across unrelated features.
+
+### Phase 2 Deliverables
+
+- Project roadmap — The roadmap is established through the phased implementation structure documented in this job scope and reflected by the repository’s separation of frontend, backend, database, and deployment assets. This deliverable is ready for delivery because the development path is clear and professionally organized.
+- System architecture plan — The architecture is based on a frontend-backend-local database structure with QR-driven access and a local-network deployment model. This deliverable is ready for delivery because the repository already demonstrates a coherent application architecture and service separation.
+- Functional workflow definitions — The main user journeys are defined around customer ordering, payment processing, and management administration. This deliverable is ready for delivery because the workflow logic is visible through the frontend views and backend routes.
+
+### Phase 3 Deliverables
+
+- Working development environment — A development environment has been established with a separate frontend and backend workspace, supporting local testing and iterative development. This deliverable is ready for delivery because the project includes a structured development setup and clearly organized source folders.
+- Project folder structure — The repository contains a clear division between frontend UI, backend logic, database files, scripts, and supporting documentation. This deliverable is ready for delivery because the structure is already maintainable and understandable.
+- Initial codebase foundation — The initial codebase foundation is in place with the necessary application entry points, supporting libraries, and source organization. This deliverable is ready for delivery because the project has moved beyond a bare skeleton and now contains working application modules.
+
+### Phase 4 Deliverables
+
+- Functional backend server — The backend server is implemented and provides request handling, route structure, controller logic, and database interaction for core operations. This deliverable is ready for delivery as a functional backend because the server is present and actively supports the application’s main workflows.
+- Database schema and seed data — The database layer includes schema initialization and seed data for the main entities required by the system. This deliverable is ready for delivery because the data structure exists and can be used to initialize the application in a usable state.
+- Core business logic modules — The core business logic covers order handling, payment updates, management actions, and role-based operational behavior. This deliverable is ready for delivery because the necessary business flows are already implemented in the backend controllers and routes.
+
+### Phase 5 Deliverables
+
+- Functional frontend application — The frontend application is implemented as a React-based interface with structured page components, reusable UI elements, and role-based view handling. This deliverable is ready for delivery because the user interface is present, operational, and connected to the backend services.
+- Customer-facing order interface — The customer-facing experience includes menu browsing, item selection, and order submission functions. This deliverable is ready for delivery because the customer interface is built and aligned with the core business objective of ordering from a cafe table.
+- Role-based app entry points — Role-based entry points exist through the customer, payment counter, and management views, with QR-based navigation linking users to the appropriate workflow. This deliverable is ready for delivery because the application already presents distinct entry paths for the main user roles.
+
+### Phase 6 Deliverables
+
+- Customer ordering workflow — The customer ordering workflow includes the ability to create and submit orders from the interface and send them into the system’s processing logic. This deliverable is ready for delivery because the flow is implemented end to end in the current application.
+- Functional order lifecycle logic — The order lifecycle is reflected through state handling, updates, and operational visibility within the order workflow. This deliverable is ready for delivery because the repository contains logic and interfaces that support order progression through the system.
+
+### Phase 7 Deliverables
+
+- Payment workflow interface — The payment counter interface is implemented to display outstanding orders and support staff in processing payments. This deliverable is ready for delivery because the payment-focused UI and data flow are already present.
+- Completed payment processing logic — Payment processing logic is implemented to update orders and reflect their state as completed or paid. This deliverable is ready for delivery because the payment pathway is present and aligned with the operational workflow of the cafe system.
+
+### Phase 8 Deliverables
+
+- Manager dashboard — The manager dashboard is implemented as a central administration surface for managing system functions. This deliverable is ready for delivery because the dashboard exists as a distinct management experience and is connected to administrative features.
+- Administrative control features — Administrative features include management of settings, menu content, employees, and operational controls. This deliverable is ready for delivery because these functions are represented in the management modules and supported by backend endpoints.
+- Operational monitoring tools — Monitoring and logging support are included through management views and backend activity handling. This deliverable is ready for delivery because the system already includes a monitoring-oriented structure and administrative visibility mechanisms.
+
+### Phase 9 Deliverables
+
+- Secure access controls — Access control is present through protected routes, role-aware logic, and management authentication mechanisms. This deliverable is mostly ready for delivery, but it should be final-validated before broader deployment because the system still benefits from additional hardening and security review.
+- Protected user and admin flows — User and admin workflows are separated by role and access behavior, which protects sensitive actions and operational functions. This deliverable is mostly ready for delivery and suitable for demonstration use, but final security validation is still advisable.
+- Stable application behavior — The application is structured to behave consistently during normal use and to support practical operation in the intended environment. This deliverable is ready for delivery as an internship-level system and should be validated through final testing before formal handover.
+
+### Phase 10 Deliverables
+
+- Enhanced real-time experience — The system includes real-time update behavior through websocket-based communication and live updates across major views. This deliverable is ready for delivery because the project already implements live synchronization between major interfaces.
+- Improved accessibility and usability — The frontend has been built with a modern UI framework, responsive layouts, localization support, and accessible interface components. This deliverable is ready for delivery because the user experience design is already substantially implemented.
+- Extended operational features — Additional operational features such as feedback handling, printing support, and supporting integrations are present in the project structure. This deliverable is ready for delivery as a functional extension set, although the final round of testing may still refine these modules.
+
+### Phase 11 Deliverables
+
+- Deployed or deployment-ready application — The application is structured for local-network deployment and is suitable for running on a Raspberry Pi or similar small device. This deliverable is ready for delivery in a local deployment context, provided the runtime environment and startup procedures are verified on the target hardware.
+- Local system setup instructions — The project includes setup guidance covering development startup, environment variables, and deployment to a Raspberry Pi-based environment. This deliverable is ready for delivery because the documentation is already present and practical.
+- Operational readiness documentation — The repository contains deployment-related documentation and environment notes that support installation and operation. This deliverable is ready for delivery because it is already documented in a usable form.
+
+### Phase 12 Deliverables
+
+- Verified application — The application should be verified through end-to-end testing of ordering, payment, management, and local-network usage. This deliverable is not yet fully complete until the final validation cycle is executed, but the foundation for it is already present.
+- Final documentation — The project already contains documentation for running the app, understanding the deployment model, and reviewing the overall system purpose. This deliverable is ready for delivery, with the expectation that the final handover package may be refined slightly before submission.
+- Handover-ready project output — The project is close to being handover-ready because the core application, documentation, and operational structure are present. This deliverable is mostly ready for delivery and should be finalized through a last round of validation and cleanup.
+
+### Summary Deliverables Added for Final Handover
+
+- Complete cafe ordering system for customers — This deliverable is ready for delivery because the application supports ordering through a customer-facing interface and the backend processes those requests in a coherent workflow.
+- Payment counter workflow — This deliverable is ready for delivery because the payment interface and payment status handling are already implemented in the current system.
+- Manager dashboard for administration — This deliverable is ready for delivery because the management view contains the administrative tools needed for oversight and operation.
+- Secure authentication and access handling — This deliverable is mostly ready for delivery and suitable for an internship-level handover, but it still requires final hardening and validation before any production-style deployment.
+- Local-network deployment setup — This deliverable is ready for delivery in a local environment because the system is designed for deployment on a Raspberry Pi or similar device within a cafe network.
+- Raspberry Pi runtime environment setup — This deliverable is ready for delivery because the project includes the full Pi OS and ARM runtime setup, including network configuration, dependency installation, and target-device launch procedures.
+- Thermal printer hardware integration readiness — This deliverable is ready for delivery because the deployment includes end-to-end printer setup, receipt formatting validation, and local printer integration support.
+- Documentation and operational guidance — This deliverable is ready for delivery because the project includes both technical guidance and operational notes that support setup and use.
+
+### Overall Readiness Summary
+
+In its current form, the BP DragonFly Garden project is best described as a functional and well-structured delivery candidate for a local cafe deployment, with the main feature set already implemented and documented. The project is strongly positioned for delivery as an internship-level solution, while the remaining work should focus on final validation, refinement, and security hardening before a more formal production-style handover.
 
 ## 5\. Final Acceptance Criteria
 
