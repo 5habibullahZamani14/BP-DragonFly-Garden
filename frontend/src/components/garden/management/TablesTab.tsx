@@ -202,9 +202,10 @@ export const TablesTab = () => {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {tables.map((table) => (
+        {tables.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number)).map((table) => (
           <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group cursor-pointer" onClick={() => setViewQRCodeTable(table)}>
             <CardContent className="pt-6 pb-4">
+              {!/(takeaway|counter|to[- ]?go)/i.test(table.table_number) && (
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
@@ -228,6 +229,7 @@ export const TablesTab = () => {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
+              )}
               <Grid3X3 className="h-8 w-8 text-green-200 mx-auto mb-2" />
               <div className="font-bold text-lg text-gray-800">{table.table_number}</div>
               <div className="text-xs text-gray-500 mt-2 flex items-center justify-center gap-1">

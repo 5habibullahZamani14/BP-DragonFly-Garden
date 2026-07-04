@@ -1272,7 +1272,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           tabIndex={0}
                           onClick={() => setSelectedMenuItem(item)}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMenuItem(item); } }}
-                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
+                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative ${item.card_size === 'large' ? 'md:col-span-2 lg:col-span-2' : item.card_size === 'extra_large' ? 'md:col-span-2 lg:col-span-2 xl:col-span-2' : ''}`}
                           style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
                         >
                           {patternImage && (
@@ -1302,7 +1302,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               )}
                             </div>
                           )}
-                          <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
+                          <div className={`relative shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10 ${item.card_size === 'large' ? 'h-28 w-28 sm:h-32 sm:w-32' : item.card_size === 'extra_large' ? 'h-36 w-36 sm:h-40 sm:w-40' : 'h-20 w-20 sm:h-24 sm:w-24'}`}>
                             {item.image_url ? (
                               <img src={item.image_url} alt={item.name} loading="lazy"
                                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -1312,9 +1312,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 <Leaf className="h-7 w-7 text-leaf/60" />
                               </div>
                             )}
-                            {item.is_popular && (
-                              <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
-                                <Star className="h-2.5 w-2.5 fill-current" />
+                            {(item.is_popular || item.is_promo) && (
+                              <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
+                                {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
                               </span>
                             )}
                           </div>
@@ -1329,7 +1329,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               {item.description || t("customer.descriptionFallback")}
                             </p>
                             <div className="mt-auto flex items-end justify-between pt-2">
-                              <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                              <div>
+                                <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                                {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                              </div>
                               <button
                                 disabled={item.is_sold_out}
                                 onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
@@ -1871,7 +1874,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       )}
         </main>
         {/* Floating cart summary */}
-        {cart.length > 0 && !cartOpen && tab !== "orders" && tab !== "feedback" && (
+        {cart.length > 0 && !cartOpen && tab !== "orders" && tab !== "feedback" && !pendingCart && (
           <div className="absolute bottom-[max(1rem,var(--safe-bottom))] left-3 right-3 z-50 mx-auto max-w-sm pointer-events-none">
             <button
               type="button"

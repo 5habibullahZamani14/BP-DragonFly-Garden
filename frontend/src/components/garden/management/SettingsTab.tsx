@@ -82,6 +82,15 @@ export const SettingsTab = () => {
   const [hotspotSaved, setHotspotSaved] = useState(false);
   const [hotspotSaving, setHotspotSaving] = useState(false);
 
+  // Confirmation dialog state
+  const [confirmationDialog, setConfirmationDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void>;
+    pending: boolean;
+  }>({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -148,65 +157,113 @@ export const SettingsTab = () => {
     }
   };
 
-  const saveTaxSettings = async () => {
-    setTaxSaving(true);
+  const showConfirmation = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmationDialog({ open: true, title, description, onConfirm, pending: false });
+  };
+
+  const handleConfirmationConfirm = async () => {
+    setConfirmationDialog(prev => ({ ...prev, pending: true }));
     try {
-      await updateSetting("sst_enabled", String(sstEnabled));
-      await updateSetting("sst_rate", String(parseFloat(sstPercent) / 100));
-      await updateSetting("service_charge_enabled", String(scEnabled));
-      await updateSetting("service_charge_rate", String(parseFloat(scPercent) / 100));
-      setTaxSaved(true);
-      setTimeout(() => setTaxSaved(false), 2500);
+      await confirmationDialog.onConfirm();
     } finally {
-      setTaxSaving(false);
+      setConfirmationDialog({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
     }
+  };
+
+  const saveTaxSettings = async () => {
+    showConfirmation(
+      "Confirm tax settings",
+      "These changes will affect all new orders and receipts.",
+      async () => {
+        setTaxSaving(true);
+        try {
+          await updateSetting("sst_enabled", String(sstEnabled));
+          await updateSetting("sst_rate", String(parseFloat(sstPercent) / 100));
+          await updateSetting("service_charge_enabled", String(scEnabled));
+          await updateSetting("service_charge_rate", String(parseFloat(scPercent) / 100));
+          setTaxSaved(true);
+          setTimeout(() => setTaxSaved(false), 2500);
+        } finally {
+          setTaxSaving(false);
+        }
+      }
+    );
   };
 
   const saveDefaultCardSize = async () => {
-    try {
-      await updateSetting("default_card_size", defaultCardSize);
-      setCardSizeSaved(true);
-      setTimeout(() => setCardSizeSaved(false), 2500);
-    } catch (e) { safeConsoleError("Failed to create backup", e); }
+    showConfirmation(
+      "Confirm default card size",
+      "This will set the default size for newly created menu items and update customer-facing card layouts.",
+      async () => {
+        try {
+          await updateSetting("default_card_size", defaultCardSize);
+          setCardSizeSaved(true);
+          setTimeout(() => setCardSizeSaved(false), 2500);
+        } catch (e) { safeConsoleError("Failed to save default card size", e); }
+      }
+    );
   };
 
   const saveDefaultPattern = async () => {
-    try {
-      await updateSetting("default_pattern_id", defaultPatternId);
-      setDefaultPatternSaved(true);
-      setTimeout(() => setDefaultPatternSaved(false), 2500);
-    } catch (e) {
-      console.error(e);
-    }
+    showConfirmation(
+      "Confirm default pattern",
+      "This will update the default menu pattern overlay used for items without their own custom pattern.",
+      async () => {
+        try {
+          await updateSetting("default_pattern_id", defaultPatternId);
+          setDefaultPatternSaved(true);
+          setTimeout(() => setDefaultPatternSaved(false), 2500);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    );
   };
 
   const clearDefaultPattern = async () => {
-    try {
-      await updateSetting("default_pattern_id", null);
-      setDefaultPatternId(null);
-      setDefaultPatternSaved(true);
-      setTimeout(() => setDefaultPatternSaved(false), 2500);
-    } catch (e) {
-      console.error(e);
-    }
+    showConfirmation(
+      "Clear default pattern",
+      "This will remove the global default pattern overlay for menu items.",
+      async () => {
+        try {
+          await updateSetting("default_pattern_id", null);
+          setDefaultPatternId(null);
+          setDefaultPatternSaved(true);
+          setTimeout(() => setDefaultPatternSaved(false), 2500);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    );
   };
 
   const handleApplyCardSizeToAll = async () => {
-    if (!confirm("Apply this card size to ALL menu items? This cannot be undone.")) return;
-    setApplyingCardSize(true);
-    try {
-      await applyDefaultCardSize(defaultCardSize);
-      await updateSetting("default_card_size", defaultCardSize);
-      setCardSizeSaved(true);
-      setTimeout(() => setCardSizeSaved(false), 2500);
-    } catch (e) { safeConsoleError("Failed to apply card size", e); alert("Failed to apply card size"); }
-    finally { setApplyingCardSize(false); }
+    showConfirmation(
+      "Apply card size to all items",
+      "This will update all existing menu items to the selected customer-facing card size.",
+      async () => {
+        setApplyingCardSize(true);
+        try {
+          await applyDefaultCardSize(defaultCardSize);
+          await updateSetting("default_card_size", defaultCardSize);
+          setCardSizeSaved(true);
+          setTimeout(() => setCardSizeSaved(false), 2500);
+        } catch (e) { safeConsoleError("Failed to apply card size", e); alert("Failed to apply card size"); }
+        finally { setApplyingCardSize(false); }
+      }
+    );
   };
 
   const saveHours = async () => {
-    await updateSetting("work_hours", hours);
-    setHoursSaved(true);
-    setTimeout(() => setHoursSaved(false), 2500);
+    showConfirmation(
+      "Confirm working hours",
+      `The restaurant operating hours will be changed to ${hours.start} - ${hours.end}.`,
+      async () => {
+        await updateSetting("work_hours", hours);
+        setHoursSaved(true);
+        setTimeout(() => setHoursSaved(false), 2500);
+      }
+    );
   };
 
   const savePasscode = async () => {
@@ -218,31 +275,43 @@ export const SettingsTab = () => {
 
   const saveCaptivePortalTarget = async () => {
     if (!captivePortalTarget.trim()) return;
-    setCaptivePortalSaving(true);
-    try {
-      await updateSetting("captive_portal_target", captivePortalTarget.trim());
-      setCaptivePortalSaved(true);
-      setTimeout(() => setCaptivePortalSaved(false), 2500);
-    } catch (e) {
-      safeConsoleError("Failed to save captive portal target", e);
-    } finally {
-      setCaptivePortalSaving(false);
-    }
+    showConfirmation(
+      "Confirm captive portal redirect",
+      "This will update the customer redirect URL used after Wi-Fi sign-in.",
+      async () => {
+        setCaptivePortalSaving(true);
+        try {
+          await updateSetting("captive_portal_target", captivePortalTarget.trim());
+          setCaptivePortalSaved(true);
+          setTimeout(() => setCaptivePortalSaved(false), 2500);
+        } catch (e) {
+          safeConsoleError("Failed to save captive portal target", e);
+        } finally {
+          setCaptivePortalSaving(false);
+        }
+      }
+    );
   };
 
   const saveHotspotSettings = async () => {
-    setHotspotSaving(true);
-    try {
-      await updateSetting("hotspot_ssid", hotspotSsid.trim());
-      await updateSetting("hotspot_password", hotspotPassword);
-      await updateSetting("hotspot_security", hotspotSecurity);
-      setHotspotSaved(true);
-      setTimeout(() => setHotspotSaved(false), 2500);
-    } catch (e) {
-      safeConsoleError("Failed to save hotspot settings", e);
-    } finally {
-      setHotspotSaving(false);
-    }
+    showConfirmation(
+      "Confirm hotspot settings",
+      "The Wi-Fi hotspot credentials will be updated for customer access.",
+      async () => {
+        setHotspotSaving(true);
+        try {
+          await updateSetting("hotspot_ssid", hotspotSsid.trim());
+          await updateSetting("hotspot_password", hotspotPassword);
+          await updateSetting("hotspot_security", hotspotSecurity);
+          setHotspotSaved(true);
+          setTimeout(() => setHotspotSaved(false), 2500);
+        } catch (e) {
+          safeConsoleError("Failed to save hotspot settings", e);
+        } finally {
+          setHotspotSaving(false);
+        }
+      }
+    );
   };
 
   const saveProfile = async () => {
@@ -255,24 +324,30 @@ export const SettingsTab = () => {
       setProfileError(t("m.passwordMismatch"));
       return;
     }
-    setProfileSaving(true);
-    try {
-      await updateManagerProfile({
-        name: profile.name.trim(),
-        id: profile.id.trim(),
-        email: profile.email.trim(),
-        phone: profile.phone.trim(),
-        ...(newPassword ? { password: newPassword } : {}),
-      });
-      setNewPassword("");
-      setConfirmPassword("");
-      setProfileSaved(true);
-      setTimeout(() => setProfileSaved(false), 2500);
-    } catch (e) {
-      setProfileError(t("m.profileSaveFailed"));
-    } finally {
-      setProfileSaving(false);
-    }
+    showConfirmation(
+      "Confirm profile update",
+      "This will update the manager profile and any password change immediately.",
+      async () => {
+        setProfileSaving(true);
+        try {
+          await updateManagerProfile({
+            name: profile.name.trim(),
+            id: profile.id.trim(),
+            email: profile.email.trim(),
+            phone: profile.phone.trim(),
+            ...(newPassword ? { password: newPassword } : {}),
+          });
+          setNewPassword("");
+          setConfirmPassword("");
+          setProfileSaved(true);
+          setTimeout(() => setProfileSaved(false), 2500);
+        } catch (e) {
+          setProfileError(t("m.profileSaveFailed"));
+        } finally {
+          setProfileSaving(false);
+        }
+      }
+    );
   };
 
   const sendReset = async () => {
@@ -516,40 +591,6 @@ export const SettingsTab = () => {
             </div>
             <Button onClick={saveHours} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
               {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.saveHours")}
-            </Button>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-
-      {/* ── Kitchen Passcode ────────────────────────────────── */}
-      <AccordionItem value="kitchen" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
-          <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.kitchenPass")}</h3>
-            <p className="text-sm text-muted-foreground font-normal">{t("m.kitchenPassDesc")}</p>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="kitchen-passcode">{t("m.passcodeLabel")}</Label>
-              <div className="relative">
-                <Input
-                  id="kitchen-passcode"
-                  type={showPasscode ? "text" : "password"}
-                  value={kitchenPasscode}
-                  onChange={(e) => setKitchenPasscode(e.target.value)}
-                  placeholder={t("m.kitchenPassPlaceholder")}
-                  className="pr-10"
-                />
-                <button type="button" onClick={() => setShowPasscode(!showPasscode)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/50 hover:text-foreground">
-                  {showPasscode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-            <Button onClick={savePasscode} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {passcodeSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.updatePasscode")}
             </Button>
           </div>
         </AccordionContent>

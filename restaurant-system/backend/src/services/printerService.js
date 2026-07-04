@@ -152,15 +152,14 @@ const printerService = {
     const timestamp = new Date().toLocaleString('en-GB');
     let ticket = "\n";
     
-    ticket += "[CENTER][H1] BP DragonFly\n";
-    ticket += "[CENTER]FORMOSA ETEN SDN. BHD.\n";
-    ticket += "[CENTER]REG NO: 201601030589\n";
-    ticket += "[CENTER]SST NO: P11-1809-32000074\n";
-    ticket += "[CENTER]NO. 6H-1-19, PENANG\n";
+    ticket += "[CENTER][H1] BP DRAGONFLY GARDEN\n";
+    ticket += "[CENTER]Solok Pondok Upih\n";
+    ticket += "[CENTER]Taman Kristal, 11020 Balik Pulau\n";
+    ticket += "[CENTER]Pulau Pinang\n";
     ticket += "----------------------------\n";
     
     ticket += `Invoice no: ${order.id}\n`;
-    ticket += `Date: ${timestamp.substring(0, 16)}\n`;
+    ticket += `Date & Time: ${timestamp}\n`;
     ticket += `Cashier: ${cashierName}\n`;
     if (!order.order_type || order.order_type === 'DINE_IN') {
       ticket += `Table: ${order.table_number}\n`;

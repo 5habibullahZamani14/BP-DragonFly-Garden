@@ -81,6 +81,34 @@ interface Employee {
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
+const PAYMENT_COUNTER_SESSION_LOCK_KEY = "paymentCounterSessionLock";
+
+const readStoredSession = <T,>(key: string): T | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const acquireSessionLock = (key: string, session: Record<string, unknown>) => {
+  const existing = readStoredSession<Record<string, unknown>>(key);
+  const now = Date.now();
+  if (existing?.expiry && typeof existing.expiry === "number" && existing.expiry > now) {
+    if (existing.token && session.token && existing.token === session.token) return true;
+    return false;
+  }
+
+  localStorage.setItem(key, JSON.stringify({ ...session, createdAt: now }));
+  return true;
+};
+
+const releaseSessionLock = (key: string) => {
+  localStorage.removeItem(key);
+};
+
 export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) => {
   const { t } = useTranslation();
   const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | null>(null);
@@ -191,11 +219,39 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   useEffect(() => {
     const savedLogin = getSavedPaymentCounterLogin();
     if (savedLogin) {
-      setLoggedInEmployee({ name: savedLogin.name, id: savedLogin.id });
+      const lockAcquired = acquireSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY, savedLogin);
+      if (!lockAcquired) {
+        localStorage.removeItem("paymentCounterLogin");
+        releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
+        notify("error", t("payment.sessionInUse"));
+      } else {
+        setLoggedInEmployee({ name: savedLogin.name, id: savedLogin.id });
+      }
     } else {
       localStorage.removeItem("paymentCounterLogin");
+      releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== PAYMENT_COUNTER_SESSION_LOCK_KEY) return;
+      if (!event.newValue) return;
+      const incoming = readStoredSession<Record<string, unknown>>(PAYMENT_COUNTER_SESSION_LOCK_KEY);
+      const current = readStoredSession<Record<string, unknown>>("paymentCounterLogin");
+      if (incoming?.token && current?.token && incoming.token !== current.token) {
+        setLoggedInEmployee(null);
+        setLoginInputId("");
+        setLoginInputName("");
+        localStorage.removeItem("paymentCounterLogin");
+        releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
+        notify("error", t("payment.sessionInUse"));
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [notify, t]);
 
   const handleLogin = async () => {
     if (!loginInputId.trim() || !loginInputName.trim()) {
@@ -205,16 +261,19 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     try {
       const result = await verifyEmployeeCredentials(loginInputId, loginInputName);
       if (result.success && result.employee && result.token) {
+        const sessionPayload = {
+          id: result.employee.id,
+          name: result.employee.name,
+          token: result.token,
+          expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        };
+        const lockAcquired = acquireSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY, sessionPayload);
+        if (!lockAcquired) {
+          notify("error", t("payment.sessionInUse"));
+          return;
+        }
         setLoggedInEmployee({ name: result.employee.name, id: result.employee.id });
-        localStorage.setItem(
-          "paymentCounterLogin",
-          JSON.stringify({
-            id: result.employee.id,
-            name: result.employee.name,
-            token: result.token,
-            expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          })
-        );
+        localStorage.setItem("paymentCounterLogin", JSON.stringify(sessionPayload));
       } else {
         notify("error", t("payment.invalidLogin"));
       }
@@ -263,6 +322,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     setLoginInputId("");
     setLoginInputName("");
     localStorage.removeItem("paymentCounterLogin");
+    releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
   };
 
   const loadData = useCallback(async () => {
@@ -688,7 +748,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                               {t("payment.processPayment")}
                             </Button>
                           </DialogTrigger>
-                        <DialogContent className="sm:max-w-[425px]">
+                        <DialogContent className="sm:max-w-[600px] max-h-[75vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>{t("payment.processPayment")}</DialogTitle>
                             <DialogDescription>{order.table_number}</DialogDescription>
@@ -746,7 +806,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 </div>
                                 
                                 {isSplitMode && (
-                                  <div className="bg-white border rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                                  <div className="bg-white border rounded-lg p-3 space-y-2 max-h-[300px] overflow-y-auto">
                                     <p className="text-xs text-gray-500 mb-2">{t("payment.selectItemsToPay")}</p>
                                     {order.items.map((item, index) => (
                                       <div 

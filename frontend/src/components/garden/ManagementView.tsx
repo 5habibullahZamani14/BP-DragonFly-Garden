@@ -70,6 +70,34 @@ type ManagerNotification = {
   action: () => void;
 };
 
+const MANAGER_SESSION_LOCK_KEY = "managerSessionLock";
+
+const readStoredSession = <T,>(key: string): T | null => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const acquireSessionLock = (key: string, session: Record<string, unknown>) => {
+  const existing = readStoredSession<Record<string, unknown>>(key);
+  const now = Date.now();
+  if (existing?.expiry && typeof existing.expiry === "number" && existing.expiry > now) {
+    if (existing.token && session.token && existing.token === session.token) return true;
+    return false;
+  }
+
+  localStorage.setItem(key, JSON.stringify({ ...session, createdAt: now }));
+  return true;
+};
+
+const releaseSessionLock = (key: string) => {
+  localStorage.removeItem(key);
+};
+
 export const ManagementView = ({ notify }: ManagementViewProps) => {
   const { t } = useTranslation();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -103,15 +131,43 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       try {
         const parsed = JSON.parse(savedLogin);
         if (parsed.expiry && Date.now() < parsed.expiry) {
-          setIsLoggedIn(true);
+          const sessionLockAcquired = acquireSessionLock(MANAGER_SESSION_LOCK_KEY, parsed);
+          if (!sessionLockAcquired) {
+            localStorage.removeItem("managerLogin");
+            releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
+            setIsLoggedIn(false);
+            notify("error", t("manager.sessionInUse"));
+          } else {
+            setIsLoggedIn(true);
+          }
         } else {
           localStorage.removeItem("managerLogin");
+          releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
         }
       } catch (e) {
         localStorage.removeItem("managerLogin");
+        releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
       }
     }
   }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== MANAGER_SESSION_LOCK_KEY) return;
+      if (!event.newValue) return;
+      const incoming = readStoredSession<Record<string, unknown>>(MANAGER_SESSION_LOCK_KEY);
+      const current = readStoredSession<Record<string, unknown>>("managerLogin");
+      if (incoming?.token && current?.token && incoming.token !== current.token) {
+        setIsLoggedIn(false);
+        localStorage.removeItem("managerLogin");
+        releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
+        notify("error", t("manager.sessionInUse"));
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [notify, t]);
 
   const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
   const [inventoryAction, setInventoryAction] = useState<{subTab?: "overview" | "stock" | "recipes", editItemId?: number} | null>(null);
@@ -179,12 +235,18 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     try {
       const result = await managerAuth(loginId.trim(), loginPassword.trim());
       if (result.success) {
-        setIsLoggedIn(true);
-        localStorage.setItem("managerLogin", JSON.stringify({
+        const sessionPayload = {
           id: loginId.trim(),
           token: result.token,
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        }));
+        };
+        const lockAcquired = acquireSessionLock(MANAGER_SESSION_LOCK_KEY, sessionPayload);
+        if (!lockAcquired) {
+          setLoginError(t("manager.sessionInUse"));
+          return;
+        }
+        setIsLoggedIn(true);
+        localStorage.setItem("managerLogin", JSON.stringify(sessionPayload));
       } else {
         setLoginError(t("manager.loginErrorInvalid"));
       }
@@ -217,6 +279,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     setLoginPassword("");
     sessionStorage.removeItem("mgr_active_tab");
     localStorage.removeItem("managerLogin");
+    releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
   };
 
   const goToTab = (tab: typeof activeTab) => {
