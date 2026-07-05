@@ -1200,7 +1200,7 @@ export function MenuTab() {
               const pattern = patterns.find(p => p.id === item.pattern_id);
               const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
               return (
-              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} ${item.card_size === 'extra_large' ? 'col-span-full' : ''} relative`}>
+              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} relative`}>
                 {patternImage && (
                   <div className="absolute inset-0 z-0 pointer-events-none">
                     <img src={patternImage}
@@ -1227,81 +1227,52 @@ export function MenuTab() {
                     )}
                   </div>
                 )}
-                {item.card_size === 'extra_large' ? (
-                  <div className="flex flex-col sm:flex-row relative z-10">
-                    <div className="w-full sm:w-1/2 h-64 bg-gray-100 relative overflow-hidden">
-                      { (item.image_url || item.repo_image_url)
-                        ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-12 w-12 opacity-50" /></div>}
+                <div className="relative z-10">
+                  <div className="h-32 bg-gray-100 relative overflow-hidden">
+                    { (item.image_url || item.repo_image_url)
+                      ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
+                    <div className="absolute top-2 end-2 flex gap-1">
+                      {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
+                      {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
+                      {item.option_groups && item.option_groups.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImageSrc(null);
+                            setEditingItem(item);
+                            setVariationsTab(true);
+                            setIsDialogOpen(true);
+                          }}
+                          className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                          title={`${item.option_groups.length} variation group(s)`}
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <CardContent className="p-6 w-full sm:w-1/2">
-                      <div className="mb-2">
-                        <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
-                        <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
-                      </div>
-                      <div className="flex justify-between items-center mt-4">
-                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
-                            onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDelete(item.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
                   </div>
-                ) : (
-                  <>
-                    <div className={`${item.card_size === 'large' ? 'h-64' : 'h-32'} bg-gray-100 relative overflow-hidden relative z-10`}>
-                      { (item.image_url || item.repo_image_url)
-                        ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
-                      <div className="absolute top-2 end-2 flex gap-1">
-                        {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
-                        {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
-                        {item.option_groups && item.option_groups.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setImageSrc(null);
-                              setEditingItem(item);
-                              setVariationsTab(true);
-                              setIsDialogOpen(true);
-                            }}
-                            className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                            title={`${item.option_groups.length} variation group(s)`}
-                          >
-                            <Settings2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                  <CardContent className="p-4 bg-white">
+                    <div className="mb-2">
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
+                      <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
+                    </div>
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                          onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDelete(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <CardContent className="p-4 bg-white relative z-10">
-                      <div className="mb-2">
-                        <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
-                        <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
-                      </div>
-                      <div className="flex justify-between items-center mt-4">
-                        <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md text-sm">RM {item.price.toFixed(2)}</span>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
-                            onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDelete(item.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </>
-                )}
+                  </CardContent>
+                </div>
               </Card>
               );
             })}

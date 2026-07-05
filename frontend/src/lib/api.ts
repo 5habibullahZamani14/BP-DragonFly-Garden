@@ -133,6 +133,13 @@ type PaymentPayload = {
   employee_name?: string;
 };
 
+type SplitPaymentPayload = {
+  payment_method_id: number;
+  item_ids: number[];
+  employee_id?: string;
+  employee_name?: string;
+};
+
 type VatPayload = {
   vat_rate: number;
   employee_id: string;
@@ -611,6 +618,18 @@ export const fetchPaymentMethods = async (qr: string): Promise<PaymentMethod[]> 
 
 export const processPayment = async (qr: string, orderId: number, paymentData: PaymentPayload): Promise<PaymentOrder | null> => {
   return await safeFetch("/payments/" + orderId + "/payments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(paymentData),
+  }, qr);
+};
+
+export const processSplitPayment = async (
+  qr: string,
+  orderId: number,
+  paymentData: SplitPaymentPayload
+): Promise<{ split_receipt: PaymentOrder | null; parent_order: PaymentOrder | null } | null> => {
+  return await safeFetch(`/payments/${orderId}/split`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(paymentData),

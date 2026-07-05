@@ -18,6 +18,7 @@ const {
   getUnpaidOrders,
   getPaidOrders,
   processPayment,
+  splitPayment,
   editOrderVAT,
   addOrderItem,
   getOrderPayments,
@@ -27,6 +28,7 @@ const {
 const {
   asyncHandler,
   validatePaymentCreation,
+  validateSplitPayment,
   validateVATEdit,
   validateAddItem,
   validateOrderIdParam
@@ -68,6 +70,19 @@ const paymentRoutes = (broadcast) => {
     const payment = await processPayment(req.params.orderId, req.body);
     broadcast({ type: "NEW_PAYMENT", payload: payment });
     res.status(201).json(payment);
+  }));
+
+  /*
+   * POST /payments/:orderId/split
+   * Processes a split payment: creates a separate child order for split items,
+   * records a payment against the parent order, and removes paid items from parent.
+   * Returns both the split receipt and the updated parent order.
+   */
+  router.post("/:orderId/split", requirePaymentToken, validateOrderIdParam, validateSplitPayment, asyncHandler(async (req, res) => {
+    const result = await splitPayment(req.params.orderId, req.body);
+    broadcast({ type: "NEW_PAYMENT", payload: result.split_receipt });
+    broadcast({ type: "ORDER_STATUS_UPDATE", payload: result.parent_order });
+    res.status(201).json(result);
   }));
 
   /*

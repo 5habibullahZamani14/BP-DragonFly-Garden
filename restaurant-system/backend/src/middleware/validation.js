@@ -402,6 +402,43 @@ const validateAddItem = (req, res, next) => {
 };
 
 /*
+ * validateSplitPayment validates a split payment request.
+ * It requires a payment method, an array of item IDs, and employee info.
+ */
+const validateSplitPayment = (req, res, next) => {
+  const paymentMethodId = toPositiveInteger(req.body?.payment_method_id);
+  const itemIds = req.body?.item_ids;
+  const employeeId = req.body?.employee_id?.toString().trim();
+  const employeeName = req.body?.employee_name?.toString().trim();
+
+  if (!paymentMethodId) {
+    return next(createHttpError(400, "Valid payment_method_id is required."));
+  }
+
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    return next(createHttpError(400, "At least one item ID is required."));
+  }
+
+  const validatedItemIds = itemIds.map(id => toPositiveInteger(id)).filter(id => id !== null);
+  if (validatedItemIds.length !== itemIds.length) {
+    return next(createHttpError(400, "All item IDs must be valid positive integers."));
+  }
+
+  if (!employeeId || !employeeName) {
+    return next(createHttpError(400, "Employee ID and name are required."));
+  }
+
+  req.body = {
+    payment_method_id: paymentMethodId,
+    item_ids: validatedItemIds,
+    employee_id: employeeId,
+    employee_name: employeeName
+  };
+
+  next();
+};
+
+/*
  * notFoundHandler is registered after all route groups and generates a 404
  * error for any request that did not match any defined route. It passes the
  * error to errorHandler below.
@@ -459,6 +496,7 @@ module.exports = {
   validateOrderQuery,
   validateQrCodeParam,
   validatePaymentCreation,
+  validateSplitPayment,
   validateVATEdit,
   validateAddItem,
   notFoundHandler,

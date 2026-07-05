@@ -1272,7 +1272,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           tabIndex={0}
                           onClick={() => setSelectedMenuItem(item)}
                           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMenuItem(item); } }}
-                          className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative ${item.card_size === 'large' ? 'md:col-span-2 lg:col-span-2' : item.card_size === 'extra_large' ? 'md:col-span-2 lg:col-span-2 xl:col-span-2' : ''}`}
+                          className={`group card-luxe p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative ${item.card_size === 'large' ? 'md:col-span-2 lg:col-span-2 flex flex-row' : item.card_size === 'extra_large' ? 'col-span-full flex flex-row' : 'flex gap-3'}`}
                           style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
                         >
                           {patternImage && (
@@ -1302,46 +1302,93 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                               )}
                             </div>
                           )}
-                          <div className={`relative shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10 ${item.card_size === 'large' ? 'h-28 w-28 sm:h-32 sm:w-32' : item.card_size === 'extra_large' ? 'h-36 w-36 sm:h-40 sm:w-40' : 'h-20 w-20 sm:h-24 sm:w-24'}`}>
-                            {item.image_url ? (
-                              <img src={item.image_url} alt={item.name} loading="lazy"
-                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center"
-                                style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
-                                <Leaf className="h-7 w-7 text-leaf/60" />
+                          {item.card_size === 'extra_large' ? (
+                            <>
+                              <div className="relative w-1/2 h-[11.05rem] sm:h-[13.26rem] overflow-hidden rounded-2xl bg-primary/5 z-10">
+                                {item.image_url ? (
+                                  <img src={item.image_url} alt={item.name} loading="lazy"
+                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center"
+                                    style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
+                                    <Leaf className="h-7 w-7 text-leaf/60" />
+                                  </div>
+                                )}
+                                {(item.is_popular || item.is_promo) && (
+                                  <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
+                                    {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            {(item.is_popular || item.is_promo) && (
-                              <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
-                                {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col relative z-10">
-                            <div className="flex items-start justify-between gap-2">
-                              <h3 className="font-1 text-[1rem] font-semibold leading-tight">
-                                {item.name}
-                                {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
-                              </h3>
-                            </div>
-                            <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
-                              {item.description || t("customer.descriptionFallback")}
-                            </p>
-                            <div className="mt-auto flex items-end justify-between pt-2">
-                              <div>
-                                <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
-                                {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                              <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h3 className="font-1 text-[1rem] font-semibold leading-tight">
+                                    {item.name}
+                                    {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
+                                  </h3>
+                                </div>
+                                <p className="mt-0.5 line-clamp-3 text-[0.75rem] leading-snug text-foreground/55">
+                                  {item.description || t("customer.descriptionFallback")}
+                                </p>
+                                <div className="mt-auto flex items-end justify-between pt-3">
+                                  <div>
+                                    <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                                  </div>
+                                  <button
+                                    disabled={item.is_sold_out}
+                                    onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
+                                    className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
+                                  >
+                                    {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
+                                  </button>
+                                </div>
                               </div>
-                              <button
-                                disabled={item.is_sold_out}
-                                onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
-                                className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
-                              >
-                                {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
-                              </button>
-                            </div>
-                          </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className={`relative overflow-hidden rounded-2xl bg-primary/5 z-10 ${item.card_size === 'large' ? 'w-1/2 h-[6.5rem] sm:h-[7.8rem]' : 'h-20 w-20 sm:h-24 sm:w-24'}`}>
+                                {item.image_url ? (
+                                  <img src={item.image_url} alt={item.name} loading="lazy"
+                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center"
+                                    style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
+                                    <Leaf className="h-7 w-7 text-leaf/60" />
+                                  </div>
+                                )}
+                                {(item.is_popular || item.is_promo) && (
+                                  <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
+                                    {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2' : ''}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <h3 className="font-1 text-[1rem] font-semibold leading-tight">
+                                    {item.name}
+                                    {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
+                                  </h3>
+                                </div>
+                                <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
+                                  {item.description || t("customer.descriptionFallback")}
+                                </p>
+                                <div className="mt-auto flex items-end justify-between pt-2">
+                                  <div>
+                                    <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                                  </div>
+                                  <button
+                                    disabled={item.is_sold_out}
+                                    onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
+                                    className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
+                                  >
+                                    {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </li>
                         );
                       })}
@@ -1364,7 +1411,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 tabIndex={0}
                 onClick={() => setSelectedMenuItem(item)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedMenuItem(item); } }}
-                className={`group card-luxe flex gap-3 p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative`}
+                className={`group card-luxe p-3 transition-all active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${item.is_sold_out ? 'opacity-50 grayscale' : ''} relative ${item.card_size === 'large' ? 'md:col-span-2 lg:col-span-2' : item.card_size === 'extra_large' ? 'md:col-span-2 lg:col-span-2 xl:col-span-2' : ''} ${item.card_size === 'extra_large' ? 'flex flex-col sm:flex-row sm:gap-4' : 'flex gap-3'}`}
                 style={{ animation: `fade-up 0.5s var(--ease-out) ${Math.min(idx * 30, 400)}ms both` }}
               >
                 {patternImage && (
@@ -1394,46 +1441,93 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                     )}
                   </div>
                 )}
-                <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-primary/5 relative z-10">
-                  {item.image_url ? (
-                    <img src={item.image_url} alt={item.name} loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                {item.card_size === 'extra_large' ? (
+                  <>
+                    <div className="relative w-1/2 h-[11.05rem] sm:h-[13.26rem] overflow-hidden rounded-2xl bg-primary/5 z-10">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center"
+                          style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
+                          <Leaf className="h-7 w-7 text-leaf/60" />
+                        </div>
+                      )}
+                      {item.is_popular && (
+                        <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
+                          <Star className="h-2.5 w-2.5 fill-current" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-1 text-[1rem] font-semibold leading-tight">
+                          {item.name}
+                          {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
+                        </h3>
+                      </div>
+                      <p className="mt-0.5 line-clamp-3 text-[0.75rem] leading-snug text-foreground/55">
+                        {item.description || t("customer.descriptionFallback")}
+                      </p>
+                      <div className="mt-auto flex items-end justify-between pt-3">
+                        <div>
+                          <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
+                          <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                        </div>
+                        <button
+                          disabled={item.is_sold_out}
+                          onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
+                          className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
+                        >
+                          {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center"
-                      style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
-                      <Leaf className="h-7 w-7 text-leaf/60" />
+                  <>
+                    <div className={`relative overflow-hidden rounded-2xl bg-primary/5 z-10 ${item.card_size === 'large' ? 'w-1/2 h-[6.5rem] sm:h-[7.8rem]' : 'h-20 w-20 sm:h-24 sm:w-24'}`}>
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center"
+                          style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.08), hsl(var(--accent)/0.18))" }}>
+                          <Leaf className="h-7 w-7 text-leaf/60" />
+                        </div>
+                      )}
+                      {item.is_popular && (
+                        <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
+                          <Star className="h-2.5 w-2.5 fill-current" />
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {item.is_popular && (
-                    <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
-                      <Star className="h-2.5 w-2.5 fill-current" />
-                    </span>
-                  )}
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col relative z-10">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-1 text-[1rem] font-semibold leading-tight">
-                      {item.name}
-                      {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
-                    </h3>
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
-                    {item.description || t("customer.descriptionFallback")}
-                  </p>
-                  <div className="mt-auto flex items-end justify-between pt-2">
-                    <div>
-                      <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
-                      <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                    <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-1 text-[1rem] font-semibold leading-tight">
+                          {item.name}
+                          {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
+                        </h3>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
+                        {item.description || t("customer.descriptionFallback")}
+                      </p>
+                      <div className="mt-auto flex items-end justify-between pt-2">
+                        <div>
+                          <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
+                          <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                        </div>
+                        <button
+                          disabled={item.is_sold_out}
+                          onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
+                          className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
+                        >
+                          {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      disabled={item.is_sold_out}
-                      onClick={(e) => { e.stopPropagation(); handleAddPress(item); }}
-                      className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow-[var(--shadow-soft)] transition active:scale-90 ${item.is_sold_out ? 'bg-muted text-foreground/50 pointer-events-none' : 'bg-primary text-primary-foreground hover:bg-primary-glow'}`}
-                    >
-                      {item.is_sold_out ? t("customer.soldOut") : <><Plus className="h-3.5 w-3.5" /> {t("customer.add")}</>}
-                    </button>
-                  </div>
-                </div>
+                  </>
+                )}
               </li>
               );
             })}

@@ -232,6 +232,146 @@ const processPayment = async (orderId, paymentData) => {
   }
 };
 
+/*
+ * splitPayment handles split payment: creates a new child order with selected items,
+ * records a payment against the original order, removes split items from the original,
+ * and returns both the split receipt and the updated parent order.
+ */
+const splitPayment = async (orderId, paymentData) => {
+  const { payment_method_id, item_ids, employee_id, employee_name } = paymentData;
+
+  const order = await fetchOrderWithPayments(orderId);
+  if (!order) {
+    throw createHttpError(404, "Order not found");
+  }
+
+  if (!Array.isArray(item_ids) || item_ids.length === 0) {
+    throw createHttpError(400, "At least one item must be selected for split payment");
+  }
+
+  const paymentMethod = await get(`SELECT id FROM payment_methods WHERE id = ?`, [payment_method_id]);
+  if (!paymentMethod) {
+    throw createHttpError(400, "Payment method not found");
+  }
+
+  // Validate that all requested items belong to this order
+  const splitItemsToProcess = order.items.filter(item => item_ids.includes(item.id));
+  if (splitItemsToProcess.length !== item_ids.length) {
+    throw createHttpError(400, "One or more items not found in this order");
+  }
+
+  // Calculate split amount (subtotal + service charge + VAT for split items)
+  const toCents = (val) => Math.round(Number(val) * 100);
+  const splitSubtotalCents = splitItemsToProcess.reduce((sum, item) => {
+    return sum + toCents(item.price_at_order_time * item.quantity);
+  }, 0);
+
+  const splitService = (splitSubtotalCents * toCents(order.service_charge_rate || 0.1)) / 10000;
+  const splitTax = ((splitSubtotalCents + splitService) * toCents(order.vat_rate || 0.06)) / 10000;
+  const splitTotalWithVat = (splitSubtotalCents + splitService + splitTax) / 100;
+
+  await run("BEGIN TRANSACTION");
+
+  try {
+    // Generate split receipt ticket number
+    const todayMaxRow = await get(`SELECT MAX(daily_ticket_number) as maxTicket FROM orders WHERE date(created_at, 'localtime') = date('now', 'localtime')`);
+    const nextTicketNumber = (todayMaxRow && todayMaxRow.maxTicket) ? todayMaxRow.maxTicket + 1 : 1;
+
+    // Create child order for split receipt
+    const splitOrderInsert = await run(
+      `
+        INSERT INTO orders (table_id, status, total_price, payment_status, order_type, parent_order_id, daily_ticket_number, vat_rate, service_charge_rate)
+        VALUES (?, ?, ?, 'paid', ?, ?, ?, ?, ?)
+      `,
+      [order.table_id, "ready", splitSubtotalCents / 100, order.order_type || "DINE_IN", orderId, nextTicketNumber, order.vat_rate, order.service_charge_rate]
+    );
+
+    const splitOrderId = splitOrderInsert.lastID;
+
+    // Copy split items to new order
+    for (const item of splitItemsToProcess) {
+      await run(
+        `
+          INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes, options_json)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [splitOrderId, item.menu_item_id, item.quantity, item.price_at_order_time, item.notes, item.options_json]
+      );
+    }
+
+    // Record payment against original order
+    await run(
+      `
+        INSERT INTO payments (order_id, payment_method_id, amount_paid, employee_id, employee_name)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      [orderId, payment_method_id, splitTotalWithVat, employee_id, employee_name]
+    );
+
+    // Update original order: remove split items and recalculate total
+    const placeholders = item_ids.map(() => "?").join(",");
+    await run(`DELETE FROM order_items WHERE id IN (${placeholders})`, item_ids);
+
+    // Recalculate original order total
+    const remainingItems = await all(
+      `SELECT price_at_order_time, quantity FROM order_items WHERE order_id = ?`,
+      [orderId]
+    );
+
+    const newTotalCents = remainingItems.reduce((sum, item) => {
+      return sum + toCents(item.price_at_order_time * item.quantity);
+    }, 0);
+
+    const newTotal = newTotalCents / 100;
+
+    // Update original order status based on remaining balance
+    const toCentsFn = (val) => Math.round(Number(val) * 100);
+    const newTotalWithVatCents = toCentsFn(newTotal * (1 + (order.service_charge_rate || 0.1)) * (1 + (order.vat_rate || 0.06)));
+    const totalPaidCents = toCentsFn(order.total_paid) + toCentsFn(splitTotalWithVat);
+    const newRemainingCents = newTotalWithVatCents - totalPaidCents;
+    const newPaymentStatus = newRemainingCents <= 0 ? "paid" : "partially_paid";
+
+    if (newPaymentStatus === "paid") {
+      await run(
+        `UPDATE orders SET total_price = ?, payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [newTotal, newPaymentStatus, orderId]
+      );
+    } else {
+      await run(
+        `UPDATE orders SET total_price = ?, payment_status = ? WHERE id = ?`,
+        [newTotal, newPaymentStatus, orderId]
+      );
+    }
+
+    // Archive the split receipt immediately
+    await run(
+      `UPDATE orders SET customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [splitOrderId]
+    );
+
+    // Log to grand archive
+    const methodRow = await get(`SELECT name FROM payment_methods WHERE id = ?`, [payment_method_id]);
+    const methodName = methodRow ? methodRow.name : `Method #${payment_method_id}`;
+
+    await run(
+      `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ["ORDER", "SPLIT_PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId} → Split Receipt #${splitOrderId}`, JSON.stringify({ Split_Amount: `RM ${splitTotalWithVat.toFixed(2)}`, Method: methodName, Items_Count: splitItemsToProcess.length })]
+    );
+
+    await run("COMMIT");
+
+    // Return both orders
+    const splitReceipt = await fetchOrderWithPayments(splitOrderId);
+    const updatedParent = await fetchOrderWithPayments(orderId);
+
+    return { split_receipt: splitReceipt, parent_order: updatedParent };
+  } catch (error) {
+    await run("ROLLBACK");
+    throw error;
+  }
+};
+
 /* getPaymentMethods returns the list of accepted payment methods. */
 const getPaymentMethods = async (req, res) => {
   const methods = await all(`SELECT id, name FROM payment_methods ORDER BY id ASC`);
@@ -507,6 +647,7 @@ module.exports = {
   getUnpaidOrders,
   getPaidOrders,
   processPayment,
+  splitPayment,
   editOrderVAT,
   addOrderItem,
   getOrderPayments,
