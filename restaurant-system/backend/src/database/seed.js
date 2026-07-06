@@ -264,7 +264,7 @@ const seedDatabase = async () => {
   }
 
   /* Seed payment methods — only insert if the method does not exist yet. */
-  const PAYMENT_METHODS = ["Cash", "Visa Card", "Mastercard", "eWallet", "Other"];
+  const PAYMENT_METHODS = ["Cash", "Visa Card", "Mastercard", "eWallet"];
 
   for (const method of PAYMENT_METHODS) {
     const existing = await get(`SELECT id FROM payment_methods WHERE name = ?`, [method]);

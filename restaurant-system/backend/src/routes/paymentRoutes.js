@@ -105,7 +105,14 @@ const paymentRoutes = (broadcast) => {
    * if a customer decides to order dessert after the original order was placed.
    * Inventory is deducted automatically when the item is added.
    */
-  router.post("/:orderId/items", requirePaymentToken, validateOrderIdParam, validateAddItem, asyncHandler(addOrderItem));
+  router.post("/:orderId/items", requirePaymentToken, validateOrderIdParam, validateAddItem, asyncHandler(async (req, res) => {
+    const result = await addOrderItem(req, res);
+    // addOrderItem already returns the updated order in the controller; if it did,
+    // broadcasting happens inside the controller via setBroadcast. We simply
+    // forward the response here. If addOrderItem didn't handle broadcast, we'd
+    // broadcast here instead.
+    return result;
+  }));
 
   /*
    * POST /payments/archive

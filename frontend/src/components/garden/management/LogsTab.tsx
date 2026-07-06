@@ -30,6 +30,8 @@ import { fetchLogs } from "@/lib/api";
 import type { LogEntry } from "@/lib/api";
 import { FileText, Download, Activity, Search, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import ChartInfo from "@/components/ui/ChartInfo";
+import ChartTickWrap from "@/components/ui/ChartTickWrap";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -264,16 +266,20 @@ export const LogsTab = () => {
               <Activity className="h-5 w-5 text-emerald-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
             </div>
-            <div className="h-[250px] w-full">
+            <div id="order-events-chart" className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={orderChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} textAnchor="middle" />} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
                   <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
+              <div className="mt-2">
+                <ChartInfo textKey="m.orderEventsInfo" />
+                <ChartExport targetId="order-events-chart" data={orderChartData} fileName="order-events" />
+              </div>
             </div>
           </div>
 
@@ -283,16 +289,20 @@ export const LogsTab = () => {
               <Activity className="h-5 w-5 text-blue-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
             </div>
-            <div className="h-[250px] w-full">
+            <div id="system-events-chart" className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={systemChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} dy={10} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} textAnchor="middle" />} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
                   <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
+              <div className="mt-2">
+                <ChartInfo textKey="m.systemEventsInfo" />
+                <ChartExport targetId="system-events-chart" data={systemChartData} fileName="system-events" />
+              </div>
             </div>
           </div>
         </div>

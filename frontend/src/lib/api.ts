@@ -135,7 +135,7 @@ type PaymentPayload = {
 
 type SplitPaymentPayload = {
   payment_method_id: number;
-  item_ids: number[];
+  split_items: Record<number, number>;
   employee_id?: string;
   employee_name?: string;
 };

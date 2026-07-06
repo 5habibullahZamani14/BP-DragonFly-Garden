@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Eye, EyeOff, LogOut, SplitSquareHorizontal, CheckSquare, Square, Bell, CheckCircle2, Plus } from "lucide-react";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, Bell, CheckCircle2, Plus } from "lucide-react";
 import {
   fetchUnpaidOrders,
   fetchPaidOrders,
@@ -81,6 +81,19 @@ interface Employee {
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
+
+const getTenderSuggestions = (remaining: number) => {
+  const baseAmount = Number.isFinite(remaining) ? remaining : 0;
+  const roundedToFive = Math.max(0, Math.ceil(baseAmount / 5) * 5);
+  const roundedAmount = roundedToFive === 0 ? 0 : roundedToFive;
+
+  return [
+    { label: "Exact due", value: Number(baseAmount.toFixed(2)) },
+    { label: "Nearest round", value: Number(roundedAmount.toFixed(2)) },
+    { label: "+RM 5", value: Number((roundedAmount + 5).toFixed(2)) },
+    { label: "+RM 10", value: Number((roundedAmount + 10).toFixed(2)) },
+  ];
+};
 
 const PAYMENT_COUNTER_SESSION_LOCK_KEY = "paymentCounterSessionLock";
 
@@ -125,6 +138,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [paymentAmount, setPaymentAmount] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const visiblePaymentMethods = paymentMethods.filter((method) => method.name.toLowerCase() !== "other");
   const [addingItem, setAddingItem] = useState(false);
   const [newItemId, setNewItemId] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
@@ -135,24 +149,29 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [assistanceRequests, setAssistanceRequests] = useState<StaffAssistanceRequest[]>([]);
   const [activeAssistanceRequest, setActiveAssistanceRequest] = useState<StaffAssistanceRequest | null>(null);
   
-  const [splitItems, setSplitItems] = useState<number[]>([]);
+  const [splitItemsQuantities, setSplitItemsQuantities] = useState<Record<number, number>>({});
   const [isSplitMode, setIsSplitMode] = useState(false);
 
   useEffect(() => {
     if (isSplitMode && selectedOrder) {
-      const splitSubtotal = splitItems.reduce((sum, itemId) => {
-        const item = selectedOrder.items.find((entry) => entry.id === itemId);
-        if (!item) return sum;
-        return sum + ((item.price_at_order_time ?? 0) * item.quantity);
+      const splitSubtotal = selectedOrder.items.reduce((sum, item) => {
+        const selectedQty = splitItemsQuantities[item.id] || 0;
+        return sum + ((item.price_at_order_time ?? 0) * selectedQty);
       }, 0);
       const service = splitSubtotal * (selectedOrder.service_charge_rate || 0.1);
       const tax = (splitSubtotal + service) * (selectedOrder.vat_rate || 0.06);
       setPaymentAmount((splitSubtotal + service + tax).toFixed(2));
     }
-  }, [splitItems, isSplitMode, selectedOrder]);
+  }, [splitItemsQuantities, isSplitMode, selectedOrder]);
 
-  const toggleSplitItem = (itemId: number) => {
-    setSplitItems(prev => prev.includes(itemId) ? prev.filter(i => i !== itemId) : [...prev, itemId]);
+  const setSplitItemQuantity = (itemId: number, quantity: number) => {
+    setSplitItemsQuantities(prev => {
+      if (quantity <= 0) {
+        const { [itemId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [itemId]: quantity };
+    });
   };
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -381,6 +400,19 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   }, [loadAssistanceRequests]);
 
   useEffect(() => {
+    if (!selectedOrder || isSplitMode || !selectedPaymentMethod) return;
+
+    const methodName = paymentMethods.find((method) => method.id.toString() === selectedPaymentMethod)?.name.toLowerCase() ?? "";
+    const shouldAutoFillAmount = ["visa card", "mastercard", "ewallet", "e-wallet", "wallet"].some((token) => methodName.includes(token));
+
+    if (shouldAutoFillAmount) {
+      setPaymentAmount(selectedOrder.remaining.toFixed(2));
+    } else if (methodName.includes("cash")) {
+      setPaymentAmount("");
+    }
+  }, [selectedOrder, selectedPaymentMethod, isSplitMode, paymentMethods]);
+
+  useEffect(() => {
     if (!activeAssistanceRequest) return;
     const timer = setTimeout(() => {
       setActiveAssistanceRequest(null);
@@ -464,7 +496,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       setSelectedOrder(null);
       setPaymentAmount("");
       setIsSplitMode(false);
-      setSplitItems([]);
+      setSplitItemsQuantities({});
       loadData();
     } catch (error) {
       notify("error", getErrorMessage(error, t("payment.failedProcess")));
@@ -474,7 +506,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   };
 
   const handleProcessSplitPayment = async () => {
-    if (!selectedOrder || splitItems.length === 0 || !selectedPaymentMethod || !loggedInEmployee) {
+    const selectedItems = Object.keys(splitItemsQuantities).length;
+    if (!selectedOrder || selectedItems === 0 || !selectedPaymentMethod || !loggedInEmployee) {
       notify("error", t("payment.selectItemsToPay"));
       return;
     }
@@ -483,7 +516,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     try {
       const result = await processSplitPayment(qrCode, selectedOrder.id, {
         payment_method_id: parseInt(selectedPaymentMethod),
-        item_ids: splitItems,
+        split_items: splitItemsQuantities,
         employee_id: loggedInEmployee.id,
         employee_name: loggedInEmployee.name
       });
@@ -502,7 +535,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       setSelectedOrder(null);
       setPaymentAmount("");
       setIsSplitMode(false);
-      setSplitItems([]);
+      setSplitItemsQuantities({});
       loadData();
     } catch (error) {
       notify("error", getErrorMessage(error, t("payment.failedProcess")));
@@ -784,7 +817,14 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <div className="flex gap-2 mt-6">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button className="flex-1 shadow-sm" size="lg" onClick={() => setSelectedOrder(order)}>
+                            <Button
+                              className="flex-1 shadow-sm"
+                              size="lg"
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setPaymentAmount(order.remaining.toFixed(2));
+                              }}
+                            >
                               {t("payment.processPayment")}
                             </Button>
                           </DialogTrigger>
@@ -814,7 +854,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                     <SelectValue placeholder={t("payment.selectMethodPlaceholder")} />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {paymentMethods.map((method) => (
+                                    {visiblePaymentMethods.map((method) => (
                                       <SelectItem key={method.id} value={method.id.toString()}>
                                         {method.name}
                                       </SelectItem>
@@ -836,9 +876,9 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                       setIsSplitMode(!isSplitMode);
                                       if (isSplitMode) {
                                         setPaymentAmount("");
-                                        setSplitItems([]);
+                                        setSplitItemsQuantities({});
                                       } else {
-                                        setSplitItems([]);
+                                        setSplitItemsQuantities({});
                                       }
                                     }}
                                   >
@@ -847,25 +887,63 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 </div>
                                 
                                 {isSplitMode && (
-                                  <div className="bg-white border rounded-lg p-3 space-y-2 max-h-[300px] overflow-y-auto">
+                                  <div className="bg-white border rounded-lg p-3 space-y-3 max-h-[300px] overflow-y-auto">
                                     <p className="text-xs text-gray-500 mb-2">{t("payment.selectItemsToPay")}</p>
-                                    {order.items.map((item) => (
-                                      <div 
-                                        key={item.id} 
-                                        onClick={() => toggleSplitItem(item.id)}
-                                        className={`flex items-center justify-between p-2 rounded cursor-pointer border ${splitItems.includes(item.id) ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-gray-50'}`}
-                                      >
-                                        <div className="flex items-center gap-2">
-                                          {splitItems.includes(item.id) ? (
-                                            <CheckSquare className="h-4 w-4 text-primary" />
-                                          ) : (
-                                            <Square className="h-4 w-4 text-gray-300" />
-                                          )}
-                                          <span className="text-sm font-medium">{item.quantity}x {item.item_name}</span>
+                                    {order.items.map((item) => {
+                                      const selectedQty = splitItemsQuantities[item.id] || 0;
+                                      return (
+                                        <div 
+                                          key={item.id}
+                                          className="flex items-center justify-between p-2 rounded border border-gray-200 hover:bg-gray-50"
+                                        >
+                                          <div className="flex items-center gap-3 flex-1">
+                                            <span className="text-sm font-medium text-gray-600 min-w-[1.5rem] text-center">
+                                              {item.quantity}X
+                                            </span>
+                                            <div className="flex-1">
+                                              <p className="text-sm font-medium">{item.item_name}</p>
+                                              <p className="text-xs text-gray-500">
+                                                RM {(item.price_at_order_time ?? 0).toFixed(2)} each
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex items-center border border-gray-300 rounded">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => setSplitItemQuantity(item.id, Math.max(0, selectedQty - 1))}
+                                              >
+                                                −
+                                              </Button>
+                                              <Input
+                                                type="number"
+                                                min="0"
+                                                max={item.quantity}
+                                                value={selectedQty}
+                                                onChange={(e) => {
+                                                  const val = Math.min(item.quantity, Math.max(0, parseInt(e.target.value) || 0));
+                                                  setSplitItemQuantity(item.id, val);
+                                                }}
+                                                className="h-7 w-12 border-0 text-center p-0 text-sm"
+                                              />
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => setSplitItemQuantity(item.id, Math.min(item.quantity, selectedQty + 1))}
+                                              >
+                                                +
+                                              </Button>
+                                            </div>
+                                            <span className="text-sm font-medium min-w-[60px] text-right">RM {((item.price_at_order_time ?? 0) * selectedQty).toFixed(2)}</span>
+                                          </div>
                                         </div>
-                                        <span className="text-sm">RM {((item.price_at_order_time ?? 0) * item.quantity).toFixed(2)}</span>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -885,6 +963,20 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                   placeholder={t("payment.tenderedPlaceholder")}
                                   className="text-lg"
                                 />
+                                <div className="flex flex-wrap gap-2 pt-2">
+                                  {getTenderSuggestions(order.remaining).map((suggestion) => (
+                                    <Button
+                                      key={`${suggestion.label}-${suggestion.value}`}
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 px-3 text-sm"
+                                      onClick={() => setPaymentAmount(suggestion.value.toFixed(2))}
+                                    >
+                                      RM {suggestion.value.toFixed(2)}
+                                    </Button>
+                                  ))}
+                                </div>
                                 {parseFloat(paymentAmount) > order.remaining && (
                                   <p className="text-sm text-green-600 font-medium mt-1">
                                     {t("payment.changeDue", { amount: `RM ${(parseFloat(paymentAmount) - order.remaining).toFixed(2)}` })}
@@ -895,7 +987,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div className="flex flex-col sm:flex-row gap-3 pt-4">
                               {isSplitMode ? (
-                                <Button onClick={handleProcessSplitPayment} disabled={isProcessing || splitItems.length === 0} className="flex-1" size="lg">
+                                <Button onClick={handleProcessSplitPayment} disabled={isProcessing || Object.keys(splitItemsQuantities).length === 0} className="flex-1" size="lg">
                                   {isProcessing ? t("payment.processing") : t("payment.processSplitPayment", "Process Split Payment")}
                                 </Button>
                               ) : (

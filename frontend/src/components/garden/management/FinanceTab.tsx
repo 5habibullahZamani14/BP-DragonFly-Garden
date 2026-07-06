@@ -10,6 +10,9 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Cell
 } from "recharts";
+import ChartInfo from "@/components/ui/ChartInfo";
+import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import ChartExport from "@/components/ui/ChartExport";
 
 export const FinanceTab = () => {
   const { t } = useTranslation();
@@ -153,7 +156,9 @@ export const FinanceTab = () => {
             <Activity className="h-5 w-5 text-accent" />
             <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.revenueTimeline")}</h3>
           </div>
+
           <div className="flex-1 w-full">
+          <div id="revenue-timeline-chart" className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={revenueByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
@@ -169,6 +174,10 @@ export const FinanceTab = () => {
                 <Area type="monotone" dataKey="total" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>
             </ResponsiveContainer>
+            <div className="mt-2">
+              <ChartInfo textKey="m.revenueTimelineInfo" />
+              <ChartExport targetId="revenue-timeline-chart" data={revenueByDay} fileName="revenue-timeline" />
+            </div>
           </div>
         </div>
 
@@ -182,7 +191,7 @@ export const FinanceTab = () => {
               </div>
               <p className="text-xs text-foreground/50 mt-1">{t("m.topProfitDesc")}</p>
             </div>
-            
+
             <div className="flex items-center gap-2 bg-white/80 rounded-full px-4 py-1.5 shadow-sm border border-foreground/5">
               <span className="text-xs font-semibold text-foreground/60 whitespace-nowrap">{t("m.showTop")}</span>
               <input 
@@ -209,7 +218,9 @@ export const FinanceTab = () => {
               </button>
             </div>
           </div>
+
           <div className="w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
+            <div id="top-profit-drivers-chart" className="w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topItemsData} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -223,15 +234,21 @@ export const FinanceTab = () => {
                     const hue = Math.round(0 + (45 - 0) * ratio);
                     const saturation = Math.round(75 + (95 - 75) * ratio);
                     const lightness = Math.round(35 + (50 - 35) * ratio);
-                    return <Cell key={`cell-${index}`} fill={`hsl(${hue}, ${saturation}%, ${lightness}%)`} />;
+                    return <Cell key={"cell-" + index} fill={"hsl(" + hue + ", " + saturation + "%, " + lightness + "%)"} />;
                   })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
+            <div className="mt-2 px-6">
+              <ChartInfo textKey="m.topProfitDriversInfo" />
+              <ChartExport targetId="top-profit-drivers-chart" data={topItemsData} fileName="top-profit-drivers" />
+            </div>
           </div>
         </div>
       </div>
 
     </div>
+  </div>
   );
 };

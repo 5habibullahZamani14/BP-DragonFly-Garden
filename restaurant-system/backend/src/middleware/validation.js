@@ -403,11 +403,11 @@ const validateAddItem = (req, res, next) => {
 
 /*
  * validateSplitPayment validates a split payment request.
- * It requires a payment method, an array of item IDs, and employee info.
+ * It requires a payment method, a split_items object (itemId -> quantity), and employee info.
  */
 const validateSplitPayment = (req, res, next) => {
   const paymentMethodId = toPositiveInteger(req.body?.payment_method_id);
-  const itemIds = req.body?.item_ids;
+  const splitItems = req.body?.split_items;
   const employeeId = req.body?.employee_id?.toString().trim();
   const employeeName = req.body?.employee_name?.toString().trim();
 
@@ -415,13 +415,18 @@ const validateSplitPayment = (req, res, next) => {
     return next(createHttpError(400, "Valid payment_method_id is required."));
   }
 
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    return next(createHttpError(400, "At least one item ID is required."));
+  if (!splitItems || typeof splitItems !== "object" || Object.keys(splitItems).length === 0) {
+    return next(createHttpError(400, "split_items object with at least one item is required."));
   }
 
-  const validatedItemIds = itemIds.map(id => toPositiveInteger(id)).filter(id => id !== null);
-  if (validatedItemIds.length !== itemIds.length) {
-    return next(createHttpError(400, "All item IDs must be valid positive integers."));
+  const validatedSplitItems = {};
+  for (const [itemId, qty] of Object.entries(splitItems)) {
+    const parsedId = toPositiveInteger(itemId);
+    const parsedQty = toPositiveInteger(qty);
+    if (parsedId === null || parsedQty === null) {
+      return next(createHttpError(400, "All item IDs and quantities must be valid positive integers."));
+    }
+    validatedSplitItems[parsedId] = parsedQty;
   }
 
   if (!employeeId || !employeeName) {
@@ -430,7 +435,7 @@ const validateSplitPayment = (req, res, next) => {
 
   req.body = {
     payment_method_id: paymentMethodId,
-    item_ids: validatedItemIds,
+    split_items: validatedSplitItems,
     employee_id: employeeId,
     employee_name: employeeName
   };

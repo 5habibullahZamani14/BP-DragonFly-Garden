@@ -32,6 +32,9 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
+import ChartInfo from "@/components/ui/ChartInfo";
+import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import ChartExport from "@/components/ui/ChartExport";
 import { INV_CATEGORY_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 
 const INV_CATEGORIES = ["Vegetables", "Meat", "Dairy", "Dry Goods", "Packaging"] as const;
@@ -326,19 +329,19 @@ export const InventoryTab = ({
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>{t("m.invHealth")}</CardTitle>
                 <CardDescription>{t("m.healthChartDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] w-full">
+                <div id="inv-health-chart" className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                       <XAxis type="number" domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
-                      <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                      <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
                       <Tooltip formatter={(value: number) => [`${value}%`, t("m.chartStockLevel")]} cursor={{ fill: 'transparent' }} />
                       <ReferenceLine x={20} stroke="red" strokeDasharray="3 3" label={{ position: 'top', value: t("m.chartAvgThreshold"), fill: 'red', fontSize: 10 }} />
                       <Bar dataKey="percent" radius={[0, 4, 4, 0]} barSize={15}>
@@ -348,7 +351,15 @@ export const InventoryTab = ({
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
+                  </div>
+                  <div>
+                    {/* Chart explanation for Inventory Health */}
+                    {/* @ts-ignore */}
+                    <ChartInfo textKey="m.healthChartInfo" />
+                    {/* Export controls */}
+                    {/* @ts-ignore */}
+                    <ChartExport targetId="inv-health-chart" data={healthData.slice(0,15)} fileName="inventory-health" />
+                  </div>
               </CardContent>
             </Card>
 
@@ -358,16 +369,25 @@ export const InventoryTab = ({
                 <CardDescription>{t("m.complexityChartDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] w-full">
+                <div id="menu-complexity-chart" className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 25 }}>
+                    <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 80 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} tick={{ fontSize: 11 }} />
+                      <XAxis dataKey="name" height={100} interval={0} tick={<ChartTickWrap wordsPerLine={4} fontSize={12} textAnchor="end" />} />
                       <YAxis allowDecimals={false} />
                       <Tooltip formatter={(value: number) => [value, t("m.chartIngredients")]} cursor={{ fill: 'transparent' }} />
                       <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+                <div>
+                  {/* Chart explanation */}
+                  {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                  {/* @ts-ignore */}
+                  <ChartInfo textKey="m.menuComplexityInfo" />
+                  {/* Export */}
+                  {/* @ts-ignore */}
+                  <ChartExport targetId="menu-complexity-chart" data={menuComplexityData} fileName="menu-complexity" />
                 </div>
               </CardContent>
             </Card>

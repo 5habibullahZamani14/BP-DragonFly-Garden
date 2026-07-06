@@ -1,4 +1,5 @@
-import { Settings2, Plus, Minus, Globe } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Settings, Plus, Minus, Globe, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { useAccessibility, FontTheme } from "@/lib/useAccessibility";
 import { useTranslation } from "react-i18next";
@@ -35,9 +36,18 @@ const FONT_OPTIONS: {
   },
 ];
 
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+  prompt(): Promise<void>;
+}
+
 export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages?: boolean }) => {
   const { fontTheme, setFontTheme, uiScale, setUiScale, fontScale, setFontScale } = useAccessibility();
   const { t, i18n } = useTranslation();
+  const [canInstall, setCanInstall] = useState(false);
+  const [installStatus, setInstallStatus] = useState<"idle" | "installed" | "unsupported">("idle");
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
 
   const ALL_LANGUAGES = [
     { code: "en", label: "English" },
@@ -54,6 +64,57 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
 
   const selectedFont = FONT_OPTIONS.find((f) => f.id === fontTheme) ?? FONT_OPTIONS[1];
 
+  useEffect(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+    if (isStandalone) {
+      setInstallStatus("installed");
+      return;
+    }
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      deferredPromptRef.current = event as BeforeInstallPromptEvent;
+      setCanInstall(true);
+      setInstallStatus("idle");
+    };
+
+    const onAppInstalled = () => {
+      deferredPromptRef.current = null;
+      setCanInstall(false);
+      setInstallStatus("installed");
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+
+    if (typeof window !== "undefined" && !("standalone" in window.navigator) && !window.matchMedia("(display-mode: standalone)").matches) {
+      setInstallStatus("unsupported");
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  const isSecureContext = typeof window !== "undefined" && window.isSecureContext;
+  const showInstallUnavailableMessage = installStatus === "unsupported" && !isSecureContext;
+  const showInstallSection = isSecureContext || installStatus === "installed";
+
+  const handleInstallClick = async () => {
+    if (!deferredPromptRef.current) {
+      return;
+    }
+
+    deferredPromptRef.current.prompt();
+    const choiceResult = await deferredPromptRef.current.userChoice;
+    if (choiceResult.outcome === "accepted") {
+      setInstallStatus("installed");
+    }
+    deferredPromptRef.current = null;
+    setCanInstall(false);
+  };
+
   const handleUiScaleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUiScale(parseFloat(e.target.value));
   };
@@ -67,10 +128,10 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
       <DialogTrigger asChild>
         <button
           className="grid h-10 w-10 place-items-center rounded-full bg-white/80 text-foreground/70 shadow-sm backdrop-blur transition-all hover:bg-white hover:shadow-md active:scale-95 border border-border/50"
-          aria-label="Accessibility Settings"
+          aria-label="Settings"
           id="settings-modal-trigger"
         >
-          <Settings2 className="h-5 w-5" />
+          <Settings className="h-5 w-5" />
         </button>
       </DialogTrigger>
 
@@ -276,6 +337,33 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
               </p>
             </div>
           </section>
+
+          {showInstallSection && (
+            <section aria-labelledby="install-heading">
+              <div className="rounded-2xl border border-border/50 bg-muted/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 id="install-heading" className="text-sm font-semibold text-foreground/80">Install this app</h3>
+                    <p className="mt-1 text-xs text-foreground/60">Use it as a full app on your phone, tablet, or desktop.</p>
+                  </div>
+                  {installStatus === "installed" ? (
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Installed</span>
+                  ) : canInstall ? (
+                    <button
+                      type="button"
+                      onClick={handleInstallClick}
+                      className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Install app
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/60">Not available</span>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Reset button */}
           <button

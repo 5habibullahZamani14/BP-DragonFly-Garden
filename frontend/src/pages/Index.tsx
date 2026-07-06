@@ -66,7 +66,7 @@ const detectRole = (): { role: Role; qrCode: string } => {
 const Index = () => {
   /* Set the page title and meta description for SEO and browser tab readability. */
   useEffect(() => {
-    document.title = "BP Dragonfly Garden — Farm-to-table ordering";
+    document.title = "BP Dragonfly Garden";
     const meta = document.querySelector('meta[name="description"]') || document.createElement("meta");
     meta.setAttribute("name", "description");
     meta.setAttribute("content", "Order from your table at BP Dragonfly Garden — botanical farm-to-table cafe. Where nature, fun & memories grow.");

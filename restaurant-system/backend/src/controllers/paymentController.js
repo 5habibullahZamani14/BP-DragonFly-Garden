@@ -148,6 +148,11 @@ const fetchOrderWithPayments = async (orderId) => {
   };
 };
 
+/* Broadcast helper: optional setter so routes can inject the server's broadcast fn */
+let broadcastFn = null;
+const setBroadcast = (fn) => { broadcastFn = fn; };
+const getBroadcast = () => broadcastFn;
+
 /*
  * processPayment records a payment transaction against an order. It validates
  * that the order is not already fully paid, that the payment method exists,
@@ -238,14 +243,14 @@ const processPayment = async (orderId, paymentData) => {
  * and returns both the split receipt and the updated parent order.
  */
 const splitPayment = async (orderId, paymentData) => {
-  const { payment_method_id, item_ids, employee_id, employee_name } = paymentData;
+  const { payment_method_id, split_items, employee_id, employee_name } = paymentData;
 
   const order = await fetchOrderWithPayments(orderId);
   if (!order) {
     throw createHttpError(404, "Order not found");
   }
 
-  if (!Array.isArray(item_ids) || item_ids.length === 0) {
+  if (!split_items || typeof split_items !== "object" || Object.keys(split_items).length === 0) {
     throw createHttpError(400, "At least one item must be selected for split payment");
   }
 
@@ -254,18 +259,27 @@ const splitPayment = async (orderId, paymentData) => {
     throw createHttpError(400, "Payment method not found");
   }
 
-  // Validate that all requested items belong to this order
-  const splitItemsToProcess = order.items.filter(item => item_ids.includes(item.id));
-  if (splitItemsToProcess.length !== item_ids.length) {
-    throw createHttpError(400, "One or more items not found in this order");
+  // Build a map of item id -> quantity to split
+  const itemsToSplit = {};
+  let splitSubtotalCents = 0;
+
+  for (const item of order.items) {
+    const qtyToSplit = split_items[item.id];
+    if (qtyToSplit !== undefined && qtyToSplit > 0) {
+      if (qtyToSplit > item.quantity) {
+        throw createHttpError(400, `Cannot split ${qtyToSplit} of item ${item.id} (only ${item.quantity} available)`);
+      }
+      itemsToSplit[item.id] = qtyToSplit;
+      splitSubtotalCents += Math.round(item.price_at_order_time * qtyToSplit * 100);
+    }
   }
 
-  // Calculate split amount (subtotal + service charge + VAT for split items)
-  const toCents = (val) => Math.round(Number(val) * 100);
-  const splitSubtotalCents = splitItemsToProcess.reduce((sum, item) => {
-    return sum + toCents(item.price_at_order_time * item.quantity);
-  }, 0);
+  if (Object.keys(itemsToSplit).length === 0) {
+    throw createHttpError(400, "No valid items selected for split payment");
+  }
 
+  // Calculate split total with service and VAT
+  const toCents = (val) => Math.round(Number(val) * 100);
   const splitService = (splitSubtotalCents * toCents(order.service_charge_rate || 0.1)) / 10000;
   const splitTax = ((splitSubtotalCents + splitService) * toCents(order.vat_rate || 0.06)) / 10000;
   const splitTotalWithVat = (splitSubtotalCents + splitService + splitTax) / 100;
@@ -288,14 +302,17 @@ const splitPayment = async (orderId, paymentData) => {
 
     const splitOrderId = splitOrderInsert.lastID;
 
-    // Copy split items to new order
-    for (const item of splitItemsToProcess) {
+    // Copy split items to new order (with split quantities)
+    for (const [itemId, qtyToSplit] of Object.entries(itemsToSplit)) {
+      const item = order.items.find(i => i.id === parseInt(itemId, 10));
+      if (!item) continue;
+
       await run(
         `
           INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes, options_json)
           VALUES (?, ?, ?, ?, ?, ?)
         `,
-        [splitOrderId, item.menu_item_id, item.quantity, item.price_at_order_time, item.notes, item.options_json]
+        [splitOrderId, item.menu_item_id, qtyToSplit, item.price_at_order_time, item.notes, item.options_json]
       );
     }
 
@@ -308,9 +325,23 @@ const splitPayment = async (orderId, paymentData) => {
       [orderId, payment_method_id, splitTotalWithVat, employee_id, employee_name]
     );
 
-    // Update original order: remove split items and recalculate total
-    const placeholders = item_ids.map(() => "?").join(",");
-    await run(`DELETE FROM order_items WHERE id IN (${placeholders})`, item_ids);
+    // Update original order: reduce quantities of split items, delete if quantity becomes 0
+    for (const [itemId, qtyToSplit] of Object.entries(itemsToSplit)) {
+      const item = order.items.find(i => i.id === parseInt(itemId, 10));
+      if (!item) continue;
+
+      if (item.quantity === parseInt(qtyToSplit, 10)) {
+        // All quantity of this item is being split, delete it
+        await run(`DELETE FROM order_items WHERE id = ?`, [itemId]);
+      } else {
+        // Partial split, reduce quantity
+        const newQty = item.quantity - parseInt(qtyToSplit, 10);
+        await run(
+          `UPDATE order_items SET quantity = ? WHERE id = ?`,
+          [newQty, itemId]
+        );
+      }
+    }
 
     // Recalculate original order total
     const remainingItems = await all(
@@ -319,7 +350,7 @@ const splitPayment = async (orderId, paymentData) => {
     );
 
     const newTotalCents = remainingItems.reduce((sum, item) => {
-      return sum + toCents(item.price_at_order_time * item.quantity);
+      return sum + Math.round(item.price_at_order_time * item.quantity * 100);
     }, 0);
 
     const newTotal = newTotalCents / 100;
@@ -356,7 +387,7 @@ const splitPayment = async (orderId, paymentData) => {
     await run(
       `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      ["ORDER", "SPLIT_PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId} → Split Receipt #${splitOrderId}`, JSON.stringify({ Split_Amount: `RM ${splitTotalWithVat.toFixed(2)}`, Method: methodName, Items_Count: splitItemsToProcess.length })]
+      ["ORDER", "SPLIT_PAYMENT", employee_name || "Employee", orderId.toString(), `Order #${orderId} → Split Receipt #${splitOrderId}`, JSON.stringify({ Split_Amount: `RM ${splitTotalWithVat.toFixed(2)}`, Method: methodName, Items_Count: Object.keys(itemsToSplit).length })]
     );
 
     await run("COMMIT");
@@ -518,7 +549,24 @@ const addOrderItem = async (req, res) => {
     throw error;
   }
 
-  res.status(201).json(await fetchOrderWithPayments(orderId));
+  const updatedOrder = await fetchOrderWithPayments(orderId);
+
+  // Broadcast the order update so payment counters and kitchen UIs refresh
+  const broadcast = getBroadcast();
+  if (broadcast && updatedOrder) {
+    try {
+      console.log(`[paymentController] broadcasting ORDER_STATUS_UPDATE for order ${orderId}`);
+      broadcast({ type: "ORDER_STATUS_UPDATE", payload: updatedOrder });
+      console.log(`[paymentController] broadcast succeeded for order ${orderId}`);
+    } catch (e) {
+      // non-fatal: continue to return the updated order
+      console.error("Broadcast failed after addOrderItem", e);
+    }
+  } else {
+    console.log(`[paymentController] no broadcast function available for ORDER_STATUS_UPDATE (order ${orderId})`);
+  }
+
+  res.status(201).json(updatedOrder);
 };
 
 /*
@@ -655,5 +703,6 @@ module.exports = {
   getArchivedOrders,
   executeArchive,
   forceArchiveLeftovers,
-  fetchOrderWithPayments
+  fetchOrderWithPayments,
+  setBroadcast
 };

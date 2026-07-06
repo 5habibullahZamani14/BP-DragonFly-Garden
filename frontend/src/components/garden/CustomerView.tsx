@@ -154,9 +154,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const confirmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingCartRef = useRef<CartLine[] | null>(null); // ref-backed copy of pendingCart — avoids stale closure
 
-  // ── Confirmation countdown (8 s before order actually sent) ────────────
+  // ── Confirmation countdown (5 s before order actually sent) ────────────
   const [pendingCart, setPendingCart] = useState<CartLine[] | null>(null);
-  const [confirmCountdown, setConfirmCountdown] = useState(8);
+  const [confirmCountdown, setConfirmCountdown] = useState(5);
   const [submitCooldown, setSubmitCooldown] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   
@@ -572,7 +572,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     const snapshot = [...cart]; // capture immediately — don't rely on state for async use
     setPendingCart(snapshot);
     pendingCartRef.current = snapshot;
-    setConfirmCountdown(8);
+    setConfirmCountdown(5);
     setCartOpen(false);
     confirmIntervalRef.current = setInterval(() => {
       setConfirmCountdown(prev => {
@@ -640,7 +640,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     if (confirmIntervalRef.current) { clearInterval(confirmIntervalRef.current); confirmIntervalRef.current = null; }
     pendingCartRef.current = null;
     setPendingCart(null);
-    setConfirmCountdown(8);
+    setConfirmCountdown(5);
     setCartOpen(true);
   };
 
@@ -796,19 +796,54 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {pendingCart && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md animate-fade-up px-6">
-          {/* Countdown ring */}
-          <div className="relative mb-6">
-            <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
-              <circle cx="48" cy="48" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="6"/>
-              <circle
-                cx="48" cy="48" r="42" fill="none"
-                stroke="hsl(var(--accent))" strokeWidth="6" strokeLinecap="round"
-                strokeDasharray={2 * Math.PI * 42}
-                strokeDashoffset={2 * Math.PI * 42 * (1 - confirmCountdown / 8)}
-                style={{ transition: "stroke-dashoffset 0.9s linear" }}
-              />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center font-1 text-3xl font-bold">{confirmCountdown}</span>
+          {/* Final polish: circular glass card, refined ticks, engraved inner ring, elegant serif number */}
+          <div className="relative mb-6" aria-hidden>
+            <div className="rounded-full flex items-center justify-center bg-white/6 backdrop-blur-md" style={{ width: 160, height: 160 }}>
+              <svg width="140" height="140" viewBox="0 0 96 96" className="-rotate-90">
+                <defs>
+                  <linearGradient id="ringGradFinal" x1="0%" x2="100%">
+                    <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity="1" />
+                    <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="1" />
+                  </linearGradient>
+                </defs>
+
+                <circle cx="48" cy="48" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="2.5" opacity="0.28" />
+                <circle cx="48" cy="48" r="34" fill="none" stroke="hsl(var(--muted))" strokeWidth="1.4" opacity="0.14" />
+
+                {Array.from({ length: 72 }).map((_, i) => (
+                  <line
+                    key={i}
+                    x1="48"
+                    y1="6"
+                    x2="48"
+                    y2={i % 6 === 0 ? 14 : 10}
+                    transform={`rotate(${(360 / 72) * i} 48 48)`}
+                    stroke="hsl(var(--muted))"
+                    strokeWidth={i % 6 === 0 ? 1.2 : 0.8}
+                    strokeLinecap="round"
+                    opacity={0.36}
+                  />
+                ))}
+
+                <circle
+                  cx="48"
+                  cy="48"
+                  r="42"
+                  fill="none"
+                  stroke="url(#ringGradFinal)"
+                  strokeWidth="4.5"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 42}
+                  strokeDashoffset={2 * Math.PI * 42 * (1 - confirmCountdown / 5)}
+                  style={{ transition: "stroke-dashoffset 0.88s cubic-bezier(.22,.9,.2,1)" }}
+                />
+              </svg>
+
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="countdown-display countdown-emboss" style={{ fontSize: 44, fontWeight: 800, lineHeight: 1 }}>{confirmCountdown}</span>
+                <span className="mt-1 text-[11px] text-foreground/60 uppercase tracking-wider">confirm</span>
+              </div>
+            </div>
           </div>
           <h2 className="font-1 text-2xl font-semibold mb-1">{t("customer.confirmOrder")}</h2>
           <p className="text-sm text-foreground/55 mb-6 text-center">{t("customer.confirmDesc1")}<br/>{t("customer.confirmDesc2")}</p>

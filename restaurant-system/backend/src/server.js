@@ -9,6 +9,7 @@
  */
 
 require("dotenv").config();
+require("dotenv").config({ path: ".env.local", override: true });
 // Fail fast if critical secrets are missing to avoid insecure fallback behavior
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not set. Aborting startup to prevent insecure default secrets.");
@@ -228,9 +229,9 @@ const clientShouldReceive = (client, data) => {
     return false;
   }
 
-  // Payment counter: interested in payments and order status changes
+  // Payment counter: interested in new orders, payments, and order status changes
   if (client._role === 'payment_counter') {
-    return ['NEW_PAYMENT', 'ORDER_STATUS_CHANGED', 'ORDER_STATUS_UPDATE', 'CALL_WAITER', 'CALL_WAITER_ACK'].includes(type);
+    return ['NEW_ORDER', 'NEW_PAYMENT', 'ORDER_STATUS_CHANGED', 'ORDER_STATUS_UPDATE', 'CALL_WAITER', 'CALL_WAITER_ACK'].includes(type);
   }
 
   // Fallback: if client has an authenticated role via JWT, allow if role matches the type
@@ -332,6 +333,11 @@ managementRoutes.setupManagementBroadcast(broadcast);
 
 // Set up broadcast function for table routes
 tableRoutes.setBroadcast(broadcast);
+// Inject broadcast into paymentController so controller functions can broadcast directly
+const paymentController = require("./controllers/paymentController");
+if (paymentController && typeof paymentController.setBroadcast === 'function') {
+  paymentController.setBroadcast(broadcast);
+}
 
 /*
  * Static file serving for the compiled frontend. If the dist folder exists,

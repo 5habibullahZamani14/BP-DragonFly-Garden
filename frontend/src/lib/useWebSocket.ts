@@ -94,6 +94,7 @@ export const useWebSocket = (
   /* Store the latest callback and eventTypes in refs so the effect stays stable. */
   const callbackRef = useRef(callback);
   const eventTypesRef = useRef(eventTypes);
+  const authValueRef = useRef<string | null>(null);
   const authValue = authParamGetter ? authParamGetter() : null;
 
   useEffect(() => {
@@ -105,13 +106,17 @@ export const useWebSocket = (
   }, [eventTypes]);
 
   useEffect(() => {
+    authValueRef.current = authValue;
+  }, [authValue]);
+
+  useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let reconnectAttempts = 0;
     let cleanupRequested = false;
     let currentWs: WebSocket | null = null;
 
     const connect = () => {
-      if (authParamGetter && !authValue) {
+      if (authParamGetter && !authValueRef.current) {
         setIsConnected(false);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
@@ -120,8 +125,8 @@ export const useWebSocket = (
       }
 
       const sep = WS_BASE.includes("?") ? "&" : "?";
-      const url = authValue
-        ? `${WS_BASE}${sep}${encodeURIComponent(authParamName)}=${encodeURIComponent(authValue)}`
+      const url = authValueRef.current
+        ? `${WS_BASE}${sep}${encodeURIComponent(authParamName)}=${encodeURIComponent(authValueRef.current)}`
         : WS_BASE;
 
       try {

@@ -32,6 +32,9 @@ import { fetchEmployees, createEmployee, updateEmployee } from "@/lib/api";
 import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import ChartInfo from "@/components/ui/ChartInfo";
+import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import ChartExport from "@/components/ui/ChartExport";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -259,7 +262,7 @@ export const EmployeesTab = () => {
               <CardDescription>{t("m.staffDistDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[250px] w-full">
+              <div id="staff-dist-chart" className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -279,6 +282,10 @@ export const EmployeesTab = () => {
                     <Tooltip formatter={(value: number) => [value, t("m.chartEmployees")]} />
                   </PieChart>
                 </ResponsiveContainer>
+              <div className="mt-2">
+                <ChartInfo textKey="m.staffDistInfo" />
+                <ChartExport targetId="staff-dist-chart" data={pieData} fileName="staff-distribution" />
+              </div>
               </div>
             </CardContent>
           </Card>
@@ -289,11 +296,11 @@ export const EmployeesTab = () => {
               <CardDescription>{t("m.payrollDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[250px] w-full">
+              <div id="payroll-load-chart" className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
+                    <XAxis dataKey="name" tick={<ChartTickWrap wordsPerLine={3} fontSize={12} />} />
                     <YAxis tickFormatter={(val) => `${val / 1000}k`} />
                     <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'transparent'}} />
                     <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]}>
@@ -303,6 +310,10 @@ export const EmployeesTab = () => {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              <div className="mt-2">
+                <ChartInfo textKey="m.payrollInfo" />
+                <ChartExport targetId="payroll-load-chart" data={barData} fileName="payroll-load" />
+              </div>
               </div>
             </CardContent>
           </Card>

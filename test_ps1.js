@@ -1,1 +1,0 @@
-require('child_process').exec("powershell.exe -Command \"Get-Content -Path 'supertest.txt' | Out-Printer -Name 'BP_DragonFly_Garden_Confirmed'\"", (err, stdout, stderr) => { console.log('DONE', err, stdout, stderr) });

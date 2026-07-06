@@ -34,11 +34,19 @@ const ChartContainer = React.forwardRef<
   React.ComponentProps<"div"> & {
     config: ChartConfig;
     children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"];
+    infoKey?: string;
   }
->(({ id, className, children, config, ...props }, ref) => {
+>(({ id, className, children, config, infoKey, ...props }, ref) => {
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
-
+  // Lazy import to avoid cycles
+  let ChartInfo: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    ChartInfo = require("@/components/ui/ChartInfo").default;
+  } catch (e) {
+    ChartInfo = null;
+  }
   return (
     <ChartContext.Provider value={{ config }}>
       <div
@@ -51,7 +59,8 @@ const ChartContainer = React.forwardRef<
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
+          <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
+          {infoKey && ChartInfo ? <div className="w-full px-2"><ChartInfo textKey={infoKey} /></div> : null}
       </div>
     </ChartContext.Provider>
   );

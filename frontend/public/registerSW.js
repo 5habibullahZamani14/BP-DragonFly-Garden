@@ -1,12 +1,13 @@
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.getRegistrations()
-      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-      .then(() => {
-        // Do not force a page reload after unregistering service workers.
-        // Reloads cause instability on flaky Raspberry Pi hotspot networks.
-        console.debug("Service workers unregistered (no reload)");
-      })
-      .catch(() => {});
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+      console.debug("Service worker registered", registration.scope);
+    } catch (error) {
+      console.warn("Service worker registration failed", error);
+    }
   });
 }
