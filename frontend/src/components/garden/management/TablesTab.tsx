@@ -33,6 +33,7 @@ export const TablesTab = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });
   const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
+  const [showHotspotQR, setShowHotspotQR] = useState(true);
 
   const handleDownloadQR = async () => {
     const element = document.getElementById("qr-code-print-area");
@@ -46,7 +47,8 @@ export const TablesTab = () => {
       const image = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.href = image;
-      link.download = `Table-${viewQRCodeTable.table_number}-QRCode.png`;
+      const qrType = showHotspotQR ? "WiFi" : "Ordering";
+      link.download = `Table-${viewQRCodeTable.table_number}-${qrType}-QRCode.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -241,80 +243,103 @@ export const TablesTab = () => {
       </div>
 
       {/* QR Code Modal */}
-      <Dialog open={!!viewQRCodeTable} onOpenChange={(open) => !open && setViewQRCodeTable(null)}>
-        <DialogContent className="sm:max-w-[340px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
+      <Dialog open={!!viewQRCodeTable} onOpenChange={(open) => {
+        if (!open) {
+          setViewQRCodeTable(null);
+          setShowHotspotQR(true); // Reset to hotspot QR when closing
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
           {viewQRCodeTable && (
-            <div className="bg-gradient-to-b from-gray-50 to-gray-100 p-6 flex flex-col items-center justify-center relative">
-              <DialogHeader>
-                <DialogTitle>{t("m.tableQrCode")}</DialogTitle>
-                <DialogDescription>{t("m.tableQrCodeDescription")}</DialogDescription>
+            <div className="bg-gradient-to-b from-blue-50 to-blue-100 p-8 flex flex-col items-center justify-start min-h-screen md:min-h-auto">
+              <DialogHeader className="w-full text-center mb-6">
+                <DialogTitle className="text-2xl font-bold text-gray-900">
+                  {showHotspotQR ? "🌐 WiFi Network QR Code" : "🛒 Ordering Portal QR Code"}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-gray-600 mt-2">
+                  {showHotspotQR 
+                    ? `Table: ${viewQRCodeTable.table_number} • Scan to join the local network`
+                    : `Table: ${viewQRCodeTable.table_number} • Scan to access the ordering screen`
+                  }
+                </DialogDescription>
               </DialogHeader>
-            {/* Printable Area */}
-            <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-sm border border-gray-100 w-full mb-2">
-              {/* The QR Code Container */}
-              {hotspotSsid && !hotspotLoading ? (
-                <>
-                  <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex flex-col items-center justify-center z-10 shadow-md mt-4">
-                    <div className="mb-4 text-center">
-                      <p className="text-sm font-semibold text-slate-900">Wi-Fi hotspot QR</p>
-                      <p className="text-xs text-slate-500">Scan this code to join the local network. Captive portal detection should then redirect the customer to the ordering page.</p>
+
+              {/* Printable Area */}
+              <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl shadow-lg border-2 border-gray-200 w-full max-w-md mb-6">
+                {/* The QR Code Container */}
+                {showHotspotQR && hotspotSsid && !hotspotLoading ? (
+                  <>
+                    <div className="text-center mb-4">
+                      <h3 className="text-lg font-bold text-gray-900">🌐 WiFi Network</h3>
+                      <p className="text-sm text-gray-600 mt-1">{hotspotSsid}</p>
                     </div>
-                    <QRCode
-                      value={hotspotQrValue}
-                      size={220}
-                      ecLevel="H"
-                      fgColor="#444444"
-                      bgColor="#ffffff"
-                      qrStyle="dots"
-                      eyeRadius={10}
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                      <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                        <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
-                        <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex flex-col items-center justify-center z-10 shadow-md">
+                      <QRCode
+                        value={hotspotQrValue}
+                        size={220}
+                        ecLevel="H"
+                        fgColor="#444444"
+                        bgColor="#ffffff"
+                        qrStyle="dots"
+                        eyeRadius={10}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                        <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                          <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                          <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="mt-6 w-full rounded-3xl bg-slate-50 p-4 border border-slate-200 text-left">
-                    <h3 className="text-sm font-semibold text-slate-900">Ordering Portal Backup</h3>
-                    <p className="text-xs text-slate-500 mb-3">This is the fallback link customers can use if their device does not automatically open the ordering page after joining the hotspot.</p>
-                    <div className="rounded-2xl bg-white p-3 border border-slate-200 text-xs text-slate-700 break-all">
-                      {viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
+                  </>
+                ) : !showHotspotQR ? (
+                  <>
+                    <div className="text-center mb-4">
+                      <h3 className="text-lg font-bold text-gray-900">🛒 Ordering Portal</h3>
+                      <p className="text-sm text-gray-600 mt-1">Direct access to menu</p>
                     </div>
-                  </div>
-                </>
-              ) : (
-                <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md mt-4">
-                  <QRCode 
-                    value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
-                    size={190} 
-                    ecLevel="H"
-                    fgColor="#444444"
-                    bgColor="#ffffff"
-                    qrStyle="dots"
-                    eyeRadius={10}
-                  />
-                  
-                  {/* The SCAN ME Center Badge */}
-                  <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                      <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
-                      <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md">
+                      <QRCode 
+                        value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
+                        size={220} 
+                        ecLevel="H"
+                        fgColor="#444444"
+                        bgColor="#ffffff"
+                        qrStyle="dots"
+                        eyeRadius={10}
+                      />
+                      
+                      {/* The SCAN ME Center Badge */}
+                      <div className="absolute inset-0 flex items-center justify-center z-20">
+                        <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                          <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                          <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  </>
+                ) : null}
 
-              <p className="mt-6 text-2xl font-bold text-gray-800 uppercase tracking-widest">{viewQRCodeTable.table_number}</p>
-            </div>
+                <p className="mt-6 text-2xl font-bold text-gray-800 uppercase tracking-widest">TABLE {viewQRCodeTable.table_number}</p>
+              </div>
 
-            <div className="w-full mt-4">
-              <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md" onClick={handleDownloadQR}>
-                <Download className="w-4 h-4 mr-2" /> {t("m.downloadQr")}
-              </Button>
+              {/* Footer with Toggle and Download Buttons */}
+              <div className="w-full max-w-md space-y-3">
+                {hotspotSsid && !hotspotLoading && (
+                  <Button 
+                    onClick={() => setShowHotspotQR(!showHotspotQR)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold py-2 text-lg"
+                  >
+                    🔁 Switch QR Code
+                  </Button>
+                )}
+                <Button 
+                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold py-2 text-lg"
+                  onClick={handleDownloadQR}
+                >
+                  <Download className="w-5 h-5 mr-2" /> Download {showHotspotQR ? "WiFi" : "Ordering"} QR
+                </Button>
+              </div>
             </div>
-          </div>
           )}
         </DialogContent>
       </Dialog>

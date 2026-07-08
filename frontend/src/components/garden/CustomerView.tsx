@@ -1659,15 +1659,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 animationDelay: `${i * 0.6}s`,
               }} />
             ))}
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[0.62rem] font-bold uppercase tracking-[0.18em] backdrop-blur">
-              <Receipt className="h-3 w-3 text-accent-soft" /> {t("customer.liveTracking")}
-            </span>
-            <h1 className="mt-3 font-1 text-[2rem] font-bold leading-[0.95] tracking-tight">
-              <span className="italic text-accent">{t("customer.yourOrders")}</span>
+            <h1 className="font-1 text-[2rem] font-bold leading-[0.95] tracking-tight text-center">
+              <span className="italic text-accent">🌸{t("customer.yourOrders")}🌸</span>
             </h1>
-            <p className="mt-2 max-w-[18rem] text-[0.85rem] leading-snug text-primary-foreground/80">
-              {t("customer.followPlates")}
-            </p>
           </header>
 
           {/* Active orders */}
