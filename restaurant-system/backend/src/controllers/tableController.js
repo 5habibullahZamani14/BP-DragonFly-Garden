@@ -8,9 +8,9 @@
  */
 
 const QRCode = require("qrcode");
-const os = require("os");
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
+const { pickPreferredLocalIp } = require("../utils/networkAddress");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
 const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
@@ -27,18 +27,7 @@ const normalizeBaseUrl = (value) => normalizeUrl(value).replace(/\/$/, "");
 const isLocalHostHeader = (host) =>
   typeof host === "string" && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i.test(host);
 
-const getLocalNetworkAddress = () => {
-  const nets = os.networkInterfaces();
-  for (const ifaceList of Object.values(nets)) {
-    if (!ifaceList) continue;
-    for (const iface of ifaceList) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return null;
-};
+const getLocalNetworkAddress = () => pickPreferredLocalIp();
 
 const getServerBaseUrlFromRequest = (req) => {
   const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;

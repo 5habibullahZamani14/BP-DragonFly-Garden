@@ -73,6 +73,7 @@ const getResend = () => {
  * first login via the Profile tab in the dashboard.
  */
 const DEFAULT_MANAGER = { id: "admin", password: "", name: "Manager", email: "", phone: "" };
+const DEFAULT_KITCHEN_PASSCODE = "kitchen2024";
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -140,6 +141,7 @@ const createLog = async (category, action, actorId, actorName, targetId, targetN
 
 const deriveEmployeeJwtRole = (department) => {
   const normalized = String(department || "").trim().toLowerCase();
+  if (/kitchen/.test(normalized)) return "kitchen_crew";
   if (/payment|cashier|counter/.test(normalized)) return "payment_counter";
   return "payment_counter";
 };
@@ -664,6 +666,16 @@ const updateManagerProfile = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// ── Kitchen passcode ──────────────────────────────────────────────────────────
+
+/* getKitchenPasscode returns the current kitchen PIN from settings, or the default. */
+const getKitchenPasscode = async (req, res, next) => {
+  try {
+    const row = await get("SELECT value FROM restaurant_settings WHERE key = 'kitchen_passcode'");
+    res.json({ passcode: row ? row.value : DEFAULT_KITCHEN_PASSCODE });
+  } catch (error) { next(error); }
+};
+
 // ── Password reset email ──────────────────────────────────────────────────────
 
 /*
@@ -878,6 +890,7 @@ module.exports = {
   getManagerProfileRoute,
   updateManagerProfile,
   managerResetPassword,
+  getKitchenPasscode,
   sendResetEmail,
   getBackups,
   createBackup,

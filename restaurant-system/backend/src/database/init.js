@@ -544,6 +544,7 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
   await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
   await ensureColumn("orders", "customer_archived_at", "DATETIME");
+  await ensureColumn("orders", "kitchen_archived_at", "DATETIME");
 
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");

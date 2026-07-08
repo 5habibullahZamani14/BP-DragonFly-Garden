@@ -54,7 +54,6 @@ const initializeDatabase = require("./database/init");
 const seedDatabase = require("./database/seed");
 const { executeNightlyCloudBackup, ensureCloudBackupUpToDate } = require("./services/cloudBackupService");
 const { compressImagesInDirectory } = require("./utils/imageCompressor");
-const { buildRedirectTargetUrl } = require("./utils/captivePortalRedirect");
 const db = require("./database/db");
 
 const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
@@ -343,8 +342,7 @@ if (paymentController && typeof paymentController.setBroadcast === 'function') {
 /* Captive Portal Routes for Apple, Android, and common connectivity checks */
 const redirectToCaptiveTarget = async (req, res) => {
   const target = await resolveCaptivePortalTarget(req);
-  const redirectTarget = buildRedirectTargetUrl(target, req);
-  return res.status(302).redirect(redirectTarget);
+  return res.status(302).redirect(target);
 };
 
 app.get(

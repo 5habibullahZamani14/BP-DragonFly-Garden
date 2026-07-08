@@ -14,9 +14,9 @@
  *   - Order status can be updated at two levels: the overall order status
  *     (queue/preparing/ready) and individual item statuses. The overall status
  *     is automatically derived from the item statuses by deriveOrderStatus.
- *   - "Archiving" is a soft operation: it just timestamps one nullable column
- *     (customer_archived_at). The order data stays in the database so the 
- *     payment counter can still access it.
+ *   - "Archiving" is a soft operation: it just timestamps two nullable columns
+ *     (customer_archived_at and kitchen_archived_at). The order data stays in
+ *     the database so the payment counter can still access it.
  */
 
 const db = require("../database/db");
@@ -459,7 +459,7 @@ const getKitchenOrders = async (filters) => {
     INNER JOIN tables t ON t.id = o.table_id
     LEFT JOIN order_items oi ON oi.order_id = o.id
     LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-    WHERE o.status IN ('queue', 'preparing', 'ready')
+    WHERE o.status IN ('queue', 'preparing', 'ready') AND o.kitchen_archived_at IS NULL
   `;
   const params = [];
 
@@ -612,17 +612,40 @@ const getCustomerArchivedOrdersForTable = async (tableId) => {
   return orders.filter(Boolean);
 };
 
+/* kitchenArchiveOrder timestamps the kitchen_archived_at column to clear an order from the board. */
+const kitchenArchiveOrder = async (orderId) => {
+  await run(`UPDATE orders SET kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
+  return fetchOrderById(orderId);
+};
+
+/*
+ * getKitchenArchivedOrders returns orders the kitchen has cleared today.
+ * The limit of 50 and the date filter keep the history panel manageable.
+ */
+const getKitchenArchivedOrders = async () => {
+  const rows = await all(
+    `SELECT id FROM orders
+     WHERE kitchen_archived_at IS NOT NULL
+       AND date(kitchen_archived_at) = date('now', 'localtime')
+     ORDER BY kitchen_archived_at DESC
+     LIMIT 50`
+  );
+  const orders = await Promise.all(rows.map(r => fetchOrderById(r.id)));
+  return orders.filter(Boolean);
+};
+
 /*
  * archiveYesterdaysOrders runs on server startup and at 01:30 each night.
  * It automatically archives any "ready" orders that were created before today
  * and were never manually archived. This prevents stale orders from previous
- * days from appearing when staff arrive in the morning.
+ * days from appearing on the kitchen board when staff arrive in the morning.
  */
 const archiveYesterdaysOrders = async () => {
   try {
     await run(
       `UPDATE orders
-       SET customer_archived_at = CURRENT_TIMESTAMP
+       SET kitchen_archived_at = CURRENT_TIMESTAMP,
+           customer_archived_at = CURRENT_TIMESTAMP
        WHERE status = 'ready'
          AND customer_archived_at IS NULL
          AND date(created_at, 'localtime') < date('now', 'localtime')`
@@ -652,7 +675,7 @@ const archiveStaffAssistanceRequests = async () => {
 const markOrderPaid = async (orderId) => {
   await run("BEGIN TRANSACTION");
   try {
-    await run("UPDATE orders SET payment_status = 'paid', customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?", [orderId]);
+    await run("UPDATE orders SET payment_status = 'paid', customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?", [orderId]);
     await run(
       `INSERT INTO order_status_history (order_id, status, changed_by) VALUES (?, 'paid', 'Cashier')`,
       [orderId]
@@ -674,6 +697,8 @@ module.exports = {
   updateItemStatus,
   customerArchiveOrder,
   getCustomerArchivedOrdersForTable,
+  kitchenArchiveOrder,
+  getKitchenArchivedOrders,
   archiveYesterdaysOrders,
   archiveStaffAssistanceRequests,
   markOrderPaid
