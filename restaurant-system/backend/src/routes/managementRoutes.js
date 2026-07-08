@@ -270,9 +270,21 @@ router.put("/recipes/:menu_item_id", managementController.updateRecipe);
 
 /*
  * GET /management/backups
- * Returns a list of all available database backups.
+ * Returns a list of all available local database backups.
  */
 router.get("/backups", managementController.getBackups);
+
+/*
+ * GET /management/backups/cloud
+ * Returns a list of all cloud-hosted database backups.
+ */
+router.get("/backups/cloud", managementController.getCloudBackups);
+
+/*
+ * GET /management/backups/download
+ * Downloads a local backup file.
+ */
+router.get("/backups/download", managementController.downloadBackup);
 
 /*
  * POST /management/backups
@@ -282,9 +294,21 @@ router.post("/backups", managementController.createBackup);
 
 /*
  * POST /management/backups/restore
- * Restores the system from a specified backup file. Body must contain { filename }.
+ * Restores the system from a specified local backup file. Body must contain { filename }.
  */
 router.post("/backups/restore", managementController.restoreBackup);
+
+/*
+ * POST /management/backups/restore/cloud
+ * Restores the system from a specified cloud backup. Body must contain { filename }.
+ */
+router.post("/backups/restore/cloud", managementController.restoreCloudBackup);
+
+/*
+ * POST /management/backups/restore/upload
+ * Restores the system from an uploaded backup file.
+ */
+router.post("/backups/restore/upload", upload.single("file"), managementController.restoreUploadedBackup);
 
 // ── Customer feedback (manager only) ─────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -44,6 +44,9 @@ export const HelpModal = ({ title, sections }: HelpModalProps) => {
             <Info className="h-6 w-6 text-blue-600" />
             {title} Instruction Guide
           </DialogTitle>
+          <DialogDescription className="text-sm text-gray-500 mt-2">
+            Search help topics or browse the instructions below to learn how to use every manager and payment feature.
+          </DialogDescription>
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input 

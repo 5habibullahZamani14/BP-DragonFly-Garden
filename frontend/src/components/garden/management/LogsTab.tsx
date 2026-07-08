@@ -32,8 +32,10 @@ import { FileText, Download, Activity, Search, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import ChartInfo from "@/components/ui/ChartInfo";
 import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import ChartExport from "@/components/ui/ChartExport";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { safeConsoleError } from "@/lib/safeConsole";
 
 export const LogsTab = () => {
   const { t } = useTranslation();
@@ -240,7 +242,7 @@ export const LogsTab = () => {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
@@ -249,60 +251,54 @@ export const LogsTab = () => {
           </h2>
           <p className="text-foreground/60 mt-1 font-medium">{t("m.grandArchiveDesc")}</p>
         </div>
-        <Button 
-          onClick={downloadExcel} 
-          className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full shadow-lg transition-transform hover:scale-105 px-6"
-        >
-          <Download className="h-4 w-4 mr-2" /> {t("m.exportExcel")}
-        </Button>
       </div>
 
       {/* Activity Chart Section */}
       {logs.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Order Events Chart */}
-          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-emerald-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
             </div>
-            <div id="order-events-chart" className="h-[250px] w-full">
+            <div id="order-events-chart" className="h-[380px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={orderChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={orderChartData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} textAnchor="middle" />} dy={10} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} angle={0} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
                   <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="mt-2">
-                <ChartInfo textKey="m.orderEventsInfo" />
-                <ChartExport targetId="order-events-chart" data={orderChartData} fileName="order-events" />
-              </div>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <ChartInfo textKey="m.orderEventsInfo" />
+              <ChartExport targetId="order-events-chart" data={orderChartData} fileName="order-events" />
             </div>
           </div>
 
           {/* System & Inventory Chart */}
-          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6">
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col">
             <div className="mb-6 flex items-center gap-2 px-2">
               <Activity className="h-5 w-5 text-blue-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
             </div>
-            <div id="system-events-chart" className="h-[250px] w-full">
+            <div id="system-events-chart" className="h-[380px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={systemChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={systemChartData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} textAnchor="middle" />} dy={10} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} angle={0} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                   <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
                   <Bar dataKey="count" name={t("m.chartTotalEvents")} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="mt-2">
-                <ChartInfo textKey="m.systemEventsInfo" />
-                <ChartExport targetId="system-events-chart" data={systemChartData} fileName="system-events" />
-              </div>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <ChartInfo textKey="m.systemEventsInfo" />
+              <ChartExport targetId="system-events-chart" data={systemChartData} fileName="system-events" />
             </div>
           </div>
         </div>
@@ -311,12 +307,14 @@ export const LogsTab = () => {
       {/* Detailed Audit Log Table */}
       <div className="bg-white/80 backdrop-blur-md border border-white/50 shadow-xl rounded-3xl overflow-hidden flex flex-col">
         <div className="p-6 border-b border-foreground/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40">
-          <h3 className="font-1 text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
-            <FileText className="h-5 w-5 text-accent" />
-            {t("m.auditTrail")}
-          </h3>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <h3 className="font-1 text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
+              <FileText className="h-5 w-5 text-accent" />
+              {t("m.auditTrail")}
+            </h3>
+          </div>
           
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
             {/* Search Bar */}
             <div className="relative group flex-1 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 group-focus-within:text-primary transition-colors" />
@@ -356,19 +354,34 @@ export const LogsTab = () => {
               <option value="ORDER">{t("m.logCatOrders")}</option>
               <option value="SYSTEM">{t("m.logCatSystem")}</option>
             </select>
+
+            <Button
+              onClick={downloadExcel}
+              className="ml-auto scale-90 bg-primary/70 hover:bg-primary/80 text-primary-foreground rounded-full shadow transition duration-200 px-4 py-2 text-sm"
+            >
+              <Download className="h-4 w-4 mr-2" /> {t("m.exportExcel")}
+            </Button>
           </div>
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left border-collapse">
+          <table className="w-full text-sm text-left border-collapse table-auto">
+            <colgroup>
+              <col style={{ width: 'max-content' }} />
+              <col style={{ width: 'max-content' }} />
+              <col style={{ width: 'max-content' }} />
+              <col style={{ width: 'max-content' }} />
+              <col style={{ width: 'max-content' }} />
+              <col style={{ width: 'minmax(180px, 1fr)' }} />
+            </colgroup>
             <thead className="text-[0.65rem] font-bold tracking-widest uppercase text-foreground/40 bg-foreground/[0.02]">
               <tr>
-                <th className="px-6 py-4 rounded-tl-2xl">{t("m.timestamp")}</th>
-                <th className="px-6 py-4">{t("m.category")}</th>
-                <th className="px-6 py-4">{t("m.action")}</th>
-                <th className="px-6 py-4">{t("m.actor")}</th>
-                <th className="px-6 py-4">{t("m.target")}</th>
-                <th className="px-6 py-4 rounded-tr-2xl">{t("m.details")}</th>
+                <th className="px-4 py-3 rounded-tl-2xl min-w-[150px]">{t("m.timestamp")}</th>
+                <th className="px-4 py-3 min-w-[120px]">{t("m.category")}</th>
+                <th className="px-4 py-3 min-w-[170px]">{t("m.action")}</th>
+                <th className="px-4 py-3 min-w-[140px]">{t("m.actor")}</th>
+                <th className="px-4 py-3 min-w-[140px]">{t("m.target")}</th>
+                <th className="px-4 py-3 rounded-tr-2xl min-w-[180px]">{t("m.details")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-foreground/5">
@@ -384,10 +397,10 @@ export const LogsTab = () => {
                     style={{ animation: `fade-in 0.3s ease-out ${i * 0.03}s both` }}
                     onClick={() => setSelectedLog(log)}
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-foreground/50 font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-foreground/50 font-medium">
                       {new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <span className={`px-3 py-1 rounded-full text-[0.65rem] font-bold tracking-wider uppercase shadow-sm ${
                         log.category === 'INVENTORY' ? 'bg-orange-100 text-orange-700' :
                         log.category === 'EMPLOYEE' ? 'bg-blue-100 text-blue-700' :
@@ -400,7 +413,7 @@ export const LogsTab = () => {
                     <td className="px-6 py-4 font-bold" style={{ color: "hsl(140, 20%, 30%)" }}>{formatAction(log.action)}</td>
                     <td className="px-6 py-4 font-medium text-foreground/70">{log.actor_name || t("m.systemActor")}</td>
                     <td className="px-6 py-4 font-medium text-foreground/90">{log.target_name || log.target_id || "—"}</td>
-                    <td className="px-6 py-4 text-foreground/60 max-w-xs truncate italic" title={formatDetails(log.details)}>
+                    <td className="px-4 py-3 text-foreground/60 max-w-[28rem] break-words italic" title={formatDetails(log.details)}>
                       {formatDetails(log.details)}
                     </td>
                   </tr>

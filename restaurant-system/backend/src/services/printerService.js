@@ -13,6 +13,15 @@ const centerText = (text) => {
   return ' '.repeat(pad) + text;
 };
 
+const formatDateTime = (date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
 /* Strips GDI tags and applies alignment manually for non-Windows (Linux/Raspberry Pi) raw print fallback. */
 const stripGdiTags = (ticket) => {
   return ticket
@@ -58,7 +67,7 @@ const stripGdiTags = (ticket) => {
 
 const printerService = {
   formatChecklistTicket: (order, itemsToPrint, isAddOn) => {
-    const timestamp = new Date().toLocaleString('en-GB');
+    const timestamp = formatDateTime(new Date());
     let ticket = "\n";
     
     let orderTypeStr = isAddOn ? "ADD-ON" : "NEW ORDER";
@@ -68,7 +77,7 @@ const printerService = {
 
     ticket += `[CENTER][H1] ${orderTypeStr}\n`;
     
-    const leftHeader = `${timestamp.substring(0, 16)}`;
+    const leftHeader = `${timestamp}`;
     const rightHeader = `#${order.daily_ticket_number || order.id}`;
     ticket += `${leftHeader}${rightHeader.padStart(28 - leftHeader.length, ' ')}\n`;
     ticket += `Send by: Cashier\n`;
@@ -149,7 +158,7 @@ const printerService = {
   },
 
   formatFinalReceipt: (order, cashierName) => {
-    const timestamp = new Date().toLocaleString('en-GB');
+    const timestamp = formatDateTime(new Date());
     let ticket = "\n";
     
     ticket += "[CENTER][H1] BP DRAGONFLY GARDEN\n";

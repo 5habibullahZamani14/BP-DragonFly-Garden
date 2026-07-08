@@ -94,7 +94,26 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
 
   const res = await fetch(url, finalInit);
   if (!res.ok) {
-    throw new Error(`API Error: ${res.status} ${res.statusText}`);
+    let errorMessage = `API Error: ${res.status} ${res.statusText}`;
+    let errorBody: unknown = null;
+    try {
+      errorBody = await res.json();
+      if (errorBody && typeof errorBody === "object") {
+        if (typeof (errorBody as any).message === "string") {
+          errorMessage = (errorBody as any).message;
+        } else if (typeof (errorBody as any).error === "string") {
+          errorMessage = (errorBody as any).error;
+        }
+      } else if (typeof errorBody === "string") {
+        errorMessage = errorBody;
+      }
+    } catch {
+      // Ignore JSON parse failures and keep the default status text.
+    }
+    const err = new Error(errorMessage) as Error & { status?: number; body?: unknown };
+    err.status = res.status;
+    err.body = errorBody;
+    throw err;
   }
   return (await res.json()) as T;
 };
@@ -1084,33 +1103,112 @@ export interface BackupFile {
   created_at: string;
 }
 
+const buildAdminAuthHeaders = () => {
+  const headers = new Headers();
+  const savedLogin = localStorage.getItem("managerLogin");
+  if (savedLogin) {
+    try {
+      const parsed = JSON.parse(savedLogin);
+      if (parsed.token) {
+        headers.set("Authorization", `Bearer ${parsed.token}`);
+      }
+    } catch (e) {
+      /* ignore malformed stored login */
+    }
+  }
+  return headers;
+};
+
 export const fetchBackups = async (): Promise<BackupFile[]> =>
   safeFetch("/management/backups");
 
-export const createBackup = async (filename: string, overwrite: boolean = false): Promise<{ success: boolean; message: string; filename: string }> => {
-  const res = await fetch(`${API_BASE}/management/backups`, {
+export const fetchCloudBackups = async (): Promise<BackupFile[]> =>
+  safeFetch("/management/backups/cloud");
+
+export const createBackup = async (filename: string, overwrite: boolean = false): Promise<{ success: boolean; message: string; filename: string }> =>
+  safeFetch("/management/backups", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename, overwrite }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Unknown error" }));
-    throw err;
-  }
-  return res.json();
-};
 
-export const restoreBackup = async (filename: string): Promise<{ success: boolean; message: string }> => {
-  const res = await fetch(`${API_BASE}/management/backups/restore`, {
+export const restoreBackup = async (filename: string): Promise<{ success: boolean; message: string }> =>
+  safeFetch("/management/backups/restore", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename }),
   });
+
+export const restoreCloudBackup = async (filename: string): Promise<{ success: boolean; message: string }> =>
+  safeFetch("/management/backups/restore/cloud", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename }),
+  });
+
+export const restoreUploadedBackup = async (file: File): Promise<{ success: boolean; message: string }> => {
+  const headers = buildAdminAuthHeaders();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/management/backups/restore/upload`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Unknown error" }));
+    let errorMessage = `API Error: ${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body && typeof body === "object") {
+        if (typeof (body as any).message === "string") {
+          errorMessage = (body as any).message;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const err = new Error(errorMessage) as Error & { status?: number };
+    err.status = res.status;
     throw err;
   }
-  return res.json();
+
+  return (await res.json()) as { success: boolean; message: string };
+};
+
+export const downloadBackup = async (filename: string): Promise<void> => {
+  const headers = buildAdminAuthHeaders();
+  const res = await fetch(`${API_BASE}/management/backups/download?filename=${encodeURIComponent(filename)}`, {
+    method: "GET",
+    headers,
+  });
+
+  if (!res.ok) {
+    let errorMessage = `API Error: ${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body && typeof body === "object") {
+        if (typeof (body as any).message === "string") {
+          errorMessage = (body as any).message;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const err = new Error(errorMessage) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 };
 
 // ── Global Modifier Library ───────────────────────────────────────────────────

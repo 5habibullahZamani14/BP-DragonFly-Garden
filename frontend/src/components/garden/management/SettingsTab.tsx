@@ -19,8 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, createBackup, restoreBackup, applyDefaultCardSize, fetchPatterns, BackupFile } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, AlertCircle, Percent, AlertTriangle } from "lucide-react";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile } from "@/lib/api";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -52,15 +52,20 @@ export const SettingsTab = () => {
   const [resetMsg, setResetMsg] = useState("");
 
   const [backups, setBackups] = useState<BackupFile[]>([]);
+  const [cloudBackups, setCloudBackups] = useState<BackupFile[]>([]);
   const [backupName, setBackupName] = useState("");
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupMsg, setBackupMsg] = useState<{text: string, isError: boolean} | null>(null);
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
+  const [activeRestoreSource, setActiveRestoreSource] = useState<"local"|"cloud"|null>(null);
+  const [uploadingBackup, setUploadingBackup] = useState(false);
 
   // In-app restore confirmation & result dialogs
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<string | null>(null);
   const [restoreResult, setRestoreResult] = useState<{ message: string; isError: boolean } | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Tax & service charge settings
   const [sstEnabled, setSstEnabled] = useState(true);
@@ -141,7 +146,7 @@ export const SettingsTab = () => {
       setProfile({ name: p.name || "", id: p.id || "", email: p.email || "", phone: p.phone || "" });
     } catch (e) { safeConsoleError("Profile load failed", e); }
 
-    loadBackups();
+    await Promise.all([loadBackups(), loadCloudBackups()]);
   };
 
   const loadBackups = async () => {
@@ -154,6 +159,15 @@ export const SettingsTab = () => {
       setBackupName(`backup_${dateStr}`);
     } catch (e) {
       safeConsoleError("Failed to load backups", e);
+    }
+  };
+
+  const loadCloudBackups = async () => {
+    try {
+      const data = await fetchCloudBackups();
+      setCloudBackups(data || []);
+    } catch (e) {
+      safeConsoleError("Failed to load cloud backups", e);
     }
   };
 
@@ -373,14 +387,15 @@ export const SettingsTab = () => {
     setBackupLoading(true);
     setBackupMsg(null);
     setShowOverwriteConfirm(false);
-    
+
     try {
       await createBackup(backupName.trim(), overwrite);
       setBackupMsg({ text: "✅ Backup created successfully", isError: false });
       loadBackups();
       setTimeout(() => setBackupMsg(null), 3000);
     } catch (err: any) {
-      if (err.message && err.message.includes("already exists")) {
+      const alreadyExists = err.status === 409 || (err.message && err.message.toLowerCase().includes("already exists"));
+      if (alreadyExists && !overwrite) {
         setShowOverwriteConfirm(true);
       } else {
         setBackupMsg({ text: `⚠️ ${err.message || t("m.backupCreateFailed")}`, isError: true });
@@ -390,25 +405,44 @@ export const SettingsTab = () => {
     }
   };
 
-  const handleRestoreBackup = async (filename: string) => {
-    // Show in-app confirmation dialog instead of window.confirm
+  const handleRestoreBackup = async (filename: string, source: "local" | "cloud") => {
+    setActiveRestoreSource(source);
     setRestoreConfirmFile(filename);
+  };
+
+  const handleDownloadBackup = async (filename: string) => {
+    try {
+      await downloadBackup(filename);
+    } catch (err: any) {
+      safeConsoleError("Download failed", err);
+      setBackupMsg({ text: `⚠️ ${err.message || "Download failed."}`, isError: true });
+    }
+  };
+
+  const handleUploadBackupFile = (file: File | null) => {
+    setUploadFile(file);
+    setUploadError(null);
   };
 
   const executeRestore = async () => {
     const filename = restoreConfirmFile;
-    if (!filename) return;
+    if (!filename || !activeRestoreSource) return;
     setRestoreConfirmFile(null);
     
     setRestoreLoading(filename);
     try {
-      await restoreBackup(filename);
+      if (activeRestoreSource === "local") {
+        await restoreBackup(filename);
+      } else {
+        await restoreCloudBackup(filename);
+      }
       setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
-      // Reload after a brief delay so the user sees the success message
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       setRestoreResult({ message: t("m.restoreFailed", { message: err.message || "Unknown error" }), isError: true });
       setRestoreLoading(null);
+    } finally {
+      setActiveRestoreSource(null);
     }
   };
 
@@ -813,6 +847,7 @@ export const SettingsTab = () => {
                       .sqlite
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">{t("m.backupNameHelp")}</p>
                 </div>
                 <div className="flex items-end">
                   {!showOverwriteConfirm ? (
@@ -842,42 +877,148 @@ export const SettingsTab = () => {
               )}
             </div>
 
-            {/* List Backups */}
-            <div className="space-y-3">
-              <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                <UploadCloud className="h-4 w-4 text-emerald-500" /> {t("m.availableBackups")}
-              </h4>
-              {backups.length === 0 ? (
-                <div className="text-center p-6 bg-white rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
-                  {t("m.noBackups")}
+            <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+              {/* Local Backups */}
+              <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-bold text-gray-800 flex items-center gap-2">
+                    <UploadCloud className="h-4 w-4 text-emerald-500" /> {t("m.localBackups")}
+                  </div>
+                  <span className="text-xs text-muted-foreground">{t("m.localBackupNote")}</span>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                  {backups.map((file) => (
-                    <div key={file.filename} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between gap-4 hover:border-blue-300 transition-colors">
-                      <div>
-                        <p className="font-bold text-gray-800 break-all">{file.filename}</p>
-                        <div className="flex gap-4 mt-2 text-xs font-medium text-gray-500">
-                          <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                          <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                {backups.length === 0 ? (
+                  <div className="text-center p-6 rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
+                    {t("m.noBackups")}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {backups.map((file) => (
+                      <div key={file.filename} className="p-4 rounded-2xl border border-gray-200 shadow-sm hover:border-blue-300 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-800 break-all">{file.filename}</p>
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+                              <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                              <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleDownloadBackup(file.filename)}>
+                              Download
+                            </Button>
+                            <Button 
+                              size="sm"
+                              onClick={() => handleRestoreBackup(file.filename, "local")}
+                              disabled={restoreLoading !== null}
+                              variant="outline"
+                              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300"
+                            >
+                              {restoreLoading === file.filename ? (
+                                <><Loader2 className="h-4 w-4 animate-spin mr-2" />{t("m.restoring")}</>
+                              ) : (
+                                t("m.restoreThisVersion")
+                              )}
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <Button 
-                        onClick={() => handleRestoreBackup(file.filename)} 
-                        disabled={restoreLoading !== null}
-                        variant="outline" 
-                        className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 transition-colors"
-                      >
-                        {restoreLoading === file.filename ? (
-                          <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("m.restoring")}</>
-                        ) : (
-                          t("m.restoreThisVersion")
-                        )}
-                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Cloud Backups + Local Upload Restore */}
+              <div className="space-y-5">
+                <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-bold text-gray-800 flex items-center gap-2">
+                      <CloudDownload className="h-4 w-4 text-sky-500" /> {t("m.cloudBackups")}
                     </div>
-                  ))}
+                    <span className="text-xs text-muted-foreground">{t("m.cloudBackupNote")}</span>
+                  </div>
+                  {cloudBackups.length === 0 ? (
+                    <div className="text-center p-6 rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
+                      {t("m.noCloudBackups")}
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+                      {cloudBackups.map((file) => (
+                        <div key={file.filename} className="p-4 rounded-2xl border border-gray-200 shadow-sm hover:border-blue-300 transition-colors">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-800 break-all">{file.filename}</p>
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+                                <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                                <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                            </div>
+                            <Button 
+                              size="sm"
+                              onClick={() => handleRestoreBackup(file.filename, "cloud")}
+                              disabled={restoreLoading !== null}
+                              variant="outline"
+                              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300"
+                            >
+                              {restoreLoading === file.filename ? (
+                                <><Loader2 className="h-4 w-4 animate-spin mr-2" />{t("m.restoring")}</>
+                              ) : (
+                                t("m.restoreThisVersion")
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
+                  <h4 className="font-bold text-gray-800">{t("m.restoreLocalDevice")}</h4>
+                  <p className="text-sm text-gray-600">{t("m.restoreLocalDeviceDesc")}</p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex-1">
+                      <Label htmlFor="backup-upload" className="text-xs text-muted-foreground">{t("m.uploadBackupFile")}</Label>
+                      <input
+                        id="backup-upload"
+                        type="file"
+                        title={t("m.uploadBackupFile")}
+                        aria-label={t("m.uploadBackupFile")}
+                        accept=".sqlite"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null;
+                          handleUploadBackupFile(file);
+                        }}
+                        className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold"
+                      />
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        if (!uploadFile) {
+                          setUploadError(t("m.uploadFileRequired"));
+                          return;
+                        }
+                        setUploadError(null);
+                        setUploadingBackup(true);
+                        try {
+                          await restoreUploadedBackup(uploadFile);
+                          setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
+                          setTimeout(() => window.location.reload(), 1500);
+                        } catch (err: any) {
+                          setUploadError(err.message || t("m.restoreFailed", { message: "Unknown error" }));
+                        } finally {
+                          setUploadingBackup(false);
+                        }
+                      }}
+                      disabled={!uploadFile || uploadingBackup}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto"
+                    >
+                      {uploadingBackup ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      {t("m.restoreFromUpload")}
+                    </Button>
+                  </div>
+                  {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+                </div>
+              </div>
             </div>
           </div>
         </AccordionContent>
@@ -917,6 +1058,29 @@ export const SettingsTab = () => {
       </Dialog>
 
       {/* ── In-app Restore Result Dialog ──────────────────────── */}
+      <Dialog open={confirmationDialog.open} onOpenChange={(open) => { if (!open) setConfirmationDialog(prev => ({ ...prev, open: false })); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">{confirmationDialog.title}</DialogTitle>
+            <DialogDescription className="pt-2 text-sm text-gray-600">
+              {confirmationDialog.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4 justify-end">
+            <Button variant="outline" onClick={() => setConfirmationDialog(prev => ({ ...prev, open: false }))}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleConfirmationConfirm}
+              disabled={confirmationDialog.pending}
+            >
+              {confirmationDialog.pending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Confirming...</> : "Confirm"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!restoreResult} onOpenChange={(open) => { if (!open) setRestoreResult(null); }}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>

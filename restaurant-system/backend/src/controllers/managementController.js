@@ -31,8 +31,21 @@ const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 
 const backupsDir = path.join(__dirname, "../../backups");
+const tmpDir = path.join(__dirname, "../../tmp");
+if (!fs.existsSync(backupsDir)) {
+  fs.mkdirSync(backupsDir, { recursive: true });
+}
+if (!fs.existsSync(tmpDir)) {
+  fs.mkdirSync(tmpDir, { recursive: true });
+}
+
+const sanitizeFilename = (filename) => {
+  if (!filename || typeof filename !== "string") return "";
+  return filename.replace(/[^a-zA-Z0-9_.-]/g, "");
+};
 if (!fs.existsSync(backupsDir)) {
   fs.mkdirSync(backupsDir, { recursive: true });
 }
@@ -767,7 +780,7 @@ const restoreBackup = async (req, res, next) => {
     if (!filename) return next(createHttpError(400, "Filename is required"));
     
     // Sanitize filename
-    const finalName = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+    const finalName = sanitizeFilename(filename);
     const sourcePath = path.join(backupsDir, finalName);
     
     if (!fs.existsSync(sourcePath)) {
@@ -786,6 +799,74 @@ const restoreBackup = async (req, res, next) => {
     
     await createLog("SYSTEM", "RESTORE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
     res.json({ success: true, message: "System restored successfully from backup" });
+  } catch (error) { next(error); }
+};
+
+const getCloudBackups = async (req, res, next) => {
+  try {
+    const backups = await listCloudBackups();
+    res.json(backups);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const restoreCloudBackup = async (req, res, next) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) return next(createHttpError(400, "Filename is required"));
+
+    const finalName = sanitizeFilename(filename);
+    if (!finalName) return next(createHttpError(400, "Invalid filename"));
+
+    const tempPath = path.join(tmpDir, `cloud-restore-${Date.now()}-${finalName}`);
+    await downloadCloudBackup(finalName, tempPath);
+
+    await run("PRAGMA wal_checkpoint(TRUNCATE)");
+    fs.copyFileSync(tempPath, dbPath);
+
+    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
+    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
+    
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+
+    await createLog("SYSTEM", "RESTORE_CLOUD_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
+    res.json({ success: true, message: "System restored successfully from cloud backup" });
+  } catch (error) { next(error); }
+};
+
+const restoreUploadedBackup = async (req, res, next) => {
+  try {
+    const file = req.file;
+    if (!file) return next(createHttpError(400, "Backup file is required"));
+    if (!file.originalname.endsWith(".sqlite")) {
+      fs.unlinkSync(file.path);
+      return next(createHttpError(400, "Uploaded file must be a .sqlite backup"));
+    }
+
+    await run("PRAGMA wal_checkpoint(TRUNCATE)");
+    fs.copyFileSync(file.path, dbPath);
+
+    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
+    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
+
+    fs.unlinkSync(file.path);
+
+    await createLog("SYSTEM", "RESTORE_UPLOADED_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: file.originalname });
+    res.json({ success: true, message: "System restored successfully from uploaded backup" });
+  } catch (error) { next(error); }
+};
+
+const downloadBackup = async (req, res, next) => {
+  try {
+    const { filename } = req.query;
+    if (!filename) return next(createHttpError(400, "Filename is required"));
+    const finalName = sanitizeFilename(String(filename));
+    const sourcePath = path.join(backupsDir, finalName);
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ success: false, message: "Backup file not found" });
+    }
+    res.download(sourcePath, finalName);
   } catch (error) { next(error); }
 };
 
@@ -814,5 +895,9 @@ module.exports = {
   getBackups,
   createBackup,
   restoreBackup,
+  getCloudBackups,
+  restoreCloudBackup,
+  restoreUploadedBackup,
+  downloadBackup,
   setBroadcast,
 };

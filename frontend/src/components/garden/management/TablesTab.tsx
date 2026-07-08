@@ -31,9 +31,13 @@ export const TablesTab = () => {
   const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [addMode, setAddMode] = useState<"manual" | "auto" | null>(null); // "manual" or "auto"
   const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });
+  const [autoTableToCreate, setAutoTableToCreate] = useState<{ table_number: string; qr_code: string } | null>(null);
+  const [showAutoConfirm, setShowAutoConfirm] = useState(false);
   const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
-  const [showHotspotQR, setShowHotspotQR] = useState(true);
+  const [showHotspotQR, setShowHotspotQR] = useState(false);
+  const [sortBy, setSortBy] = useState<"number" | "creation_date">("number"); // Sorting mode
 
   const handleDownloadQR = async () => {
     const element = document.getElementById("qr-code-print-area");
@@ -54,6 +58,75 @@ export const TablesTab = () => {
       document.body.removeChild(link);
     } catch (err) {
       safeConsoleError("Failed to generate QR Code image", err);
+    }
+  };
+
+  // Function to find the next available table number, filling gaps from lowest
+  const getNextTableNumber = (): { number: number; name: string; qrCode: string } => {
+    // Extract numeric table numbers from existing tables
+    const existingNumbers = tables
+      .filter(t => !/(takeaway|counter|to[- ]?go)/i.test(t.table_number))
+      .map(t => {
+        const match = t.table_number.match(/\d+/);
+        return match ? parseInt(match[0], 10) : null;
+      })
+      .filter((n): n is number => n !== null)
+      .sort((a, b) => a - b);
+
+    // Find the lowest missing number starting from 1
+    let nextNum = 1;
+    for (const num of existingNumbers) {
+      if (num === nextNum) {
+        nextNum++;
+      } else if (num > nextNum) {
+        break; // Found the gap
+      }
+    }
+
+    const tableName = `Table ${nextNum}`;
+    const qrCode = `table-${nextNum}`;
+    return { number: nextNum, name: tableName, qrCode };
+  };
+
+  const handleAutoTableCreate = () => {
+    const nextTable = getNextTableNumber();
+    setAutoTableToCreate({
+      table_number: nextTable.name,
+      qr_code: nextTable.qrCode,
+    });
+    setShowAutoConfirm(true);
+  };
+
+  const handleConfirmAutoCreate = async () => {
+    if (!autoTableToCreate) return;
+    try {
+      await createTable(autoTableToCreate);
+      setShowAutoConfirm(false);
+      setAutoTableToCreate(null);
+      setIsAdding(false);
+      setAddMode(null);
+      loadTables();
+    } catch (e) {
+      safeConsoleError("Failed to create auto table", e);
+    }
+  };
+
+  const getSortedTables = (tablesToSort: TableRecord[]) => {
+    const filtered = tablesToSort.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number));
+
+    if (sortBy === "number") {
+      return filtered.sort((a, b) => {
+        const numA = parseInt(a.table_number.match(/\d+/)?.[0] || "999", 10);
+        const numB = parseInt(b.table_number.match(/\d+/)?.[0] || "999", 10);
+        return numA - numB;
+      });
+    } else {
+      // Sort by creation date (oldest first)
+      return filtered.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateA - dateB;
+      });
     }
   };
   
@@ -111,6 +184,7 @@ export const TablesTab = () => {
     try {
       await createTable(newTable);
       setIsAdding(false);
+      setAddMode(null);
       setNewTable({ table_number: "", qr_code: "" });
       loadTables();
     } catch (e) {
@@ -150,15 +224,44 @@ export const TablesTab = () => {
           <Grid3X3 className="h-6 w-6 text-green-600" />
           {t("m.restaurantTables")}
         </h2>
-        <Button onClick={() => setIsAdding(true)} className="bg-green-600 hover:bg-green-700 text-white">
-          <Plus className="h-4 w-4 mr-2" /> {t("m.addTable")}
-        </Button>
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <Button
+              onClick={() => setSortBy("number")}
+              className={sortBy === "number" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
+              size="sm"
+            >
+              Sort by Number
+            </Button>
+            <Button
+              onClick={() => setSortBy("creation_date")}
+              className={sortBy === "creation_date" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
+              size="sm"
+            >
+              Sort by Creation Date
+            </Button>
+          </div>
+          {!isAdding ? (
+            <>
+              <Button onClick={() => { setIsAdding(true); setAddMode("manual"); }} className="bg-green-600 hover:bg-green-700 text-white">
+                <Plus className="h-4 w-4 mr-2" /> Add New Table Manually
+              </Button>
+              <Button onClick={() => { setIsAdding(true); setAddMode("auto"); handleAutoTableCreate(); }} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Plus className="h-4 w-4 mr-2" /> Add New Table Automatically
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "", qr_code: "" }); }} variant="outline">
+              Close
+            </Button>
+          )}
+        </div>
       </div>
 
-      {isAdding && (
+      {isAdding && addMode === "manual" && (
         <Card className="border-green-200 shadow-md">
           <CardHeader>
-            <CardTitle>{t("m.newTable")}</CardTitle>
+            <CardTitle>Add Table Manually</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -173,7 +276,7 @@ export const TablesTab = () => {
             </div>
             <div className="flex gap-2 pt-4">
               <Button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white flex-1">{t("m.saveTable")}</Button>
-              <Button onClick={() => setIsAdding(false)} variant="outline" className="flex-1">{t("m.cancel")}</Button>
+              <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "", qr_code: "" }); }} variant="outline" className="flex-1">{t("m.cancel")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +307,7 @@ export const TablesTab = () => {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {tables.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number)).map((table) => (
+        {getSortedTables(tables).map((table) => (
           <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group cursor-pointer" onClick={() => setViewQRCodeTable(table)}>
             <CardContent className="pt-6 pb-4">
               {!/(takeaway|counter|to[- ]?go)/i.test(table.table_number) && (
@@ -242,41 +345,96 @@ export const TablesTab = () => {
         ))}
       </div>
 
+      {/* Auto Create Confirmation Dialog */}
+      <Dialog open={showAutoConfirm} onOpenChange={(open) => {
+        if (!open) {
+          setShowAutoConfirm(false);
+          setAutoTableToCreate(null);
+          setIsAdding(false);
+          setAddMode(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create Table Automatically</DialogTitle>
+            <DialogDescription>
+              Please confirm the table details below
+            </DialogDescription>
+          </DialogHeader>
+          {autoTableToCreate && (
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Table Name</p>
+                    <p className="text-lg font-bold text-gray-900 mt-1">{autoTableToCreate.table_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">QR Code ID</p>
+                    <p className="text-sm text-gray-800 mt-1 font-mono">{autoTableToCreate.qr_code}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  onClick={handleConfirmAutoCreate}
+                  className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
+                >
+                  Create Table
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setShowAutoConfirm(false);
+                    setAutoTableToCreate(null);
+                    setIsAdding(false);
+                    setAddMode(null);
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* QR Code Modal */}
       <Dialog open={!!viewQRCodeTable} onOpenChange={(open) => {
         if (!open) {
           setViewQRCodeTable(null);
-          setShowHotspotQR(true); // Reset to hotspot QR when closing
+          setShowHotspotQR(false); // Reset to the customer ordering QR when closing
         }
       }}>
-        <DialogContent className="sm:max-w-[500px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
+        <DialogContent className="sm:max-w-[420px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
           {viewQRCodeTable && (
-            <div className="bg-gradient-to-b from-blue-50 to-blue-100 p-8 flex flex-col items-center justify-start min-h-screen md:min-h-auto">
-              <DialogHeader className="w-full text-center mb-6">
-                <DialogTitle className="text-2xl font-bold text-gray-900">
-                  {showHotspotQR ? "🌐 WiFi Network QR Code" : "🛒 Ordering Portal QR Code"}
+            <div className="bg-gradient-to-b from-blue-50 to-blue-100 p-4 flex flex-col items-center justify-start">
+              <DialogHeader className="w-full text-center mb-3">
+                <DialogTitle className="text-lg font-bold text-gray-900">
+                  {showHotspotQR ? "🌐 WiFi Network QR Code" : "🛒 Table Ordering QR Code"}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-gray-600 mt-2">
+                <DialogDescription className="text-xs text-gray-600 mt-1.5">
                   {showHotspotQR 
-                    ? `Table: ${viewQRCodeTable.table_number} • Scan to join the local network`
-                    : `Table: ${viewQRCodeTable.table_number} • Scan to access the ordering screen`
+                    ? `Table: ${viewQRCodeTable.table_number} • Optional network QR for hotspot access`
+                    : `Table: ${viewQRCodeTable.table_number} • This is the single QR customers scan to order`
                   }
                 </DialogDescription>
               </DialogHeader>
 
               {/* Printable Area */}
-              <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl shadow-lg border-2 border-gray-200 w-full max-w-md mb-6">
+              <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-lg border-2 border-gray-200 w-full max-w-xs mb-4">
                 {/* The QR Code Container */}
                 {showHotspotQR && hotspotSsid && !hotspotLoading ? (
                   <>
-                    <div className="text-center mb-4">
-                      <h3 className="text-lg font-bold text-gray-900">🌐 WiFi Network</h3>
-                      <p className="text-sm text-gray-600 mt-1">{hotspotSsid}</p>
+                    <div className="text-center mb-3">
+                      <h3 className="text-base font-bold text-gray-900">🌐 WiFi Network</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">{hotspotSsid}</p>
                     </div>
-                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex flex-col items-center justify-center z-10 shadow-md">
+                    <div className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex flex-col items-center justify-center z-10 shadow-md">
                       <QRCode
                         value={hotspotQrValue}
-                        size={220}
+                        size={180}
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"
@@ -284,23 +442,23 @@ export const TablesTab = () => {
                         eyeRadius={10}
                       />
                       <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                        <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                          <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
-                          <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                        <div className="bg-white px-2 py-1 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                          <span className="text-[12px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                          <span className="text-[16px] font-black text-[#555555] uppercase tracking-widest leading-none mt-0.5">{t("m.qrMe")}</span>
                         </div>
                       </div>
                     </div>
                   </>
                 ) : !showHotspotQR ? (
                   <>
-                    <div className="text-center mb-4">
-                      <h3 className="text-lg font-bold text-gray-900">🛒 Ordering Portal</h3>
-                      <p className="text-sm text-gray-600 mt-1">Direct access to menu</p>
+                    <div className="text-center mb-3">
+                      <h3 className="text-base font-bold text-gray-900">🛒 Ordering Portal</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">Direct access to menu</p>
                     </div>
-                    <div className="relative border-[6px] border-[#555555] rounded-xl p-3 bg-white flex items-center justify-center z-10 shadow-md">
+                    <div className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md">
                       <QRCode 
                         value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
-                        size={220} 
+                        size={180} 
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"
@@ -310,33 +468,33 @@ export const TablesTab = () => {
                       
                       {/* The SCAN ME Center Badge */}
                       <div className="absolute inset-0 flex items-center justify-center z-20">
-                        <div className="bg-white px-3 py-1.5 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
-                          <span className="text-[14px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
-                          <span className="text-[20px] font-black text-[#555555] uppercase tracking-widest leading-none mt-[2px]">{t("m.qrMe")}</span>
+                        <div className="bg-white px-2 py-1 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
+                          <span className="text-[12px] font-black text-[#555555] uppercase tracking-widest leading-none">{t("m.qrScan")}</span>
+                          <span className="text-[16px] font-black text-[#555555] uppercase tracking-widest leading-none mt-0.5">{t("m.qrMe")}</span>
                         </div>
                       </div>
                     </div>
                   </>
                 ) : null}
 
-                <p className="mt-6 text-2xl font-bold text-gray-800 uppercase tracking-widest">TABLE {viewQRCodeTable.table_number}</p>
+                <p className="mt-4 text-lg font-bold text-gray-800 uppercase tracking-widest">TABLE {viewQRCodeTable.table_number}</p>
               </div>
 
               {/* Footer with Toggle and Download Buttons */}
-              <div className="w-full max-w-md space-y-3">
+              <div className="w-full max-w-xs space-y-2">
                 {hotspotSsid && !hotspotLoading && (
                   <Button 
                     onClick={() => setShowHotspotQR(!showHotspotQR)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold py-2 text-lg"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold py-1.5 text-sm"
                   >
-                    🔁 Switch QR Code
+                    {showHotspotQR ? "🛒 Show Ordering QR" : "🌐 Show Wi-Fi QR"}
                   </Button>
                 )}
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold py-2 text-lg"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold py-1.5 text-sm"
                   onClick={handleDownloadQR}
                 >
-                  <Download className="w-5 h-5 mr-2" /> Download {showHotspotQR ? "WiFi" : "Ordering"} QR
+                  <Download className="w-4 h-4 mr-2" /> Download {showHotspotQR ? "WiFi" : "Ordering"} QR
                 </Button>
               </div>
             </div>

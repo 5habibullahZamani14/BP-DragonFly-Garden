@@ -12,44 +12,72 @@ const path = require("path");
  * logs a warning and skips the upload.
  */
 
+const AWS = require("aws-sdk");
+
+const createS3Client = () => {
+  if (!process.env.B2_KEY_ID || !process.env.B2_APPLICATION_KEY || !process.env.B2_ENDPOINT || !process.env.B2_BUCKET_NAME) {
+    throw new Error("Backblaze cloud backup is not configured. Missing B2 credentials.");
+  }
+
+  const endpoint = new AWS.Endpoint(process.env.B2_ENDPOINT);
+  return new AWS.S3({
+    endpoint,
+    accessKeyId: process.env.B2_KEY_ID,
+    secretAccessKey: process.env.B2_APPLICATION_KEY,
+    s3ForcePathStyle: true,
+  });
+};
+
 const uploadToCloud = async (filePath) => {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Backup file not found at ${filePath}`);
   }
 
-  // Check for credentials
-  if (!process.env.B2_KEY_ID) {
-    console.log("[Cloud Backup] Skipped cloud upload. B2_KEY_ID not found in .env");
-    return false;
+  try {
+    const s3 = createS3Client();
+    console.log(`[Cloud Backup] Authenticating with secure cloud provider...`);
+    await s3.upload({
+      Bucket: process.env.B2_BUCKET_NAME,
+      Key: path.basename(filePath),
+      Body: fs.createReadStream(filePath),
+    }).promise();
+    console.log(`[Cloud Backup] Successfully uploaded ${path.basename(filePath)} to secure cloud storage.`);
+    return true;
+  } catch (error) {
+    console.error("[Cloud Backup] Cloud upload failed:", error);
+    throw error;
   }
+};
 
-  console.log(`[Cloud Backup] Authenticating with secure cloud provider...`);
+const listCloudBackups = async () => {
+  const s3 = createS3Client();
+  const data = await s3
+    .listObjectsV2({ Bucket: process.env.B2_BUCKET_NAME, Prefix: "" })
+    .promise();
 
-  // ==============================================================================
-  // USER: Backblaze B2 Implementation
-  // Backblaze uses an S3-compatible API, so we still use the aws-sdk!
-  // To activate this, install the SDK by running: npm install aws-sdk
-  //
-  const AWS = require('aws-sdk');
-  const ep = new AWS.Endpoint(process.env.B2_ENDPOINT); // e.g., 's3.us-west-004.backblazeb2.com'
-  const s3 = new AWS.S3({
-    endpoint: ep,
-    accessKeyId: process.env.B2_KEY_ID,
-    secretAccessKey: process.env.B2_APPLICATION_KEY
-  });
-  await s3.upload({
-    Bucket: process.env.B2_BUCKET_NAME,
-    Key: path.basename(filePath),
-    Body: fs.createReadStream(filePath)
-  }).promise();
-  // ==============================================================================
+  if (!data.Contents) return [];
 
-  // For now, it simulates a successful upload.
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`[Cloud Backup] Successfully uploaded ${path.basename(filePath)} to secure cloud storage.`);
-      resolve(true);
-    }, 2000);
+  return data.Contents
+    .filter((item) => item.Key && item.Key.endsWith(".sqlite"))
+    .map((item) => ({
+      filename: item.Key,
+      size: item.Size || 0,
+      created_at: item.LastModified ? item.LastModified.toISOString() : new Date().toISOString(),
+    }))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+};
+
+const downloadCloudBackup = async (key, destinationPath) => {
+  const s3 = createS3Client();
+  return new Promise((resolve, reject) => {
+    const readStream = s3.getObject({ Bucket: process.env.B2_BUCKET_NAME, Key: key }).createReadStream();
+    const writeStream = fs.createWriteStream(destinationPath);
+
+    readStream.on("error", reject);
+    writeStream.on("error", reject);
+    writeStream.on("finish", resolve);
+
+    readStream.pipe(writeStream);
   });
 };
 
@@ -78,7 +106,7 @@ const executeNightlyCloudBackup = async () => {
 
 const cleanupOldBackups = (backupDir) => {
   try {
-    const files = fs.readdirSync(backupDir).filter(f => f.startsWith("db_backup_"));
+    const files = fs.readdirSync(backupDir).filter((f) => f.startsWith("db_backup_"));
     const now = Date.now();
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -109,21 +137,20 @@ const ensureCloudBackupUpToDate = async () => {
   const backupDir = path.join(__dirname, "../../../backups");
   if (!fs.existsSync(backupDir)) return executeNightlyCloudBackup();
 
-  const files = fs.readdirSync(backupDir)
-    .filter(f => f.startsWith("db_backup_"))
-    .map(f => ({
+  const files = fs
+    .readdirSync(backupDir)
+    .filter((f) => f.startsWith("db_backup_"))
+    .map((f) => ({
       name: f,
-      time: fs.statSync(path.join(backupDir, f)).mtime.getTime()
+      time: fs.statSync(path.join(backupDir, f)).mtime.getTime(),
     }))
     .sort((a, b) => b.time - a.time);
 
   const now = new Date();
 
-  // Define the threshold as 3:00 AM today
   const threeAM = new Date(now);
   threeAM.setHours(3, 0, 0, 0);
 
-  // If it's before 3 AM right now, the threshold was 3 AM yesterday
   if (now < threeAM) {
     threeAM.setDate(threeAM.getDate() - 1);
   }
@@ -138,4 +165,4 @@ const ensureCloudBackupUpToDate = async () => {
   }
 };
 
-module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate };
+module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup };

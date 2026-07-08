@@ -339,6 +339,26 @@ if (paymentController && typeof paymentController.setBroadcast === 'function') {
   paymentController.setBroadcast(broadcast);
 }
 
+/* Captive Portal Routes for Apple, Android, and common connectivity checks */
+const redirectToCaptiveTarget = async (req, res) => {
+  const target = await resolveCaptivePortalTarget(req);
+  return res.status(302).redirect(target);
+};
+
+app.get(
+  [
+    "/hotspot-detect.html",
+    "/generate_204",
+    "/gen_204",
+    "/ncsi.txt",
+    "/connecttest.txt",
+    "/success.txt",
+    "/library/test/success.html",
+    "/connectivity-check",
+  ],
+  async (req, res) => redirectToCaptiveTarget(req, res)
+);
+
 /*
  * Static file serving for the compiled frontend. If the dist folder exists,
  * Express serves its contents. This is only active in production — during
@@ -380,26 +400,6 @@ app.get('/ready', async (req, res) => {
     res.status(503).json({ ready: false, error: String(err) });
   }
 });
-
-/* Captive Portal Routes for Apple, Android, and common connectivity checks */
-const redirectToCaptiveTarget = async (req, res) => {
-  const target = await resolveCaptivePortalTarget(req);
-  return res.status(302).redirect(target);
-};
-
-app.get(
-  [
-    "/hotspot-detect.html",
-    "/generate_204",
-    "/gen_204",
-    "/ncsi.txt",
-    "/connecttest.txt",
-    "/success.txt",
-    "/library/test/success.html",
-    "/connectivity-check",
-  ],
-  async (req, res) => redirectToCaptiveTarget(req, res)
-);
 
 /* Global error handlers — these must be registered last. */
 app.use(notFoundHandler);
