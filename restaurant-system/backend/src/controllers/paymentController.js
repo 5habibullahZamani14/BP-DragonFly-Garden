@@ -77,7 +77,6 @@ const fetchOrderWithPayments = async (orderId) => {
         o.payment_status,
         o.created_at,
         o.customer_archived_at,
-        o.kitchen_archived_at,
         o.order_type,
         o.customer_name,
         o.customer_phone,
@@ -203,7 +202,7 @@ const processPayment = async (orderId, paymentData) => {
 
     if (newStatus === "paid") {
       await run(
-        `UPDATE orders SET payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE orders SET payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [newStatus, orderId]
       );
       await run(
@@ -364,7 +363,7 @@ const splitPayment = async (orderId, paymentData) => {
 
     if (newPaymentStatus === "paid") {
       await run(
-        `UPDATE orders SET total_price = ?, payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE orders SET total_price = ?, payment_status = ?, customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [newTotal, newPaymentStatus, orderId]
       );
     } else {
@@ -376,7 +375,7 @@ const splitPayment = async (orderId, paymentData) => {
 
     // Archive the split receipt immediately
     await run(
-      `UPDATE orders SET customer_archived_at = CURRENT_TIMESTAMP, kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE orders SET customer_archived_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [splitOrderId]
     );
 
