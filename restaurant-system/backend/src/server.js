@@ -269,8 +269,23 @@ if (process.env.VITE_DEV_MODE === '1') {
 } else {
   const allowed = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
   app.use(cors({ origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // allow non-browser requests like curl
-    if (allowed.length === 0) return cb(new Error('CORS not configured'));
+    // No Origin header (curl, devices, or same-origin) — allow.
+    if (!origin) return cb(null, true);
+
+    // If no allowed origins configured, allow common captive-portal check
+    // hosts (msftconnecttest) so devices' "Open browser and connect" flows
+    // can fetch the frontend assets while the browser's Host header is
+    // rewritten by the captive portal DNS redirect.
+    if (allowed.length === 0) {
+      try {
+        const lower = String(origin).toLowerCase();
+        if (lower.includes('msftconnecttest.com')) return cb(null, true);
+      } catch (e) {
+        // fall through to error
+      }
+      return cb(new Error('CORS not configured'));
+    }
+
     if (allowed.includes(origin)) return cb(null, true);
     return cb(new Error('CORS origin not allowed'));
   }}));
@@ -348,6 +363,7 @@ const redirectToCaptiveTarget = async (req, res) => {
 app.get(
   [
     "/hotspot-detect.html",
+      "/redirect",
     "/generate_204",
     "/gen_204",
     "/ncsi.txt",
