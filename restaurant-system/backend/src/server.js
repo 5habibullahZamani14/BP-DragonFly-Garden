@@ -8,8 +8,9 @@
  * complete picture of how the application starts up.
  */
 
-require("dotenv").config();
-require("dotenv").config({ path: ".env.local", override: true });
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+require("dotenv").config({ path: path.resolve(__dirname, "..", ".env.local"), override: true });
 // Fail fast if critical secrets are missing to avoid insecure fallback behavior
 if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET environment variable is not set. Aborting startup to prevent insecure default secrets.");
@@ -17,7 +18,6 @@ if (!process.env.JWT_SECRET) {
 }
 const fs = require("fs");
 const os = require("os");
-const path = require("path");
 const express = require("express");
 const http = require("http");
 const cors = require("cors");

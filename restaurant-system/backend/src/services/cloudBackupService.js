@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env.local"), override: true });
 
 /*
  * cloudBackupService.js
@@ -117,6 +119,83 @@ const downloadCloudBackup = async (key, destinationPath) => {
   });
 };
 
+const createLocalBackupOnly = async (backupDir) => {
+  const dbPath = path.join(__dirname, "../database/database.sqlite");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const tarName = `full_backup_${timestamp}.tar.gz`;
+  const tarPath = path.join(backupDir, tarName);
+
+  const toInclude = [];
+  if (fs.existsSync(dbPath)) toInclude.push(dbPath);
+
+  const frontendMenuImages = path.resolve(__dirname, "../../../frontend/public/menu-images");
+  const frontendFeedbackImages = path.resolve(__dirname, "../../../frontend/public/feedback-images");
+  if (fs.existsSync(frontendMenuImages)) toInclude.push(frontendMenuImages);
+  if (fs.existsSync(frontendFeedbackImages)) toInclude.push(frontendFeedbackImages);
+
+  const backendLogs = path.resolve(__dirname, "../../logs");
+  if (fs.existsSync(backendLogs)) toInclude.push(backendLogs);
+
+  const backendDir = path.resolve(__dirname, "../..");
+  const envFile = path.join(backendDir, ".env");
+  const envLocal = path.join(backendDir, ".env.local");
+  if (fs.existsSync(envFile)) toInclude.push(envFile);
+  if (fs.existsSync(envLocal)) toInclude.push(envLocal);
+
+  const uploadsDir = path.resolve(__dirname, "../../uploads");
+  if (fs.existsSync(uploadsDir)) toInclude.push(uploadsDir);
+
+  if (toInclude.length === 0) {
+    console.warn("[Cloud Backup] Nothing found to include in local backup. Aborting.");
+    return;
+  }
+
+  const args = ["-czf", tarPath, ...toInclude];
+  const tar = spawnSync("tar", args, { stdio: "inherit" });
+  if (tar.error) throw tar.error;
+  if (tar.status !== 0) throw new Error(`tar exited with code ${tar.status}`);
+
+  const encKey = process.env.BACKUP_ENC_KEY || null;
+  if (encKey) {
+    const encPath = `${tarPath}.enc`;
+    encryptFile(tarPath, encPath, encKey);
+    try { fs.unlinkSync(tarPath); } catch (e) {}
+  }
+
+  cleanupOldBackups(backupDir);
+};
+
+const uploadLatestLocalBackupToCloud = async (backupDir) => {
+  const latestLocal = fs.readdirSync(backupDir)
+    .filter((f) => f.endsWith(".tar.gz.enc") || f.endsWith(".tar.gz"))
+    .map((f) => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
+    .sort((a, b) => b.time - a.time)[0];
+
+  if (!latestLocal) {
+    console.log("[Cloud Backup] No local backup archive was found to upload to Backblaze.");
+    return;
+  }
+
+  const filePath = path.join(backupDir, latestLocal.name);
+  if (!fs.existsSync(filePath)) return;
+
+  const encKey = process.env.BACKUP_ENC_KEY || null;
+  if (!encKey && filePath.endsWith(".tar.gz")) {
+    console.error("[Cloud Backup] BACKUP_ENC_KEY not configured; refusing to upload an unencrypted backup.");
+    return;
+  }
+
+  if (filePath.endsWith(".tar.gz")) {
+    const encPath = `${filePath}.enc`;
+    encryptFile(filePath, encPath, encKey);
+    await uploadToCloud(encPath);
+    try { fs.unlinkSync(encPath); } catch (e) {}
+    return;
+  }
+
+  await uploadToCloud(filePath);
+};
+
 const executeNightlyCloudBackup = async () => {
   const dbPath = path.join(__dirname, "../database/database.sqlite");
   const backupDir = path.join(__dirname, "../../../backups");
@@ -146,8 +225,9 @@ const executeNightlyCloudBackup = async () => {
   if (fs.existsSync(backendLogs)) toInclude.push(backendLogs);
 
   // Env files (sensitive) - these will be included and encrypted
-  const envFile = path.resolve(process.cwd(), ".env");
-  const envLocal = path.resolve(process.cwd(), ".env.local");
+  const backendDir = path.resolve(__dirname, "../..");
+  const envFile = path.join(backendDir, ".env");
+  const envLocal = path.join(backendDir, ".env.local");
   if (fs.existsSync(envFile)) toInclude.push(envFile);
   if (fs.existsSync(envLocal)) toInclude.push(envLocal);
 
@@ -253,7 +333,16 @@ const getLatestLocalBackupTime = (backupDir) => {
 
 const ensureCloudBackupUpToDate = async () => {
   const backupDir = path.join(__dirname, "../../../backups");
-  if (!fs.existsSync(backupDir)) return executeNightlyCloudBackup();
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+
+  if (process.env.FORCE_BACKUP_ON_STARTUP === "1" || process.env.FORCE_BACKUP_ON_STARTUP === "true") {
+    console.log("[Cloud Backup] FORCE_BACKUP_ON_STARTUP is enabled. Creating a fresh local backup and syncing it to Backblaze immediately.");
+    await createLocalBackupOnly(backupDir);
+    await uploadLatestLocalBackupToCloud(backupDir);
+    return;
+  }
 
   const now = new Date();
   const threeAM = new Date(now);
@@ -265,14 +354,29 @@ const ensureCloudBackupUpToDate = async () => {
   const localLatest = getLatestLocalBackupTime(backupDir);
   const remoteLatest = await getLatestRemoteBackupTime();
 
-  const latest = Math.max(localLatest, remoteLatest);
+  const localIsCurrent = localLatest > 0 && localLatest >= threeAM.getTime();
+  const remoteIsCurrent = remoteLatest > 0 && remoteLatest >= threeAM.getTime();
 
-  if (latest < threeAM.getTime()) {
-    console.log("[Cloud Backup] No backup found (local or remote) newer than 3:00 AM. Running catch-up backup now...");
-    await executeNightlyCloudBackup();
-  } else {
-    console.log("[Cloud Backup] Backup is up to date (local or remote).");
+  if (!localIsCurrent && !remoteIsCurrent) {
+    console.log("[Cloud Backup] No up-to-date backup found locally or in Backblaze. Creating a local backup and uploading it to Backblaze.");
+    await createLocalBackupOnly(backupDir);
+    await uploadLatestLocalBackupToCloud(backupDir);
+    return;
   }
+
+  if (!localIsCurrent && remoteIsCurrent) {
+    console.log("[Cloud Backup] Backblaze has an up-to-date backup, but local copy is missing. Creating a local backup only.");
+    await createLocalBackupOnly(backupDir);
+    return;
+  }
+
+  if (localIsCurrent && !remoteIsCurrent) {
+    console.log("[Cloud Backup] Local copy is up to date, but Backblaze copy is missing or stale. Uploading to Backblaze only.");
+    await uploadLatestLocalBackupToCloud(backupDir);
+    return;
+  }
+
+  console.log("[Cloud Backup] Up-to-date local and cloud backups already exist.");
 };
 
 module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup };
