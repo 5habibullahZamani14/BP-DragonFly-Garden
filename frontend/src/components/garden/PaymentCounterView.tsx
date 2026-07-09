@@ -569,7 +569,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   // Render Login Screen if not logged in
   if (!loggedInEmployee) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col px-4 py-6 sm:p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
           <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
@@ -602,7 +602,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleLogin} className="w-full text-lg h-12">{t("payment.loginBtn")}</Button>
+            <Button onClick={handleLogin} size="xl" className="w-full text-lg sm:h-12">{t("payment.loginBtn")}</Button>
           </CardFooter>
         </Card>
         </div>
@@ -612,7 +612,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
   // Main UI when logged in
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 px-4 py-6 sm:p-6">
       {activeAssistanceRequest && (
         <div className="fixed right-5 top-5 z-50 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-green-200 bg-white p-4 shadow-2xl">
           <div className="flex items-start gap-3">
@@ -818,8 +818,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button
-                              className="flex-1 shadow-sm"
-                              size="lg"
+                              className="flex-1 h-14 sm:h-12 shadow-sm"
+                              size="xl"
                               onClick={() => {
                                 setSelectedOrder(order);
                                 setPaymentAmount(order.remaining.toFixed(2));
@@ -987,15 +987,15 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
                             <div className="flex flex-col sm:flex-row gap-3 pt-4">
                               {isSplitMode ? (
-                                <Button onClick={handleProcessSplitPayment} disabled={isProcessing || Object.keys(splitItemsQuantities).length === 0} className="flex-1" size="lg">
+                                <Button onClick={handleProcessSplitPayment} disabled={isProcessing || Object.keys(splitItemsQuantities).length === 0} className="flex-1 h-14" size="xl">
                                   {isProcessing ? t("payment.processing") : t("payment.processSplitPayment", "Process Split Payment")}
                                 </Button>
                               ) : (
-                                <Button onClick={handleProcessPayment} disabled={isProcessing} className="flex-1" size="lg">
+                                <Button onClick={handleProcessPayment} disabled={isProcessing} className="flex-1 h-14" size="xl">
                                   {isProcessing ? t("payment.processing") : t("payment.processPaymentBtn")}
                                 </Button>
                               )}
-                              <Button variant="outline" onClick={() => setAddingItem(true)} size="lg" className="sm:flex-none">
+                              <Button variant="outline" onClick={() => setAddingItem(true)} size="xl" className="sm:flex-none h-14">
                                 {t("payment.addItem")}
                               </Button>
                             </div>

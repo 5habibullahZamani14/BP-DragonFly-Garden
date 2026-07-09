@@ -13,6 +13,8 @@ const path = require("path");
  */
 
 const AWS = require("aws-sdk");
+const crypto = require("crypto");
+const { spawnSync } = require("child_process");
 
 const createS3Client = () => {
   if (!process.env.B2_KEY_ID || !process.env.B2_APPLICATION_KEY || !process.env.B2_ENDPOINT || !process.env.B2_BUCKET_NAME) {
@@ -47,6 +49,40 @@ const uploadToCloud = async (filePath) => {
     console.error("[Cloud Backup] Cloud upload failed:", error);
     throw error;
   }
+};
+
+// Encrypt a file using AES-256-GCM. The provided key must be a base64-encoded 32-byte key.
+const encryptFile = (inputPath, outputPath, base64Key) => {
+  if (!base64Key) throw new Error("BACKUP_ENC_KEY not configured; cannot encrypt backups");
+  const key = Buffer.from(base64Key, "base64");
+  if (key.length !== 32) throw new Error("BACKUP_ENC_KEY must be 32 bytes (base64-encoded)");
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+
+  const input = fs.readFileSync(inputPath);
+  const encrypted = Buffer.concat([cipher.update(input), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  // Output format: [iv (12)][authTag (16)][ciphertext]
+  const out = Buffer.concat([iv, authTag, encrypted]);
+  fs.writeFileSync(outputPath, out);
+};
+
+const decryptFile = (inputPath, outputPath, base64Key) => {
+  if (!base64Key) throw new Error("BACKUP_ENC_KEY not configured; cannot decrypt backups");
+  const key = Buffer.from(base64Key, "base64");
+  if (key.length !== 32) throw new Error("BACKUP_ENC_KEY must be 32 bytes (base64-encoded)");
+
+  const data = fs.readFileSync(inputPath);
+  const iv = data.slice(0, 12);
+  const authTag = data.slice(12, 28);
+  const ciphertext = data.slice(28);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  fs.writeFileSync(outputPath, decrypted);
 };
 
 const listCloudBackups = async () => {
@@ -90,14 +126,71 @@ const executeNightlyCloudBackup = async () => {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupFile = path.join(backupDir, `db_backup_${timestamp}.sqlite`);
+  const tarName = `full_backup_${timestamp}.tar.gz`;
+  const tarPath = path.join(backupDir, tarName);
+  const encPath = `${tarPath}.enc`;
+
+  // Directories and files to include in a full backup (data only, not source code)
+  const toInclude = [];
+  // SQLite DB
+  if (fs.existsSync(dbPath)) toInclude.push(dbPath);
+
+  // Uploaded images used by the app (frontend public directories)
+  const frontendMenuImages = path.resolve(__dirname, "../../../frontend/public/menu-images");
+  const frontendFeedbackImages = path.resolve(__dirname, "../../../frontend/public/feedback-images");
+  if (fs.existsSync(frontendMenuImages)) toInclude.push(frontendMenuImages);
+  if (fs.existsSync(frontendFeedbackImages)) toInclude.push(frontendFeedbackImages);
+
+  // Backend logs
+  const backendLogs = path.resolve(__dirname, "../../logs");
+  if (fs.existsSync(backendLogs)) toInclude.push(backendLogs);
+
+  // Env files (sensitive) - these will be included and encrypted
+  const envFile = path.resolve(process.cwd(), ".env");
+  const envLocal = path.resolve(process.cwd(), ".env.local");
+  if (fs.existsSync(envFile)) toInclude.push(envFile);
+  if (fs.existsSync(envLocal)) toInclude.push(envLocal);
+
+  // Any additional data directories that look relevant
+  const uploadsDir = path.resolve(__dirname, "../../uploads");
+  if (fs.existsSync(uploadsDir)) toInclude.push(uploadsDir);
 
   try {
-    console.log("[Cloud Backup] Creating snapshot for cloud upload...");
-    fs.copyFileSync(dbPath, backupFile);
-    await uploadToCloud(backupFile);
+    console.log("[Cloud Backup] Creating comprehensive tar.gz snapshot for cloud upload...");
 
-    // Clean up old local backups to enforce the 7-day rolling window
+    if (toInclude.length === 0) {
+      console.warn("[Cloud Backup] Nothing found to include in backup. Aborting.");
+      return;
+    }
+
+    // Use system tar command (available on Linux/Raspberry Pi)
+    const args = ["-czf", tarPath, ...toInclude];
+    const tar = spawnSync("tar", args, { stdio: "inherit" });
+    if (tar.error) {
+      throw tar.error;
+    }
+    if (tar.status !== 0) {
+      throw new Error(`tar exited with code ${tar.status}`);
+    }
+
+    // Encrypt archive using AES-256-GCM if BACKUP_ENC_KEY provided
+    const encKey = process.env.BACKUP_ENC_KEY || null;
+    if (!encKey) {
+      console.error("[Cloud Backup] BACKUP_ENC_KEY not configured; refusing to upload unencrypted backup.");
+      // Keep local tar but do not upload unencrypted
+      cleanupOldBackups(backupDir);
+      return;
+    }
+
+    encryptFile(tarPath, encPath, encKey);
+
+    // Upload encrypted archive
+    await uploadToCloud(encPath);
+
+    // Optionally remove plaintext tar
+    try { fs.unlinkSync(tarPath); } catch (e) {}
+
+    // Clean up old local backups (both .tar.gz.enc and older patterns)
     cleanupOldBackups(backupDir);
   } catch (error) {
     console.error("[Cloud Backup] Failed to execute nightly cloud backup:", error);
@@ -106,7 +199,7 @@ const executeNightlyCloudBackup = async () => {
 
 const cleanupOldBackups = (backupDir) => {
   try {
-    const files = fs.readdirSync(backupDir).filter((f) => f.startsWith("db_backup_"));
+    const files = fs.readdirSync(backupDir).filter((f) => f.startsWith("db_backup_") || f.startsWith("full_backup_") || f.endsWith(".tar.gz.enc"));
     const now = Date.now();
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -133,36 +226,63 @@ const cleanupOldBackups = (backupDir) => {
  * If not, it executes it immediately. This handles the scenario where 
  * the Raspberry Pi or server was turned off overnight.
  */
+const getLatestRemoteBackupTime = async () => {
+  try {
+    const s3 = createS3Client();
+    const res = await s3.listObjectsV2({ Bucket: process.env.B2_BUCKET_NAME, Prefix: "full_backup_" }).promise();
+    if (!res.Contents || res.Contents.length === 0) return 0;
+    const latest = res.Contents.reduce((acc, cur) => {
+      const t = cur.LastModified ? new Date(cur.LastModified).getTime() : 0;
+      return t > acc ? t : acc;
+    }, 0);
+    return latest;
+  } catch (err) {
+    console.warn('[Cloud Backup] Could not query remote backups:', err && err.message ? err.message : err);
+    return 0;
+  }
+};
+
+const getLatestLocalBackupTime = (backupDir) => {
+  if (!fs.existsSync(backupDir)) return 0;
+  const files = fs.readdirSync(backupDir).filter((f) => f.startsWith("full_backup_") || f.startsWith("db_backup_") || f.endsWith(".tar.gz.enc")).map((f) => ({
+    name: f,
+    time: fs.statSync(path.join(backupDir, f)).mtime.getTime(),
+  })).sort((a, b) => b.time - a.time);
+  return files.length > 0 ? files[0].time : 0;
+};
+
 const ensureCloudBackupUpToDate = async () => {
   const backupDir = path.join(__dirname, "../../../backups");
   if (!fs.existsSync(backupDir)) return executeNightlyCloudBackup();
 
-  const files = fs
-    .readdirSync(backupDir)
-    .filter((f) => f.startsWith("db_backup_"))
-    .map((f) => ({
-      name: f,
-      time: fs.statSync(path.join(backupDir, f)).mtime.getTime(),
-    }))
-    .sort((a, b) => b.time - a.time);
-
   const now = new Date();
-
   const threeAM = new Date(now);
   threeAM.setHours(3, 0, 0, 0);
-
   if (now < threeAM) {
     threeAM.setDate(threeAM.getDate() - 1);
   }
 
-  const latestBackupTime = files.length > 0 ? files[0].time : 0;
+  const localLatest = getLatestLocalBackupTime(backupDir);
+  const remoteLatest = await getLatestRemoteBackupTime();
 
-  if (latestBackupTime < threeAM.getTime()) {
-    console.log("[Cloud Backup] System missed the 3:00 AM backup. Running catch-up backup now...");
+  const latest = Math.max(localLatest, remoteLatest);
+
+  if (latest < threeAM.getTime()) {
+    console.log("[Cloud Backup] No backup found (local or remote) newer than 3:00 AM. Running catch-up backup now...");
     await executeNightlyCloudBackup();
   } else {
-    console.log("[Cloud Backup] Backup is up to date.");
+    console.log("[Cloud Backup] Backup is up to date (local or remote).");
   }
 };
 
 module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup };
+module.exports.downloadAndDecryptBackup = async (keyName, destinationPath) => {
+  const tmpDir = path.join(__dirname, "../../../backups");
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const encLocalPath = path.join(tmpDir, path.basename(keyName));
+  await downloadCloudBackup(keyName, encLocalPath);
+  const decTarPath = encLocalPath.replace(/\.enc$/, "");
+  decryptFile(encLocalPath, decTarPath, process.env.BACKUP_ENC_KEY);
+  // Caller may extract the returned tar.gz path
+  return decTarPath;
+};
