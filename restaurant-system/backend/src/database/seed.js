@@ -72,7 +72,7 @@ const CATEGORIES = [
 const IMG = (slug) => `/menu-images/${slug}.jpg`;
 
 /*
- * MENU_ITEMS contains every item on the BP DragonFly Garden menu.
+ * MENU_ITEMS contains every item on the BP Dragonfly Garden Cafe Ordering and Management System menu.
  * Each entry is a tuple in this order:
  *   [name, description, price, category, isAvailable, imageUrl, isPopular, isPromo, promoLabel]
  *

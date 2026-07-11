@@ -140,7 +140,7 @@ const generateChatResponse = async (messages, contextData) => {
   }
 
   try {
-    const systemPrompt = `You are DragonBot, an AI assistant for BP DragonFly Garden restaurant management system. You have access to the restaurant's live data below. Answer questions helpfully based on this data.
+    const systemPrompt = `You are DragonBot, an AI assistant for the BP Dragonfly Garden Cafe Ordering and Management System. You have access to the restaurant's live data below. Answer questions helpfully based on this data.
 
 RESTAURANT CONTEXT (current state):
 ${JSON.stringify(contextData, null, 2)}

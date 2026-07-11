@@ -1,8 +1,8 @@
-# Project Logbook - BP DragonFly Garden Ordering System
+# Project Logbook - BP Dragonfly Garden Cafe Ordering and Management System
 
 **Author:** HZ  
 **Internship period:** 9 March 2026 - 23 August 2026  
-**Host organisation:** BP DragonFly Garden  
+**Host organisation:** BP Dragonfly Garden Cafe Ordering and Management System
 **Degree programme:** Bachelor's in computer science / software engineering  
 **Project:** QR-code-based table ordering and restaurant management system  
 **Current progress (as of 29 June 2026):** ~90% complete - core ordering, payment, management, security, deployment, and UI enhancement features are now substantially implemented and documented

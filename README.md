@@ -1,6 +1,6 @@
-# BP DragonFly Garden — Cafe Ordering System
+# BP Dragonfly Garden Cafe Ordering and Management System
 
-This is the ordering and management system built for BP DragonFly Garden, a small farm-to-table
+This is the ordering and management system built for BP Dragonfly Garden Cafe Ordering and Management System, a small farm-to-table
 cafe. The system lets customers browse the menu and place orders from their table by scanning a
 QR code, gives the kitchen crew a live view of incoming orders, and provides a payment counter
 and a manager dashboard for day-to-day operations.
