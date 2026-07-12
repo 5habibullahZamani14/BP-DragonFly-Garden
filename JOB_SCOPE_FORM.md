@@ -512,7 +512,7 @@ Task 12.1: Implement backup and restore readiness
 
 - Establish local and cloud backup behavior.
   - ***{EXPLANATIONS}:*** The current system has been extended to create local backup archives and to synchronize the latest valid backup to a cloud storage provider. This is important because it protects the restaurant data and reduces the risk of complete loss if the local device or storage medium fails.
-- Ensure backup logic is based on freshness rather than assumptions.
+- Every backup must be verified by checking actual file timestamps and data integrity checksums, not by guessing whether data is current.
   - ***{EXPLANATIONS}:*** The backup service now checks whether a fresh local backup and a fresh cloud backup are present and creates or syncs the missing side when necessary. This is an important operational improvement because it prevents the system from relying on a weak or incomplete backup policy.
 - Prepare restore procedures for the deployment environment.
   - ***{EXPLANATIONS}:*** The backup system is designed to support recovery through the availability of recoverable archived data and associated environment information. This makes the project more practical because it can be restored and brought back online with greater confidence rather than being dependent on a fragile manual process.
