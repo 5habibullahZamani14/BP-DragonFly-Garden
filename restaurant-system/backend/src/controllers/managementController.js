@@ -1033,7 +1033,5 @@ module.exports = {
   restoreCloudBackup,
   restoreUploadedBackup,
   downloadBackup,
-  checkSystemVersion,
-  performSystemUpdate,
   setBroadcast,
 };
