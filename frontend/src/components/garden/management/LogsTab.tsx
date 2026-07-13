@@ -67,12 +67,15 @@ export const LogsTab = () => {
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(log => 
-        log.action.toLowerCase().includes(q) ||
-        (log.actor_name || "").toLowerCase().includes(q) ||
-        (log.target_name || log.target_id || "").toLowerCase().includes(q) ||
-        (log.details || "").toLowerCase().includes(q)
-      );
+      result = result.filter(log => {
+        const targetText = String(log.target_name || log.target_id || "");
+        return (
+          log.action.toLowerCase().includes(q) ||
+          (log.actor_name || "").toLowerCase().includes(q) ||
+          targetText.toLowerCase().includes(q) ||
+          (log.details || "").toLowerCase().includes(q)
+        );
+      });
     }
     
     if (timeFrame !== "all") {
@@ -97,7 +100,7 @@ export const LogsTab = () => {
     // Calculate dynamic column widths based on maximum content length
     let maxTs = 10, maxCat = 8, maxAct = 6, maxActor = 5, maxTarget = 6, maxDetails = 7;
     filteredLogs.forEach(log => {
-      const tsLen = new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }).length;
+      const tsLen = formatTimestamp(log.timestamp).length;
       if (tsLen > maxTs) maxTs = tsLen;
       if (log.category.length > maxCat) maxCat = log.category.length;
       if (log.action.length > maxAct) maxAct = log.action.length;
@@ -143,7 +146,7 @@ export const LogsTab = () => {
       } catch (e) { /* ignore */ }
 
       const row = worksheet.addRow({
-        timestamp: new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }),
+        timestamp: formatTimestamp(log.timestamp),
         category: log.category,
         action: formattedAction,
         actor: log.actor_name || "System",
@@ -213,6 +216,35 @@ export const LogsTab = () => {
       // ignore JSON parse errors and just return the string
     }
     return details;
+  };
+
+  const TIMESTAMP_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  };
+
+  const parseTimestamp = (raw?: string | null) => {
+    if (!raw) return null;
+    const value = String(raw).trim();
+    if (!value) return null;
+
+    const sqliteUtcPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+    const normalized = sqliteUtcPattern.test(value)
+      ? `${value.replace(' ', 'T')}Z`
+      : value.replace(' ', 'T');
+
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatTimestamp = (raw?: string | null) => {
+    const date = parseTimestamp(raw);
+    if (!date) return "—";
+    return date.toLocaleString('en-MY', TIMESTAMP_FORMAT_OPTIONS);
   };
 
   const getActionCounts = (logArray: LogEntry[]) => {
@@ -398,7 +430,7 @@ export const LogsTab = () => {
                     onClick={() => setSelectedLog(log)}
                   >
                     <td className="px-4 py-3 whitespace-nowrap text-foreground/50 font-medium">
-                      {new Date(log.timestamp).toLocaleString('en-MY', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      {formatTimestamp(log.timestamp)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-3 py-1 rounded-full text-[0.65rem] font-bold tracking-wider uppercase shadow-sm ${
@@ -425,19 +457,19 @@ export const LogsTab = () => {
       </div>
 
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <DialogContent className="max-w-[85vw] w-[85vw] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
+        <DialogContent className="!max-w-none !w-[85vw] h-[85vh] overflow-hidden border-0 shadow-2xl rounded-3xl bg-white/95 backdrop-blur-xl">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-foreground/5 bg-foreground/[0.02]">
             <DialogTitle className="flex items-center gap-3 text-2xl font-1" style={{ color: "hsl(140, 30%, 20%)" }}>
               <FileText className="h-6 w-6 text-primary" />
               {t("m.archiveRecord")}
             </DialogTitle>
             <DialogDescription className="font-medium text-foreground/50">
-              {selectedLog && new Date(selectedLog.timestamp).toLocaleString('en-MY', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {selectedLog && formatTimestamp(selectedLog.timestamp)}
             </DialogDescription>
           </DialogHeader>
           
           {selectedLog && (
-            <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div className="p-6 space-y-6 max-h-[calc(75vh-140px)] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-foreground/[0.02] p-4 rounded-2xl border border-foreground/5">
                   <p className="text-xs uppercase tracking-wider font-bold text-foreground/40 mb-1">{t("m.category")}</p>

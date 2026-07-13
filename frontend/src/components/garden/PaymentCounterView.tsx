@@ -40,7 +40,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Eye, EyeOff, LogOut, SplitSquareHorizontal, Bell, CheckCircle2, Plus } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, Bell, CheckCircle2, Plus, Trash2, AlertCircle } from "lucide-react";
 import {
   fetchUnpaidOrders,
   fetchPaidOrders,
@@ -54,6 +55,7 @@ import {
   printFinalBill,
   fetchStaffAssistanceRequests,
   acknowledgeStaffAssistanceRequest,
+  cancelOrder,
 } from "@/lib/api";
 import type { MenuItem, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -151,6 +153,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   
   const [splitItemsQuantities, setSplitItemsQuantities] = useState<Record<number, number>>({});
   const [isSplitMode, setIsSplitMode] = useState(false);
+  const [orderToCancelId, setOrderToCancelId] = useState<number | null>(null);
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
 
   useEffect(() => {
     if (isSplitMode && selectedOrder) {
@@ -563,6 +567,26 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         loadData(); // Refresh data to show the new item
     } catch (error) {
         notify("error", getErrorMessage(error, t("payment.failedAddItem")));
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!orderToCancelId || !loggedInEmployee) {
+      notify("error", t("payment.failedCancel"));
+      return;
+    }
+
+    try {
+      await cancelOrder(qrCode, orderToCancelId, {
+        employee_id: loggedInEmployee.id,
+        employee_name: loggedInEmployee.name,
+      });
+      notify("success", t("payment.orderCancelled"));
+      setOrderToCancelId(null);
+      setShowCancelConfirmation(false);
+      loadData();
+    } catch (error) {
+      notify("error", getErrorMessage(error, t("payment.failedCancel")));
     }
   };
 
@@ -1014,6 +1038,18 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       >
                         {t("payment.addOnBtn")}
                       </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="lg" 
+                        onClick={() => {
+                          setOrderToCancelId(order.id);
+                          setShowCancelConfirmation(true);
+                        }}
+                        className="flex-none font-medium"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        {t("payment.cancelBtn")}
+                      </Button>
                     </div>
                     </CardContent>
                   </Card>
@@ -1091,6 +1127,31 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               </div>
           </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showCancelConfirmation} onOpenChange={setShowCancelConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              {t("payment.cancelConfirmTitle")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("payment.cancelConfirmDesc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg bg-red-50 p-3 border border-red-200">
+            <p className="text-sm text-red-800 font-medium">
+              {t("payment.cancelWarning")}
+            </p>
+          </div>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelOrder} className="bg-red-600 hover:bg-red-700">
+              {t("payment.confirmCancel")}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PosOrderModal 
         isOpen={posModalOpen} 

@@ -1888,8 +1888,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
           <div className="absolute inset-0 bg-primary/40 backdrop-blur-sm animate-fade-up" onClick={() => setCartOpen(false)} />
-          <div className="relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-[32px] bg-background p-5 shadow-2xl animate-slide-down md:rounded-[32px] md:mb-4">
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
+          <div className="relative w-full max-w-2xl h-[88vh] rounded-t-[32px] bg-background shadow-2xl animate-slide-down md:rounded-[32px] md:mb-4 overflow-hidden">
+            <div className="relative flex h-full flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-5 pb-[calc(10rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <span className="eyebrow">{t("customer.checkout")}</span>
@@ -1983,14 +1985,18 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               </div>
             )}
 
-            <div className="sticky bottom-0 mt-5 -mx-5 -mb-5 rounded-b-[32px] bg-background/95 px-5 pb-6 pt-4 backdrop-blur">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-foreground/60">{t("customer.total")}</span>
-                <strong className="font-1 text-2xl font-semibold">{formatRM(total)}</strong>
               </div>
-              <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo || submitCooldown || !!pendingCart} onClick={startConfirmation} className="w-full">
-                {submitCooldown ? t("customer.orderSent") : submitting ? t("customer.sending") : t("customer.sendOrder")}
-              </PetalButton>
+              <div className="absolute inset-x-0 bottom-0 z-10 rounded-b-[32px] bg-background border-t border-border/60 shadow-[0_-10px_30px_rgba(15,23,42,0.12)]">
+                <div className="px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-foreground/60">{t("customer.total")}</span>
+                    <strong className="font-1 text-2xl font-semibold">{formatRM(total)}</strong>
+                  </div>
+                  <PetalButton variant="emerald" size="lg" disabled={submitting || cart.length === 0 || !tableInfo || submitCooldown || !!pendingCart} onClick={startConfirmation} className="w-full">
+                    {submitCooldown ? t("customer.orderSent") : submitting ? t("customer.sending") : t("customer.sendOrder")}
+                  </PetalButton>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -678,6 +678,14 @@ export const printFinalBill = async (qr: string, orderId: number, cashierName: s
   }, qr);
 };
 
+export const cancelOrder = async (qr: string, orderId: number, body: { employee_id?: string; employee_name?: string }): Promise<PaymentOrder | null> => {
+  return await safeFetch(`/orders/${orderId}/cancel`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }, qr);
+};
+
 export interface StaffAssistanceRequest {
   id: number;
   table_id: number;

@@ -27,6 +27,7 @@ const {
   customerArchiveOrder,
   getCustomerArchivedOrdersForTable,
 } = require("../controllers/orderController");
+const { fetchOrderWithPayments } = require("../controllers/paymentController");
 const {
   asyncHandler,
   validateOrderCreation,
@@ -289,6 +290,60 @@ const orderRoutes = (broadcast) => {
    */
   router.patch("/:id/customer-archive", asyncHandler(async (req, res) => {
     res.json(await customerArchiveOrder(req.params.id));
+  }));
+
+  /*
+   * PATCH /orders/:id/cancel
+   * Cancels an order from the payment counter. Only payment counter staff can
+   * cancel unpaid orders. Sets order status to 'cancelled' and broadcasts the event.
+   */
+  router.patch("/:id/cancel", requirePaymentToken, asyncHandler(async (req, res) => {
+    const orderId = req.params.id;
+    const { employee_id, employee_name } = req.body || {};
+
+    const order = await get("SELECT id, status, payment_status FROM orders WHERE id = ?", [orderId]);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    if (order.payment_status !== "unpaid") {
+      return res.status(400).json({ error: "Only unpaid orders can be cancelled" });
+    }
+
+    const cancelledOrder = await fetchOrderWithPayments(orderId);
+    if (!cancelledOrder) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    await run(`UPDATE orders SET status = 'cancelled', payment_status = 'cancelled' WHERE id = ?`, [orderId]);
+    await run(
+      `INSERT INTO archived_orders (original_order_id, table_id, status, total_price, vat_rate, service_charge_rate, payment_status, created_at, daily_ticket_number, order_data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        cancelledOrder.id,
+        cancelledOrder.table_id,
+        'cancelled',
+        cancelledOrder.total_price,
+        cancelledOrder.vat_rate,
+        cancelledOrder.service_charge_rate,
+        'cancelled',
+        cancelledOrder.created_at,
+        cancelledOrder.daily_ticket_number,
+        JSON.stringify(cancelledOrder),
+      ]
+    );
+
+    await logArchive("ORDER_CANCELLED", orderId, `Order #${orderId}`, {
+      order_id: orderId,
+      previous_status: order.status,
+      payment_status: order.payment_status,
+      cancelled_at: new Date().toISOString(),
+    }, { id: employee_id, name: employee_name });
+
+    const updatedOrder = await getOrder(orderId);
+    broadcast({ type: "ORDER_STATUS_UPDATE", payload: updatedOrder });
+    
+    res.json(updatedOrder);
   }));
 
   return router;
