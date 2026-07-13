@@ -883,7 +883,7 @@ const downloadBackup = async (req, res, next) => {
  * GET current and latest version from git commit hashes
  * Returns both current HEAD and latest from origin/main
  */
-exports.checkSystemVersion = async (req, res, next) => {
+const checkSystemVersion = async (req, res, next) => {
   try {
     // Fetch latest from remote
     try {
@@ -932,7 +932,7 @@ exports.checkSystemVersion = async (req, res, next) => {
  * 3. Build frontend
  * 4. Optionally restart services
  */
-exports.performSystemUpdate = async (req, res, next) => {
+const performSystemUpdate = async (req, res, next) => {
   try {
     const logs = [];
     const logFn = (msg) => {
@@ -1033,5 +1033,7 @@ module.exports = {
   restoreCloudBackup,
   restoreUploadedBackup,
   downloadBackup,
+  checkSystemVersion,
+  performSystemUpdate,
   setBroadcast,
 };
