@@ -31,9 +31,16 @@ const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { promisify } = require("util");
+const { exec: execCb } = require("child_process");
+const exec = promisify(execCb);
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 
 const backupsDir = path.join(__dirname, "../../backups");
+const backendRoot = path.resolve(__dirname, "../../..");
+const repoRoot = path.resolve(__dirname, "../../../..");
+const frontendDir = path.join(repoRoot, "frontend");
+const updateBranch = process.env.UPDATE_BRANCH || "main";
 const tmpDir = path.join(__dirname, "../../tmp");
 if (!fs.existsSync(backupsDir)) {
   fs.mkdirSync(backupsDir, { recursive: true });
@@ -870,6 +877,133 @@ const downloadBackup = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// ── System Updates ────────────────────────────────────────────────────────────
+
+/**
+ * GET current and latest version from git commit hashes
+ * Returns both current HEAD and latest from origin/main
+ */
+exports.checkSystemVersion = async (req, res, next) => {
+  try {
+    // Fetch latest from remote
+    try {
+      await exec("git fetch origin", { cwd: repoRoot });
+    } catch (e) {
+      // Fetch failed, but we can still check local HEAD
+    }
+
+    // Get current HEAD
+    const { stdout: currentOutput } = await exec("git rev-parse HEAD", { cwd: repoRoot });
+    const current_version = currentOutput.toString().trim().substring(0, 8);
+
+    // Get latest from origin/main
+    let latest_version = current_version; // fallback
+    try {
+      const { stdout: latestOutput } = await exec("git rev-parse origin/main", { cwd: repoRoot });
+      latest_version = latestOutput.toString().trim().substring(0, 8);
+    } catch (e) {
+      // If remote is not available, use current
+    }
+
+    const is_up_to_date = current_version === latest_version;
+
+    // Log the check
+    await createLog("SYSTEM", "VERSION_CHECK", "admin", "manager", null, null, {
+      current_version,
+      latest_version,
+      is_up_to_date,
+    });
+
+    res.json({
+      current_version,
+      latest_version,
+      is_up_to_date,
+      needs_update: !is_up_to_date,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Perform system update:
+ * 1. Pull latest from GitHub
+ * 2. Install/update backend dependencies
+ * 3. Build frontend
+ * 4. Optionally restart services
+ */
+exports.performSystemUpdate = async (req, res, next) => {
+  try {
+    const logs = [];
+    const logFn = (msg) => {
+      logs.push(msg);
+      console.log(`[UPDATE] ${msg}`);
+    };
+
+    try {
+      // Step 1: Fetch and pull
+      logFn("Fetching latest from GitHub...");
+      await exec("git fetch origin", { cwd: repoRoot });
+
+      logFn("Resetting to latest main...");
+      await exec("git reset --hard origin/main", { cwd: repoRoot });
+
+      // Step 2: Install backend deps
+      logFn("Installing backend dependencies...");
+      const backendPackageJson = path.join(repoRoot, "restaurant-system/backend/package.json");
+      if (fs.existsSync(backendPackageJson)) {
+        await exec("npm ci", { cwd: path.join(repoRoot, "restaurant-system/backend"), timeout: 300000 });
+      }
+
+      // Step 3: Build frontend
+      logFn("Installing frontend dependencies...");
+      const frontendPackageJson = path.join(repoRoot, "frontend/package.json");
+      if (fs.existsSync(frontendPackageJson)) {
+        await exec("npm ci", { cwd: frontendDir, timeout: 300000 });
+
+        logFn("Building frontend...");
+        const buildResult = await exec("npm run build", { cwd: frontendDir, timeout: 600000 });
+        
+        // Check if build succeeded
+        if (buildResult.stderr && buildResult.stderr.includes("error")) {
+          throw new Error(`Frontend build had errors: ${buildResult.stderr}`);
+        }
+      }
+
+      logFn("Update completed successfully!");
+
+      // Log the successful update
+      await createLog("SYSTEM", "UPDATE_SUCCESS", "admin", "manager", null, null, {
+        logs: logs.join("\n"),
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: "System updated successfully! Please reload the page.",
+        logs: logs.join("\n"),
+      });
+    } catch (error) {
+      logFn(`ERROR: ${error.message}`);
+
+      // Log the failed update
+      await createLog("SYSTEM", "UPDATE_FAILED", "admin", "manager", null, null, {
+        error: error.message,
+        logs: logs.join("\n"),
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(500).json({
+        success: false,
+        message: `Update failed: ${error.message}`,
+        logs: logs.join("\n"),
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createLog,
   getLogs,
@@ -899,5 +1033,7 @@ module.exports = {
   restoreCloudBackup,
   restoreUploadedBackup,
   downloadBackup,
+  checkSystemVersion,
+  performSystemUpdate,
   setBroadcast,
 };

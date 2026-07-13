@@ -1219,6 +1219,33 @@ export const downloadBackup = async (filename: string): Promise<void> => {
   URL.revokeObjectURL(url);
 };
 
+// ── System Updates ────────────────────────────────────────────────────────────
+
+export interface VersionCheckResult {
+  current_version: string;
+  latest_version: string;
+  is_up_to_date: boolean;
+  needs_update: boolean;
+}
+
+export interface UpdateResult {
+  success: boolean;
+  message: string;
+  logs?: string;
+}
+
+export const checkSystemVersion = async (): Promise<VersionCheckResult> =>
+  safeFetch<VersionCheckResult>("/management/system/check-version", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+export const performSystemUpdate = async (): Promise<UpdateResult> =>
+  safeFetch<UpdateResult>("/management/system/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
 // ── Global Modifier Library ───────────────────────────────────────────────────
 
 export interface GlobalModifierOption {

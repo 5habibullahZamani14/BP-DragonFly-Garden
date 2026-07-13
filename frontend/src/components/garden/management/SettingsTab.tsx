@@ -19,8 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle } from "lucide-react";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -87,7 +87,15 @@ export const SettingsTab = () => {
   const [hotspotSaved, setHotspotSaved] = useState(false);
   const [hotspotSaving, setHotspotSaving] = useState(false);
 
+  // System update state
+  const [updateCheckLoading, setUpdateCheckLoading] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [versionInfo, setVersionInfo] = useState<VersionCheckResult | null>(null);
+  const [updateInProgress, setUpdateInProgress] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
   // Confirmation dialog state
+
   const [confirmationDialog, setConfirmationDialog] = useState<{
     open: boolean;
     title: string;
@@ -182,6 +190,50 @@ export const SettingsTab = () => {
     } finally {
       setConfirmationDialog({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
     }
+  };
+
+  // System update functions
+  const handleCheckForUpdates = async () => {
+    setUpdateCheckLoading(true);
+    setUpdateMsg(null);
+    try {
+      const result = await checkSystemVersion();
+      setVersionInfo(result);
+      setUpdateAvailable(result.needs_update);
+      if (result.is_up_to_date) {
+        setUpdateMsg({ text: "✅ App is already up to date.", isError: false });
+      }
+    } catch (err: any) {
+      safeConsoleError("Version check failed", err);
+      setUpdateMsg({ text: `❌ Failed to check for updates: ${err.message || "Unknown error"}`, isError: true });
+    } finally {
+      setUpdateCheckLoading(false);
+    }
+  };
+
+  const handlePerformUpdate = async () => {
+    showConfirmation(
+      "Confirm System Update",
+      "This will update the application to the latest version from GitHub. Frontend and backend dependencies will be reinstalled and rebuilt. This may take a few minutes. Proceed?",
+      async () => {
+        setUpdateInProgress(true);
+        setUpdateMsg(null);
+        try {
+          const result = await performSystemUpdate();
+          if (result.success) {
+            setUpdateMsg({ text: "✅ System updated successfully! Reloading in 3 seconds...", isError: false });
+            setTimeout(() => window.location.reload(), 3000);
+          } else {
+            setUpdateMsg({ text: `⚠️ ${result.message}`, isError: true });
+          }
+        } catch (err: any) {
+          safeConsoleError("Update failed", err);
+          setUpdateMsg({ text: `❌ Update failed: ${err.message || "Unknown error"}`, isError: true });
+        } finally {
+          setUpdateInProgress(false);
+        }
+      }
+    );
   };
 
   const saveTaxSettings = async () => {
@@ -450,6 +502,70 @@ export const SettingsTab = () => {
 
   return (
     <>
+    <div className="space-y-6 pb-6">
+      {/* ── System Update Card ─────────────────────────── */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-transparent">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
+          </div>
+          <CardDescription>Check and apply the latest application updates from GitHub</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {updateMsg && (
+            <div className={`p-3 rounded-lg text-sm font-medium ${
+              updateMsg.isError 
+                ? 'bg-red-100 text-red-800 border border-red-300' 
+                : 'bg-green-100 text-green-800 border border-green-300'
+            }`}>
+              {updateMsg.text}
+            </div>
+          )}
+
+          {versionInfo && !updateInProgress && (
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
+              <div className="space-y-2">
+                <div><span className="font-semibold">Current Version:</span> {versionInfo.current_version}</div>
+                <div><span className="font-semibold">Latest Version:</span> {versionInfo.latest_version}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={handleCheckForUpdates}
+              disabled={updateCheckLoading || updateInProgress}
+              variant="outline"
+              className="gap-2"
+            >
+              {updateCheckLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Check for Updates
+            </Button>
+
+            {updateAvailable && !updateInProgress && (
+              <Button
+                onClick={handlePerformUpdate}
+                disabled={updateCheckLoading || updateInProgress}
+                className="gap-2 bg-blue-600 hover:bg-blue-700"
+              >
+                {updateInProgress ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {updateInProgress ? "Updating..." : "Update Now"}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
     <Accordion type="single" collapsible className="space-y-6">
 
       {/* ── Tax & Service Charge ─────────────────────────── */}

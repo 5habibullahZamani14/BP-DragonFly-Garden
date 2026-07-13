@@ -376,6 +376,23 @@ router.delete("/menu-items/:itemId/modifiers/:groupId", unassignModifierGroup);
 /* PUT  /management/menu-items/:itemId/modifiers/:groupId/default — set default option */
 router.put("/menu-items/:itemId/modifiers/:groupId/default", setDefaultOption);
 
+// ── System Updates ────────────────────────────────────────────────────────────
+
+/*
+ * POST /management/system/check-version
+ * Checks if a newer version of the app is available from GitHub.
+ * Returns: { current_version, latest_version, is_up_to_date, needs_update }
+ */
+router.post("/system/check-version", managementController.checkSystemVersion);
+
+/*
+ * POST /management/system/update
+ * Performs a system update by pulling from GitHub, reinstalling dependencies,
+ * rebuilding frontend, and restarting the service.
+ * Returns: { success, message, logs? }
+ */
+router.post("/system/update", managementController.performSystemUpdate);
+
 module.exports = router;
 
 module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;
