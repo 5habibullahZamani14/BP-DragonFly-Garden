@@ -161,7 +161,7 @@ const createOrder = async (orderData) => {
   const placeholders = uniqueMenuItemIds.map(() => "?").join(", ");
   const menuItems = await all(
     `
-      SELECT id, name, price, is_available
+      SELECT id, name, price, is_available, is_promo, promo_affects_price, promo_discount_percent
       FROM menu_items
       WHERE id IN (${placeholders})
     `,
@@ -191,7 +191,14 @@ const createOrder = async (orderData) => {
      * Each item's effective price = base price + sum of selected option price_deltas. */
     const additionalPriceCents = items.reduce((total, item) => {
       const menuItem = menuItemMap.get(item.menu_item_id);
-      const baseCents = Math.round(menuItem.price * 100);
+      
+      let basePrice = menuItem.price;
+      if (menuItem.is_promo && menuItem.promo_affects_price && menuItem.promo_discount_percent) {
+        const discountFactor = (100 - menuItem.promo_discount_percent) / 100;
+        basePrice = menuItem.price * discountFactor;
+      }
+
+      const baseCents = Math.round(basePrice * 100);
       const optionDeltaCents = (item.options || []).reduce(
         (sum, opt) => sum + Math.round((opt.priceDelta || 0) * 100), 0
       );
@@ -282,10 +289,16 @@ const createOrder = async (orderData) => {
       const menuItem = menuItemMap.get(item.menu_item_id);
 
       /* Compute effective price = base price + sum of selected option price_deltas */
+      let basePrice = menuItem.price;
+      if (menuItem.is_promo && menuItem.promo_affects_price && menuItem.promo_discount_percent) {
+        const discountFactor = (100 - menuItem.promo_discount_percent) / 100;
+        basePrice = menuItem.price * discountFactor;
+      }
+
       const optionDeltaCents = (item.options || []).reduce(
         (sum, opt) => sum + Math.round((opt.priceDelta || 0) * 100), 0
       );
-      const effectivePriceCents = Math.round(menuItem.price * 100) + optionDeltaCents;
+      const effectivePriceCents = Math.round(basePrice * 100) + optionDeltaCents;
       const effectivePrice = effectivePriceCents / 100;
 
       const optionsJson = item.options && item.options.length > 0

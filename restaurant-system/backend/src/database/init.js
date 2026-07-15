@@ -219,6 +219,17 @@ const initializeDatabase = async () => {
     )
   `);
 
+  /* Promotion templates are reusable promotion configurations (tags). */
+  await run(`
+    CREATE TABLE IF NOT EXISTS promotion_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      promo_label TEXT NOT NULL,
+      promo_affects_price INTEGER NOT NULL DEFAULT 0,
+      promo_discount_percent INTEGER DEFAULT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   /* Payments records each individual payment transaction. */
   await run(`
     CREATE TABLE IF NOT EXISTS payments (
@@ -480,6 +491,8 @@ const initializeDatabase = async () => {
   await ensureColumn("menu_items", "is_popular", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("menu_items", "is_promo", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("menu_items", "promo_label", "TEXT");
+  await ensureColumn("menu_items", "promo_affects_price", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn("menu_items", "promo_discount_percent", "INTEGER");
   await ensureColumn("menu_items", "card_size", "TEXT NOT NULL DEFAULT 'normal'");
 
   // Pattern editing properties
@@ -491,6 +504,7 @@ const initializeDatabase = async () => {
   await ensureColumn("patterns", "fade_direction", "TEXT NOT NULL DEFAULT 'none'");
   await ensureColumn("patterns", "fade_intensity", "REAL NOT NULL DEFAULT 0.5");
   await ensureColumn("menu_items", "repo_image_id", "INTEGER");
+  await ensureColumn("menu_items", "type", "TEXT NOT NULL DEFAULT 'food'");
   await run(`
     CREATE TABLE IF NOT EXISTS image_repository_sections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -690,6 +704,18 @@ const initializeDatabase = async () => {
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_enabled', 'true')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_rate', '0.10')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('captive_portal_target', 'http://10.42.0.1:5000/')`);
+
+  try {
+    const categories = await all("SELECT id, name FROM categories");
+    for (const cat of categories) {
+      const nameLower = cat.name.toLowerCase();
+      if (nameLower.includes("drink") || nameLower.includes("beverage") || nameLower.includes("tea") || nameLower.includes("juice") || nameLower.includes("coffee")) {
+        await run("UPDATE menu_items SET type = 'drink' WHERE category_id = ? AND type = 'food'", [cat.id]);
+      }
+    }
+  } catch (err) {
+    console.error("Error classifying seeded menu item types:", err);
+  }
 
   console.log("Database schema ready");
 };

@@ -502,7 +502,7 @@ const addOrderItem = async (req, res) => {
   }
 
   const menuItem = await get(
-    `SELECT id, name, price, is_available FROM menu_items WHERE id = ?`,
+    `SELECT id, name, price, is_available, is_promo, promo_affects_price, promo_discount_percent FROM menu_items WHERE id = ?`,
     [menu_item_id]
   );
 
@@ -514,8 +514,14 @@ const addOrderItem = async (req, res) => {
     throw createHttpError(400, `${menuItem.name} is currently unavailable`);
   }
 
+  let basePrice = menuItem.price;
+  if (menuItem.is_promo && menuItem.promo_affects_price && menuItem.promo_discount_percent) {
+    const discountFactor = (100 - menuItem.promo_discount_percent) / 100;
+    basePrice = menuItem.price * discountFactor;
+  }
+
   const toCents = (val) => Math.round(Number(val) * 100);
-  const lineTotalCents = toCents(menuItem.price) * quantity;
+  const lineTotalCents = toCents(basePrice) * quantity;
   const nextTotal = (toCents(order.total_price) + lineTotalCents) / 100;
 
   await run("BEGIN TRANSACTION");
@@ -526,7 +532,7 @@ const addOrderItem = async (req, res) => {
         INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time, notes)
         VALUES (?, ?, ?, ?, ?)
       `,
-      [orderId, menu_item_id, quantity, menuItem.price, notes]
+      [orderId, menu_item_id, quantity, basePrice, notes]
     );
     /*
      * Reset payment_status to "partially_paid" if it was already "paid",

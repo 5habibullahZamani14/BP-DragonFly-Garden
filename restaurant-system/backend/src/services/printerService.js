@@ -22,6 +22,18 @@ const formatDateTime = (date) => {
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 };
 
+const formatTableNumber = (tableNumber) => {
+  if (!tableNumber) return "";
+  const trimmed = tableNumber.trim();
+  if (/^table\b/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/(takeaway|delivery|pickup)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `Table: ${trimmed}`;
+};
+
 /* Strips GDI tags and applies alignment manually for non-Windows (Linux/Raspberry Pi) raw print fallback. */
 const stripGdiTags = (ticket) => {
   return ticket
@@ -66,7 +78,7 @@ const stripGdiTags = (ticket) => {
 };
 
 const printerService = {
-  formatChecklistTicket: (order, itemsToPrint, isAddOn) => {
+  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle) => {
     const timestamp = formatDateTime(new Date());
     let ticket = "\n";
     
@@ -74,8 +86,14 @@ const printerService = {
     if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON (PICKUP)" : "PICKUP";
     else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON (DELIVERY)" : "DELIVERY";
     else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON (TAKEAWAY)" : "TAKEAWAY";
+    else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON (COUNTER)" : "COUNTER ORDER";
 
-    ticket += `[CENTER][H1] ${orderTypeStr}\n`;
+    if (copyTitle) {
+      ticket += `[CENTER][H1] ${copyTitle}\n`;
+      ticket += `[CENTER][BOLD](${orderTypeStr})\n`;
+    } else {
+      ticket += `[CENTER][H1] ${orderTypeStr}\n`;
+    }
     
     const leftHeader = `${timestamp}`;
     const rightHeader = `#${order.daily_ticket_number || order.id}`;
@@ -83,8 +101,11 @@ const printerService = {
     ticket += `Send by: Cashier\n`;
     
     if (!order.order_type || order.order_type === 'DINE_IN') {
-      ticket += `Table: ${order.table_number}\n`;
+      ticket += `${formatTableNumber(order.table_number)}\n`;
     } else {
+      if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
+        ticket += `${formatTableNumber(order.table_number)}\n`;
+      }
       if (order.customer_name) ticket += `Name: ${order.customer_name}\n`;
       if (order.customer_phone) ticket += `Phone: ${order.customer_phone}\n`;
       if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup At: ${order.collection_time}\n`;
@@ -171,9 +192,12 @@ const printerService = {
     ticket += `Date & Time: ${timestamp}\n`;
     ticket += `Cashier: ${cashierName}\n`;
     if (!order.order_type || order.order_type === 'DINE_IN') {
-      ticket += `Table: ${order.table_number}\n`;
+      ticket += `${formatTableNumber(order.table_number)}\n`;
     } else {
       ticket += `Order Type: ${order.order_type}\n`;
+      if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
+        ticket += `${formatTableNumber(order.table_number)}\n`;
+      }
       if (order.customer_name) ticket += `Customer: ${order.customer_name}\n`;
       if (order.order_type === 'DELIVERY' && order.delivery_address) {
         ticket += `Address: ${order.delivery_address}\n`;
@@ -288,18 +312,47 @@ const printerService = {
   },
 
   printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {
-    let ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn);
-    if (copyNum === 1) {
-      ticket = `[CENTER][BOLD]*** CUSTOMER COPY ***\n` + ticket;
-    } else if (copyNum === 2) {
-      ticket = `[CENTER][BOLD]*** KITCHEN COPY ***\n` + ticket;
-    }
+    const copyTitle = copyNum === 1 ? "CUSTOMER COPY" : "KITCHEN COPY";
+    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle);
     return await printerService.executePrint(ticket, `order_${order.id}_checklist`);
   },
 
   printFinalReceipt: async (order, cashierName) => {
     const ticket = printerService.formatFinalReceipt(order, cashierName);
     return await printerService.executePrint(ticket, `order_${order.id}_final`);
+  },
+
+  printDailySalesReport: async (todayOrders) => {
+    const timestamp = formatDateTime(new Date());
+    const todayDateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    
+    let ticket = "\n";
+    ticket += "[CENTER][H1] DAILY SALES REPORT\n";
+    ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
+    ticket += "----------------------------\n";
+    ticket += `Date: ${todayDateStr}\n`;
+    ticket += `Printed At: ${timestamp}\n`;
+    ticket += "----------------------------\n";
+    
+    let totalSales = 0;
+    todayOrders.forEach((order, index) => {
+      const orderNum = order.daily_ticket_number || order.id;
+      const price = Number(order.total_price || 0);
+      totalSales += price;
+      
+      const label = `${index + 1}. Order #${orderNum}`;
+      const priceStr = `RM ${price.toFixed(2)}`;
+      ticket += `${label.padEnd(16, ' ')}${priceStr.padStart(12, ' ')}\n`;
+    });
+    
+    ticket += "----------------------------\n";
+    const totalLabel = "Total Sales:";
+    const totalValStr = `RM ${totalSales.toFixed(2)}`;
+    ticket += `[BOLD]${totalLabel.padEnd(16, ' ')}${totalValStr.padStart(12, ' ')}\n`;
+    ticket += "----------------------------\n";
+    ticket += "\n\n";
+    
+    return await printerService.executePrint(ticket, `daily_sales_report`);
   },
 
   executePrint: (ticket, filenamePrefix) =>

@@ -73,6 +73,15 @@ import { SettingsModal } from "./SettingsModal";
 import { useTranslation } from "react-i18next";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
+
+const getMenuItemPrice = (item: MenuItem) => {
+  if (item && item.is_promo && item.promo_affects_price && item.promo_discount_percent) {
+    const factor = (100 - item.promo_discount_percent) / 100;
+    return item.price * factor;
+  }
+  return item.price;
+};
+
 const ORDER_STAGES = ["queue", "preparing", "ready"] as const;
 const STAGE_LABEL: Record<string, string> = { queue: "customer.received", preparing: "customer.cooking", ready: "customer.ready" };
 const orderStageIndex = (status: string) => ORDER_STAGES.findIndex((stage) => stage === status);
@@ -93,7 +102,7 @@ type CartLine = {
   notes: string;
   selectedOptions: SelectedOption[];
 };
-type CartSource = Pick<MenuItem, "id" | "name" | "price"> & { option_groups?: MenuItem["option_groups"] };
+type CartSource = MenuItem;
 type OrderWithVat = Order & { total_with_vat?: number | string | null };
 
 
@@ -491,7 +500,8 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     [itemId, ...opts.map(o => o.optionId).sort()].join("-");
 
   const addToCart = (item: CartSource, selectedOptions: SelectedOption[] = []) => {
-    const effectivePrice = item.price + selectedOptions.reduce((s, o) => s + o.priceDelta, 0);
+    const basePrice = getMenuItemPrice(item);
+    const effectivePrice = basePrice + selectedOptions.reduce((s, o) => s + o.priceDelta, 0);
     const cartKey = buildCartKey(item.id, selectedOptions);
     setCart((c) => {
       const ex = c.find((x) => x.cartKey === cartKey);
@@ -1138,8 +1148,17 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 </p>
                 <div className="mt-3 flex items-end justify-between">
                   <div>
-                    <span className="font-1 text-xl sm:text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
-                    <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
+                    {spotlight.is_promo && spotlight.promo_affects_price && spotlight.promo_discount_percent ? (
+                      <>
+                        <span className="font-1 text-xl sm:text-2xl font-bold text-accent">{formatRM(getMenuItemPrice(spotlight))}</span>
+                        <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">{formatRM(spotlight.price)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-1 text-xl sm:text-2xl font-bold text-accent">{formatRM(spotlight.price)}</span>
+                        <span className="text-[0.65rem] text-primary-foreground/50 line-through ml-2">RM {(spotlight.price * 1.2).toFixed(2)}</span>
+                      </>
+                    )}
                   </div>
                   <button
                     onClick={() => handleAddPress(spotlight)}
@@ -1186,7 +1205,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                   <div className="mt-3 flex items-end justify-between">
                     <div>
                       <p className="text-[0.6rem] uppercase tracking-widest opacity-70">{t("customer.from")}</p>
-                      <p className="font-1 text-xl font-bold">{formatRM(p.price)}</p>
+                      {p.is_promo && p.promo_affects_price && p.promo_discount_percent ? (
+                        <div className="flex flex-col text-start">
+                          <span className="text-[0.7rem] opacity-75 line-through leading-none">{formatRM(p.price)}</span>
+                          <span className="font-1 text-xl font-bold leading-tight">{formatRM(getMenuItemPrice(p))}</span>
+                        </div>
+                      ) : (
+                        <p className="font-1 text-xl font-bold">{formatRM(p.price)}</p>
+                      )}
                     </div>
                     <button
                       onClick={() => handleAddPress(p)}
@@ -1239,7 +1265,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <div className="p-2.5">
                   <h3 className="font-1 text-sm font-semibold leading-tight line-clamp-1">{item.name}</h3>
                   <p className="mt-0.5 text-[0.65rem] text-foreground/50 line-clamp-1">{categoryLabel(item.category_name)}</p>
-                  <p className="mt-1 font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                  {item.is_promo && item.promo_affects_price && item.promo_discount_percent ? (
+                    <div className="flex flex-col text-start mt-1">
+                      <span className="text-[0.7rem] text-foreground/45 line-through leading-none">{formatRM(item.price)}</span>
+                      <span className="font-1 text-base font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(item))}</span>
+                    </div>
+                  ) : (
+                    <p className="mt-1 font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                  )}
                 </div>
               </article>
             ))}
@@ -1351,15 +1384,18 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 )}
                                 {(item.is_popular || item.is_promo) && (
                                   <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
-                                    {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
+                                    {item.is_popular ? (
+                                      <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</>
+                                    ) : (
+                                      item.promo_label || t("customer.promoFallback")
+                                    )}
                                   </span>
                                 )}
                               </div>
-                              <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2">
+                              <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2 text-start">
                                 <div className="flex items-start justify-between gap-2">
                                   <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                                     {item.name}
-                                    {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                                   </h3>
                                 </div>
                                 <p className="mt-0.5 line-clamp-3 text-[0.75rem] leading-snug text-foreground/55">
@@ -1367,8 +1403,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 </p>
                                 <div className="mt-auto flex items-end justify-between pt-3">
                                   <div>
-                                    <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
-                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                                    {item.is_promo && item.promo_affects_price && item.promo_discount_percent ? (
+                                      <div className="flex flex-col text-start">
+                                        <span className="text-[0.7rem] text-foreground/45 line-through leading-none">{formatRM(item.price)}</span>
+                                        <span className="font-1 text-base font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(item))}</span>
+                                      </div>
+                                    ) : (
+                                      <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                                    )}
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">Special</p>}
                                   </div>
                                   <button
                                     disabled={item.is_sold_out}
@@ -1394,15 +1437,18 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 )}
                                 {(item.is_popular || item.is_promo) && (
                                   <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
-                                    {item.is_popular ? <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</> : t("customer.new")}
+                                    {item.is_popular ? (
+                                      <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</>
+                                    ) : (
+                                      item.promo_label || t("customer.promoFallback")
+                                    )}
                                   </span>
                                 )}
                               </div>
-                              <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2' : ''}`}>
+                              <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2 text-start' : 'text-start'}`}>
                                 <div className="flex items-start justify-between gap-2">
                                   <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                                     {item.name}
-                                    {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                                   </h3>
                                 </div>
                                 <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
@@ -1410,8 +1456,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                 </p>
                                 <div className="mt-auto flex items-end justify-between pt-2">
                                   <div>
-                                    <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
-                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600">Special</p>}
+                                    {item.is_promo && item.promo_affects_price && item.promo_discount_percent ? (
+                                      <div className="flex flex-col text-start">
+                                        <span className="text-[0.7rem] text-foreground/45 line-through leading-none">{formatRM(item.price)}</span>
+                                        <span className="font-1 text-base font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(item))}</span>
+                                      </div>
+                                    ) : (
+                                      <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                                    )}
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">Special</p>}
                                   </div>
                                   <button
                                     disabled={item.is_sold_out}
@@ -1488,17 +1541,20 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           <Leaf className="h-7 w-7 text-leaf/60" />
                         </div>
                       )}
-                      {item.is_popular && (
-                        <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
-                          <Star className="h-2.5 w-2.5 fill-current" />
+                      {(item.is_popular || item.is_promo) && (
+                        <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
+                          {item.is_popular ? (
+                            <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</>
+                          ) : (
+                            item.promo_label || t("customer.promoFallback")
+                          )}
                         </span>
                       )}
                     </div>
-                    <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2">
+                    <div className="flex min-w-0 flex-1 flex-col relative z-10 pt-2 sm:pt-0 sm:pl-3 w-1/2 text-start">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                           {item.name}
-                          {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                         </h3>
                       </div>
                       <p className="mt-0.5 line-clamp-3 text-[0.75rem] leading-snug text-foreground/55">
@@ -1507,7 +1563,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <div className="mt-auto flex items-end justify-between pt-3">
                         <div>
                           <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
-                          <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                          {item.is_promo && item.promo_affects_price && item.promo_discount_percent ? (
+                            <div className="flex flex-col text-start mt-1">
+                              <span className="text-[0.7rem] text-foreground/45 line-through leading-none">{formatRM(item.price)}</span>
+                              <span className="font-1 text-base font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(item))}</span>
+                            </div>
+                          ) : (
+                            <p className="font-1 text-base font-bold text-primary mt-1">{formatRM(item.price)}</p>
+                          )}
                         </div>
                         <button
                           disabled={item.is_sold_out}
@@ -1531,17 +1594,20 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                           <Leaf className="h-7 w-7 text-leaf/60" />
                         </div>
                       )}
-                      {item.is_popular && (
-                        <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-accent-foreground shadow">
-                          <Star className="h-2.5 w-2.5 fill-current" />
+                      {(item.is_popular || item.is_promo) && (
+                        <span className={`absolute left-1 top-1 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6rem] font-black uppercase shadow ${item.is_popular ? 'bg-accent text-accent-foreground' : 'bg-amber-500 text-white'}`}>
+                          {item.is_popular ? (
+                            <><Star className="h-2.5 w-2.5 fill-current" /> {t("customer.popular")}</>
+                          ) : (
+                            item.promo_label || t("customer.promoFallback")
+                          )}
                         </span>
                       )}
                     </div>
-                    <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2' : ''}`}>
+                    <div className={`flex min-w-0 flex-1 flex-col relative z-10 ${item.card_size === 'large' ? 'w-1/2 text-start' : 'text-start'}`}>
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="font-1 text-[1rem] font-semibold leading-tight">
                           {item.name}
-                          {item.is_promo && <span className="ml-1.5 align-middle tag-new">{t("customer.new")}</span>}
                         </h3>
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-[0.75rem] leading-snug text-foreground/55">
@@ -1550,7 +1616,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <div className="mt-auto flex items-end justify-between pt-2">
                         <div>
                           <p className="text-[0.58rem] font-medium uppercase tracking-widest text-foreground/40">{categoryLabel(item.category_name)}</p>
-                          <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
+                          {item.is_promo && item.promo_affects_price && item.promo_discount_percent ? (
+                            <div className="flex flex-col text-start mt-1">
+                              <span className="text-[0.7rem] text-foreground/45 line-through leading-none">{formatRM(item.price)}</span>
+                              <span className="font-1 text-base font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(item))}</span>
+                            </div>
+                          ) : (
+                            <p className="font-1 text-base font-bold text-primary mt-1">{formatRM(item.price)}</p>
+                          )}
                         </div>
                         <button
                           disabled={item.is_sold_out}
@@ -1598,7 +1671,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
                     <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Price</p>
-                    <p className="mt-2 text-lg font-semibold text-primary">{formatRM(selectedMenuItem?.price ?? 0)}</p>
+                    {selectedMenuItem && selectedMenuItem.is_promo && selectedMenuItem.promo_affects_price && selectedMenuItem.promo_discount_percent ? (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-sm text-foreground/45 line-through leading-none">{formatRM(selectedMenuItem.price)}</span>
+                        <span className="text-lg font-bold text-rose-600 dark:text-rose-400 leading-tight">{formatRM(getMenuItemPrice(selectedMenuItem))}</span>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-lg font-semibold text-primary">{formatRM(selectedMenuItem?.price ?? 0)}</p>
+                    )}
                   </div>
                   <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
                     <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Status</p>
@@ -2062,7 +2142,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 <div className="min-w-0">
                   <h2 className="font-1 text-xl font-bold leading-tight truncate">{optionSheetItem.name}</h2>
                   <p className="text-sm text-foreground/55 mt-0.5">
-                    {t("customer.from")} <span className="font-semibold text-primary">{formatRM(optionSheetItem.price)}</span>
+                    {t("customer.from")} <span className="font-semibold text-primary">{formatRM(getMenuItemPrice(optionSheetItem))}</span>
                     {Object.values(pendingSelections).some(s => s.size > 0) && (
                       <span className="text-foreground/40 ml-1">
                         + {formatRM(Object.entries(pendingSelections).reduce((sum, [gidStr, sel]) => {
@@ -2131,7 +2211,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 style={{ background: "var(--gradient-hero)" }}
               >
                 {t("customer.addToOrder")} · {formatRM(
-                  optionSheetItem.price + Object.entries(pendingSelections).reduce((sum, [gidStr, sel]) => {
+                  getMenuItemPrice(optionSheetItem) + Object.entries(pendingSelections).reduce((sum, [gidStr, sel]) => {
                     const g = (optionSheetItem.option_groups ?? []).find(g => g.id === parseInt(gidStr));
                     if (!g) return sum;
                     return sum + [...sel].reduce((s, oid) => s + (g.options.find(o => o.id === oid)?.price_delta ?? 0), 0);

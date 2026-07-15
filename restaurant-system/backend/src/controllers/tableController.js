@@ -61,25 +61,42 @@ const getRestaurantSetting = (key) =>
  * is configured.
  */
 const resolveOrderingBaseUrl = async (req) => {
+  const localIp = getLocalNetworkAddress();
+  const port = Number(process.env.PORT) || 5000;
+
+  if (localIp) {
+    if (localIp === "10.42.0.1") {
+      // Running on the Pi
+      if (process.env.CAPTIVE_PORTAL_TARGET) {
+        return normalizeBaseUrl(process.env.CAPTIVE_PORTAL_TARGET);
+      }
+      try {
+        const rawValue = await getRestaurantSetting("captive_portal_target");
+        if (rawValue) {
+          return normalizeBaseUrl(rawValue);
+        }
+      } catch (err) {
+        console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
+      }
+      return `http://10.42.0.1:${port}`;
+    } else {
+      // Running on PC/laptop or other local networks
+      return `http://${localIp}:${port}`;
+    }
+  }
+
+  // Fallback if no network IP is detected
   if (process.env.CAPTIVE_PORTAL_TARGET) {
     return normalizeBaseUrl(process.env.CAPTIVE_PORTAL_TARGET);
   }
-
   try {
     const rawValue = await getRestaurantSetting("captive_portal_target");
     if (rawValue) {
       return normalizeBaseUrl(rawValue);
     }
-  } catch (err) {
-    console.warn("Could not load captive portal target from settings:", err && err.message ? err.message : err);
-  }
+  } catch (err) {}
 
-  const requestHostUrl = getServerBaseUrlFromRequest(req);
-  if (requestHostUrl) {
-    return requestHostUrl;
-  }
-
-  return DEFAULT_CAPTIVE_PORTAL_TARGET.replace(/\/$/, "");
+  return `http://127.0.0.1:${port}`;
 };
 
 /*

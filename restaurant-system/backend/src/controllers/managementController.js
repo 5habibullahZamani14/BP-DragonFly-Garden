@@ -156,13 +156,14 @@ const deriveEmployeeJwtRole = (department) => {
 /* getFinanceData returns comprehensive financial data for the dashboard (P&L, Revenue, Cost of Goods Sold) */
 const getFinanceData = async (req, res, next) => {
   try {
-    const orders = await all("SELECT id, total_price, created_at FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
+    const orders = await all("SELECT id, total_price, order_type, created_at FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
     
     const items = await all(`
       SELECT 
         mi.id,
         mi.name,
         mi.price,
+        mi.type,
         IFNULL(SUM(oi.quantity), 0) as total_sold
       FROM menu_items mi
       LEFT JOIN order_items oi ON mi.id = oi.menu_item_id
@@ -189,9 +190,84 @@ const getFinanceData = async (req, res, next) => {
       };
     });
 
+    const orderItems = await all(`
+      SELECT 
+        oi.order_id, 
+        oi.menu_item_id, 
+        oi.quantity, 
+        oi.price_at_order_time, 
+        mi.type, 
+        o.created_at
+      FROM order_items oi
+      JOIN menu_items mi ON oi.menu_item_id = mi.id
+      JOIN orders o ON oi.order_id = o.id
+      WHERE o.payment_status = 'paid' OR o.status = 'archived'
+    `);
+
+    const feedbackRatings = await all(`
+      SELECT 
+        AVG(rating_staff) as avg_staff,
+        AVG(rating_app) as avg_app,
+        AVG(rating_cleanliness) as avg_cleanliness,
+        AVG(rating_food) as avg_food,
+        AVG(rating_atmosphere) as avg_atmosphere,
+        AVG(rating_value) as avg_value,
+        COUNT(*) as total_feedbacks
+      FROM customer_feedback
+    `);
+
+    const helpStats = await all(`
+      SELECT 
+        strftime('%w', requested_at) as day_of_week,
+        COUNT(*) as count
+      FROM staff_assistance_requests
+      GROUP BY day_of_week
+    `);
+
+    const inventoryForecast = await all(`
+      SELECT 
+        ii.id,
+        ii.name,
+        ii.current_stock,
+        ii.max_stock,
+        ii.unit,
+        ii.low_stock_threshold_percent,
+        IFNULL(
+          (
+            SELECT SUM(oi.quantity * mii.quantity_required)
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN menu_item_ingredients mii ON oi.menu_item_id = mii.menu_item_id
+            WHERE mii.inventory_item_id = ii.id
+              AND (o.payment_status = 'paid' OR o.status = 'archived')
+              AND o.created_at >= datetime('now', '-30 days')
+          ),
+          0
+        ) as usage_30_days
+      FROM inventory_items ii
+    `);
+
+    const inventoryForecastNormalized = inventoryForecast.map(ii => {
+      const burnRatePerDay = ii.usage_30_days / 30;
+      const daysRemaining = burnRatePerDay > 0 ? (ii.current_stock / burnRatePerDay) : null;
+      return {
+        id: ii.id,
+        name: ii.name,
+        current_stock: ii.current_stock,
+        max_stock: ii.max_stock,
+        unit: ii.unit,
+        burn_rate_day: burnRatePerDay,
+        days_remaining: daysRemaining !== null ? parseFloat(daysRemaining.toFixed(1)) : null
+      };
+    });
+
     res.json({
       orders,
-      items: itemsWithCosts
+      items: itemsWithCosts,
+      order_items: orderItems,
+      feedback_ratings: feedbackRatings[0] || null,
+      help_stats: helpStats,
+      inventory_forecast: inventoryForecastNormalized
     });
   } catch (error) { next(error); }
 };
@@ -781,12 +857,134 @@ const createBackup = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const extractAndRestoreTar = async (tarPath) => {
+  const { spawnSync } = require("child_process");
+  const targetExtractDir = path.join(tmpDir, `restore-extract-${Date.now()}`);
+  if (!fs.existsSync(targetExtractDir)) {
+    fs.mkdirSync(targetExtractDir, { recursive: true });
+  }
+
+  const tarArgs = ["-xzf", tarPath, "-C", targetExtractDir];
+  const tarResult = spawnSync("tar", tarArgs);
+  if (tarResult.error) {
+    throw tarResult.error;
+  }
+  if (tarResult.status !== 0) {
+    throw new Error(`tar extraction failed with code ${tarResult.status}`);
+  }
+
+  const findInDir = (dir, nameToFind, isDirGoal = false) => {
+    if (!fs.existsSync(dir)) return null;
+    const queue = [dir];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const entries = fs.readdirSync(current, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(current, entry.name);
+        if (entry.name === nameToFind) {
+          if (isDirGoal && entry.isDirectory()) return fullPath;
+          if (!isDirGoal && entry.isFile()) return fullPath;
+        }
+        if (entry.isDirectory()) {
+          queue.push(fullPath);
+        }
+      }
+    }
+    return null;
+  };
+
+  const globCopy = (srcDir, destDir) => {
+    if (!fs.existsSync(srcDir)) return;
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        globCopy(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  };
+
+  const extDbPath = findInDir(targetExtractDir, "database.sqlite", false);
+  if (extDbPath) {
+    fs.copyFileSync(extDbPath, dbPath);
+    console.log(`[Restore] Successfully restored database.sqlite`);
+  }
+
+  const extEnv = findInDir(targetExtractDir, ".env", false);
+  if (extEnv) {
+    const destEnv = path.join(__dirname, "../../.env");
+    fs.copyFileSync(extEnv, destEnv);
+    console.log(`[Restore] Successfully restored .env`);
+  }
+  const extEnvLocal = findInDir(targetExtractDir, ".env.local", false);
+  if (extEnvLocal) {
+    const destEnvLocal = path.join(__dirname, "../../.env.local");
+    fs.copyFileSync(extEnvLocal, destEnvLocal);
+    console.log(`[Restore] Successfully restored .env.local`);
+  }
+
+  const extMenuImages = findInDir(targetExtractDir, "menu-images", true);
+  if (extMenuImages) {
+    const destMenuImages = path.resolve(__dirname, "../../../frontend/public/menu-images");
+    globCopy(extMenuImages, destMenuImages);
+    console.log(`[Restore] Successfully restored menu-images`);
+  }
+
+  const extFeedbackImages = findInDir(targetExtractDir, "feedback-images", true);
+  if (extFeedbackImages) {
+    const destFeedbackImages = path.resolve(__dirname, "../../../frontend/public/feedback-images");
+    globCopy(extFeedbackImages, destFeedbackImages);
+    console.log(`[Restore] Successfully restored feedback-images`);
+  }
+
+  const extUploads = findInDir(targetExtractDir, "uploads", true);
+  if (extUploads) {
+    const destUploads = path.resolve(__dirname, "../../uploads");
+    globCopy(extUploads, destUploads);
+    console.log(`[Restore] Successfully restored uploads`);
+  }
+
+  try {
+    fs.rmSync(targetExtractDir, { recursive: true, force: true });
+  } catch (e) {}
+};
+
+const performRestore = async (filePath, originalFilename) => {
+  await run("PRAGMA wal_checkpoint(TRUNCATE)");
+
+  if (originalFilename.endsWith(".tar.gz.enc") || originalFilename.endsWith(".enc")) {
+    const encKey = process.env.BACKUP_ENC_KEY || null;
+    if (!encKey) {
+      throw new Error("BACKUP_ENC_KEY not configured; cannot decrypt backup.");
+    }
+    const decTarPath = path.join(tmpDir, `decrypted-tar-${Date.now()}.tar.gz`);
+    const { decryptFile } = require("../services/cloudBackupService");
+    decryptFile(filePath, decTarPath, encKey);
+    await extractAndRestoreTar(decTarPath);
+    try { fs.unlinkSync(decTarPath); } catch (e) {}
+  } else if (originalFilename.endsWith(".tar.gz")) {
+    await extractAndRestoreTar(filePath);
+  } else {
+    fs.copyFileSync(filePath, dbPath);
+  }
+
+  if (fs.existsSync(dbWalPath)) {
+    try { fs.unlinkSync(dbWalPath); } catch (e) {}
+  }
+  if (fs.existsSync(dbShmPath)) {
+    try { fs.unlinkSync(dbShmPath); } catch (e) {}
+  }
+};
+
 const restoreBackup = async (req, res, next) => {
   try {
     const { filename } = req.body;
     if (!filename) return next(createHttpError(400, "Filename is required"));
     
-    // Sanitize filename
     const finalName = sanitizeFilename(filename);
     const sourcePath = path.join(backupsDir, finalName);
     
@@ -794,15 +992,7 @@ const restoreBackup = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Backup file not found" });
     }
     
-    // Force a WAL checkpoint to flush current state before overwriting
-    await run("PRAGMA wal_checkpoint(TRUNCATE)");
-    
-    // Overwrite the main DB file
-    fs.copyFileSync(sourcePath, dbPath);
-    
-    // Wipe out WAL and SHM files to prevent the SQLite engine from recovering old temporary data
-    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
-    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
+    await performRestore(sourcePath, finalName);
     
     await createLog("SYSTEM", "RESTORE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
     res.json({ success: true, message: "System restored successfully from backup" });
@@ -829,11 +1019,7 @@ const restoreCloudBackup = async (req, res, next) => {
     const tempPath = path.join(tmpDir, `cloud-restore-${Date.now()}-${finalName}`);
     await downloadCloudBackup(finalName, tempPath);
 
-    await run("PRAGMA wal_checkpoint(TRUNCATE)");
-    fs.copyFileSync(tempPath, dbPath);
-
-    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
-    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
+    await performRestore(tempPath, finalName);
     
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
@@ -846,18 +1032,16 @@ const restoreUploadedBackup = async (req, res, next) => {
   try {
     const file = req.file;
     if (!file) return next(createHttpError(400, "Backup file is required"));
-    if (!file.originalname.endsWith(".sqlite")) {
+    
+    const isSupported = file.originalname.endsWith(".sqlite") || file.originalname.endsWith(".tar.gz") || file.originalname.endsWith(".tar.gz.enc") || file.originalname.endsWith(".enc");
+    if (!isSupported) {
       fs.unlinkSync(file.path);
-      return next(createHttpError(400, "Uploaded file must be a .sqlite backup"));
+      return next(createHttpError(400, "Uploaded file must be a .sqlite or tar.gz backup"));
     }
 
-    await run("PRAGMA wal_checkpoint(TRUNCATE)");
-    fs.copyFileSync(file.path, dbPath);
-
-    if (fs.existsSync(dbWalPath)) fs.unlinkSync(dbWalPath);
-    if (fs.existsSync(dbShmPath)) fs.unlinkSync(dbShmPath);
-
-    fs.unlinkSync(file.path);
+    await performRestore(file.path, file.originalname);
+    
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     await createLog("SYSTEM", "RESTORE_UPLOADED_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: file.originalname });
     res.json({ success: true, message: "System restored successfully from uploaded backup" });

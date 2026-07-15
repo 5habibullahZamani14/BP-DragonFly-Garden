@@ -55,6 +55,7 @@ const seedDatabase = require("./database/seed");
 const { executeNightlyCloudBackup, ensureCloudBackupUpToDate } = require("./services/cloudBackupService");
 const { compressImagesInDirectory } = require("./utils/imageCompressor");
 const db = require("./database/db");
+const printerService = require("./services/printerService");
 
 const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
 const normalizeUrl = (value) => {
@@ -517,8 +518,91 @@ const startServer = async () => {
         }, delay);
       };
 
+      const scheduleDailySalesReport = () => {
+        let lastPrintedDay = null;
+
+        const checkAndPrintSalesReport = async () => {
+          try {
+            const now = new Date();
+            const currentDay = now.toDateString(); // e.g. "Wed Jul 15 2026"
+
+            // Skip if already printed today
+            if (lastPrintedDay === currentDay) return;
+
+            // Fetch closing time setting from DB
+            const closingTimeSetting = await getRestaurantSetting("work_hours");
+            let closingTime = "22:00"; // default fallback
+            if (closingTimeSetting) {
+              try {
+                const parsed = JSON.parse(closingTimeSetting);
+                if (parsed && parsed.end) {
+                  closingTime = parsed.end; // e.g. "22:00"
+                }
+              } catch (err) {
+                // Not JSON or fallback
+                if (typeof closingTimeSetting === "string" && closingTimeSetting.includes(":")) {
+                  closingTime = closingTimeSetting.trim();
+                }
+              }
+            }
+
+            // Parse closing time (e.g. "22:00" -> hour = 22, minute = 0)
+            const parts = closingTime.split(":");
+            if (parts.length !== 2) return;
+            const closingHour = parseInt(parts[0], 10);
+            const closingMinute = parseInt(parts[1], 10);
+            if (isNaN(closingHour) || isNaN(closingMinute)) return;
+
+            // Calculate print time: 5 minutes before closing
+            let printHour = closingHour;
+            let printMinute = closingMinute - 5;
+            if (printMinute < 0) {
+              printMinute += 60;
+              printHour -= 1;
+              if (printHour < 0) {
+                printHour += 24;
+              }
+            }
+
+            // Check if current local time matches printHour and printMinute
+            if (now.getHours() === printHour && now.getMinutes() === printMinute) {
+              // Query all paid/archived orders
+              const all = (sql, params = []) =>
+                new Promise((resolve, reject) => {
+                  db.all(sql, params, (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows);
+                  });
+                });
+
+              const orders = await all("SELECT id, total_price, created_at, daily_ticket_number FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
+              
+              // Filter for today's orders
+              const todayLocalStr = now.toLocaleDateString();
+              const todayOrders = orders.filter(order => {
+                const orderDate = new Date(order.created_at.includes("T") ? order.created_at : order.created_at.replace(" ", "T"));
+                return orderDate.toLocaleDateString() === todayLocalStr;
+              });
+
+              // Format and execute print
+              await printerService.printDailySalesReport(todayOrders);
+
+              lastPrintedDay = currentDay;
+              console.log(`[Scheduler] Daily sales report printed successfully for ${currentDay}.`);
+            }
+          } catch (err) {
+            console.error("Scheduled daily sales report print failed:", err);
+          }
+        };
+
+        // Run check immediately and then every 60 seconds
+        checkAndPrintSalesReport();
+        setInterval(checkAndPrintSalesReport, 60 * 1000);
+      };
+
       scheduleDailyArchive();
       scheduleCloudBackup();
+      scheduleDailySalesReport();
       
       // Execute a catch-up backup check immediately on startup
       ensureCloudBackupUpToDate().catch(err => {

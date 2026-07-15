@@ -295,7 +295,7 @@ export type ManagerProfile = {
 };
 
 export type FinanceData = {
-  orders: { id: number; total_price: number; created_at: string }[];
+  orders: { id: number; total_price: number; order_type: string; created_at: string }[];
   items: {
     id: number;
     name: string;
@@ -303,6 +303,37 @@ export type FinanceData = {
     total_sold: number;
     unit_cost: number;
     profit_margin: number;
+    type?: string;
+  }[];
+  order_items: {
+    order_id: number;
+    menu_item_id: number;
+    quantity: number;
+    price_at_order_time: number;
+    type: string;
+    created_at: string;
+  }[];
+  feedback_ratings: {
+    avg_staff: number | null;
+    avg_app: number | null;
+    avg_cleanliness: number | null;
+    avg_food: number | null;
+    avg_atmosphere: number | null;
+    avg_value: number | null;
+    total_feedbacks: number;
+  } | null;
+  help_stats: {
+    day_of_week: string;
+    count: number;
+  }[];
+  inventory_forecast: {
+    id: number;
+    name: string;
+    current_stock: number;
+    max_stock: number;
+    unit: string;
+    burn_rate_day: number;
+    days_remaining: number | null;
   }[];
 };
 
@@ -331,8 +362,12 @@ export interface MenuItem {
   is_popular: boolean;
   is_promo: boolean;
   promo_label: string | null;
+  promo_affects_price: boolean;
+  promo_discount_percent: number | null;
   is_sold_out?: boolean;
   option_groups?: any[];
+  card_size?: "normal" | "large" | "extra_large";
+  type?: 'food' | 'drink' | 'merchandise';
 }
 
 export interface Pattern {
@@ -392,6 +427,8 @@ export type MenuItemPayload = {
   is_popular?: boolean;
   is_promo?: boolean;
   promo_label?: string;
+  promo_affects_price?: boolean;
+  promo_discount_percent?: number | null;
   card_size?: "normal" | "large" | "extra_large";
 };
 
@@ -420,6 +457,35 @@ export const uploadMenuItemImage = async (id: number, file: Blob) => {
     body: formData,
   });
 };
+
+export interface PromotionTemplate {
+  id: number;
+  promo_label: string;
+  promo_affects_price: boolean;
+  promo_discount_percent: number | null;
+}
+
+export const fetchPromotionTemplates = async () =>
+  safeFetch<PromotionTemplate[]>("/management/promotions");
+
+export const createPromotionTemplate = async (data: Omit<PromotionTemplate, "id">) =>
+  safeFetch<{ id: number; success: boolean }>("/management/promotions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deletePromotionTemplate = async (id: number) =>
+  safeFetch<{ success: boolean }>(`/management/promotions/${id}`, {
+    method: "DELETE",
+  });
+
+export const applyPromotionToAll = async (data: Omit<PromotionTemplate, "id">) =>
+  safeFetch<{ success: boolean }>("/management/promotions/apply-all", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 
 export const applyDefaultCardSize = async (card_size: "normal" | "large" | "extra_large") =>
   safeFetch<{ success: boolean }>(`/management/menu/apply-default-card-size`, {

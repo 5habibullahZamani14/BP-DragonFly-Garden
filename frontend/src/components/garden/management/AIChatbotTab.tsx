@@ -103,10 +103,112 @@ export const AIChatbotTab = () => {
           setUsage(result.usage as unknown as UsageData);
         }
       } else {
-        setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I couldn't process that. Please try again." }]);
+        throw new Error(result.error || "Backend returned unsuccessful status");
       }
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I encountered an error. Please try again." }]);
+    } catch (backendErr) {
+      console.warn("Backend AI chat failed, attempting client-side fallback:", backendErr);
+      try {
+        // Fetch context and api key from the backend
+        const contextRes = await fetch(`${API_BASE}/management/feedback/ai-chat/client-context`, {
+          headers: {
+            Authorization: (() => {
+              const saved = localStorage.getItem("managerLogin");
+              if (saved) {
+                try {
+                  const parsed = JSON.parse(saved);
+                  return parsed.token ? `Bearer ${parsed.token}` : "";
+                } catch { return ""; }
+              }
+              return "";
+            })(),
+          },
+        });
+        if (!contextRes.ok) {
+          throw new Error("Could not fetch client context from backend");
+        }
+        const { apiKey, contextData } = await contextRes.json();
+        if (!apiKey) {
+          setMessages((prev) => [...prev, {
+            role: "assistant",
+            content: "DragonBot is currently unavailable. No Groq API Key was found in the server's environment configuration. Please set `GROQ_API_KEY` in the server's `.env` file."
+          }]);
+          return;
+        }
+
+        const systemPrompt = `You are DragonBot, an AI assistant for the BP Dragonfly Garden Cafe Ordering and Management System. You have access to the restaurant's live data below. Answer questions helpfully based on this data.
+
+RESTAURANT CONTEXT (current state):
+${JSON.stringify(contextData, null, 2)}
+
+Guidelines:
+- Answer based on the provided data only. If the data doesn't contain what you need, say so.
+- Use markdown formatting for readable responses: **bold** for key numbers, bullet lists, short paragraphs.
+- Never reveal manager passwords, API keys, QR codes, or view tokens.
+- Be concise but thorough. Think step by step.
+- If asked about trends or analysis, note that your data is a snapshot of the current state.
+- Do NOT include images, diagrams, or visual elements in your response. Text and tables only.`;
+
+        const groqMessages = [
+          { role: "system", content: systemPrompt },
+          ...messages.map(m => ({ role: m.role, content: m.content })),
+          { role: "user", content: msg }
+        ];
+
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: groqMessages,
+          }),
+        });
+
+        if (!groqRes.ok) {
+          const errText = await groqRes.text();
+          throw new Error(`Groq API error: ${groqRes.status} - ${errText}`);
+        }
+
+        const groqData = await groqRes.json();
+        const reply = groqData.choices?.[0]?.message?.content || "Sorry, I couldn't get a response from Groq.";
+        setMessages((prev) => [...prev, {
+          role: "assistant",
+          content: reply + "\n\n*(Sent via client-side connection because the local server is offline)*"
+        }]);
+
+        // Report usage back to the backend
+        try {
+          const trackRes = await fetch(`${API_BASE}/management/feedback/ai-chat/track`, {
+            method: "POST",
+            headers: {
+              Authorization: (() => {
+                const saved = localStorage.getItem("managerLogin");
+                if (saved) {
+                  try {
+                    const parsed = JSON.parse(saved);
+                    return parsed.token ? `Bearer ${parsed.token}` : "";
+                  } catch { return ""; }
+                }
+                return "";
+              })(),
+            },
+          });
+          if (trackRes.ok) {
+            const usageData = await trackRes.json();
+            setUsage(usageData as UsageData);
+          }
+        } catch (e) {
+          console.warn("Failed to report AI chat usage to backend", e);
+        }
+      } catch (fallbackErr) {
+        console.error("Direct Groq API fallback failed:", fallbackErr);
+        setMessages((prev) => [...prev, {
+          role: "assistant",
+          content: "DragonBot is currently unavailable.\n\n**Troubleshooting steps:**\n1. Check if your browser device is connected to the internet.\n2. Verify the server's `GROQ_API_KEY` is set correctly.\n3. Make sure the local server is running."
+        }]);
+      }
     } finally {
       setLoading(false);
     }

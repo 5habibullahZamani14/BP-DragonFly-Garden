@@ -96,7 +96,7 @@ const listCloudBackups = async () => {
   if (!data.Contents) return [];
 
   return data.Contents
-    .filter((item) => item.Key && item.Key.endsWith(".sqlite"))
+    .filter((item) => item.Key && (item.Key.endsWith(".sqlite") || item.Key.endsWith(".tar.gz") || item.Key.endsWith(".tar.gz.enc")))
     .map((item) => ({
       filename: item.Key,
       size: item.Size || 0,
@@ -379,7 +379,7 @@ const ensureCloudBackupUpToDate = async () => {
   console.log("[Cloud Backup] Up-to-date local and cloud backups already exist.");
 };
 
-module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup };
+module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup, decryptFile, encryptFile };
 module.exports.downloadAndDecryptBackup = async (keyName, destinationPath) => {
   const tmpDir = path.join(__dirname, "../../../backups");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });

@@ -25,6 +25,7 @@ const {
   assignModifierGroup, unassignModifierGroup, setDefaultOption,
   createOptionGroup, updateOptionGroup, deleteOptionGroup,
   createOption, updateOption, deleteOption,
+  getPromotionTemplates, createPromotionTemplate, deletePromotionTemplate, applyPromotionToAll,
 } = menuController;
 
 
@@ -324,6 +325,8 @@ router.delete("/feedback/analysis/findings/:id", feedbackController.deleteFindin
 
 router.post("/feedback/ai-chat", feedbackController.aiChat);
 router.get("/feedback/ai-chat/usage", feedbackController.getChatUsage);
+router.get("/feedback/ai-chat/client-context", feedbackController.getClientContext);
+router.post("/feedback/ai-chat/track", feedbackController.trackChatUsage);
 
 // Set up broadcast function for feedback controller
 const setupFeedbackBroadcast = (broadcastFn) => {
@@ -392,6 +395,20 @@ router.post("/system/check-version", managementController.checkSystemVersion);
  * Returns: { success, message, logs? }
  */
 router.post("/system/update", managementController.performSystemUpdate);
+
+// ── Promotion Templates ───────────────────────────────────────────────────────
+
+/* GET  /management/promotions                  — get all templates */
+router.get("/promotions", getPromotionTemplates);
+
+/* POST /management/promotions                  — create a template */
+router.post("/promotions", createPromotionTemplate);
+
+/* DELETE /management/promotions/:id             — delete a template */
+router.delete("/promotions/:id", deletePromotionTemplate);
+
+/* POST /management/promotions/apply-all        — apply template to all menu items */
+router.post("/promotions/apply-all", applyPromotionToAll);
 
 module.exports = router;
 

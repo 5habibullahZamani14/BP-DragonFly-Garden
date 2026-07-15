@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { createCounterOrder } from "@/lib/api";
+import { createCounterOrder, fetchTables, type TableRecord } from "@/lib/api";
 import type { MenuItem, Order } from "@/lib/api";
-import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check } from "lucide-react";
+import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check, Layers } from "lucide-react";
 
 interface PosOrderModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  initialOrderType: "TAKEAWAY" | "PICKUP" | "DELIVERY";
+  initialOrderType: "TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER";
   menuItems: MenuItem[];
   qrCode: string;
   notify: (kind: "success" | "error", text: string) => void;
@@ -39,24 +39,33 @@ interface CartItem {
 
 export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItems, qrCode, notify, onOrderCreated, parentOrder = null }: PosOrderModalProps) {
   const { t } = useTranslation();
-  const [orderType, setOrderType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">(initialOrderType);
+  const [orderType, setOrderType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER">(initialOrderType);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [collectionTime, setCollectionTime] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tables, setTables] = useState<TableRecord[]>([]);
+  const [selectedTableId, setSelectedTableId] = useState<number>(999);
 
-  // States for options selection
   const [configuringItem, setConfiguringItem] = useState<MenuItem | null>(null);
   const [selectedGroupOptions, setSelectedGroupOptions] = useState<Record<number, { optionId: number; name: string; delta: number }[]>>({});
 
   useEffect(() => {
     if (isOpen) {
+      fetchTables().then(setTables).catch(() => {});
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
       if (parentOrder) {
         setOrderType(parentOrder.order_type as any);
+        setSelectedTableId(parentOrder.table_id || 999);
       } else {
         setOrderType(initialOrderType);
+        setSelectedTableId(999);
       }
     }
   }, [isOpen, initialOrderType, parentOrder]);
@@ -173,7 +182,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
     setIsSubmitting(true);
     try {
       const order = await createCounterOrder(qrCode, {
-        table_id: parentOrder ? parentOrder.table_id : 999, // Use parent table if it's an add-on
+        table_id: parentOrder ? parentOrder.table_id : (orderType === "COUNTER" ? selectedTableId : 999),
         order_type: orderType,
         customer_name: parentOrder ? parentOrder.customer_name : customerName,
         customer_phone: parentOrder ? parentOrder.customer_phone : customerPhone,
@@ -189,11 +198,11 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
       });
       
       notify("success", t("pos.orderCreatedSuccess", {
-        orderType: t(
-          orderType === "TAKEAWAY" ? "pos.orderTypeTakeaway"
-            : orderType === "PICKUP" ? "pos.orderTypePickup"
-            : "pos.orderTypeDelivery"
-        ),
+        orderType: 
+          orderType === "TAKEAWAY" ? t("pos.orderTypeTakeaway")
+            : orderType === "PICKUP" ? t("pos.orderTypePickup")
+            : orderType === "DELIVERY" ? t("pos.orderTypeDelivery")
+            : t("pos.orderTypeCounter", "Counter Order"),
       }));
       onOrderCreated(order);
       onOpenChange(false);
@@ -227,12 +236,13 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                   {orderType === "TAKEAWAY" && <ShoppingBag className="h-6 w-6 text-green-600" />}
                   {orderType === "PICKUP" && <Clock className="h-6 w-6 text-orange-600" />}
                   {orderType === "DELIVERY" && <MapPin className="h-6 w-6 text-blue-600" />}
+                  {orderType === "COUNTER" && <Layers className="h-6 w-6 text-pink-600" />}
                   {t("pos.newOrderTitle", {
-                    orderType: t(
-                      orderType === "TAKEAWAY" ? "pos.orderTypeTakeaway"
-                        : orderType === "PICKUP" ? "pos.orderTypePickup"
-                        : "pos.orderTypeDelivery"
-                    ),
+                    orderType: 
+                      orderType === "TAKEAWAY" ? t("pos.orderTypeTakeaway")
+                        : orderType === "PICKUP" ? t("pos.orderTypePickup")
+                        : orderType === "DELIVERY" ? t("pos.orderTypeDelivery")
+                        : t("pos.orderTypeCounter", "Counter Order"),
                   })}
                 </>
               )}
@@ -244,11 +254,31 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
             <div className="flex-1 flex flex-col border-r bg-white overflow-y-auto">
               <div className="p-6 space-y-8">
 
-                {/* Customer Details Form */}
-                {!parentOrder && orderType !== "TAKEAWAY" && (
+                {/* Customer/Counter Details Form */}
+                {!parentOrder && (orderType === "PICKUP" || orderType === "DELIVERY" || orderType === "COUNTER") && (
                   <section className="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
-                    <h3 className="font-semibold text-gray-800 mb-2">{t("pos.customerDetails")}</h3>
+                    <h3 className="font-semibold text-gray-800 mb-2">
+                      {orderType === "COUNTER" ? t("pos.counterOrderDetails", "Counter Order Details") : t("pos.customerDetails")}
+                    </h3>
                     <div className="grid grid-cols-2 gap-4">
+                      {orderType === "COUNTER" && (
+                        <div className="space-y-2 col-span-2">
+                          <Label className="flex items-center gap-1.5"><Layers className="w-3.5 h-3.5 text-pink-600" /> {t("pos.tableNumber", "Table Number (Optional)")}</Label>
+                          <select
+                            value={selectedTableId}
+                            onChange={(e) => setSelectedTableId(Number(e.target.value))}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <option value={999}>{t("pos.noTable", "No Table (At Counter)")}</option>
+                            {tables
+                              .filter(t => t.id !== 999 && t.table_number !== "Counter Order")
+                              .map(t => (
+                                <option key={t.id} value={t.id}>{t.table_number}</option>
+                              ))
+                            }
+                          </select>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {t("pos.name")}</Label>
                         <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t("pos.name")} />

@@ -93,7 +93,10 @@ const getMenu = async (req, res) => {
       menu_items.is_popular,
       menu_items.is_promo,
       menu_items.promo_label,
+      menu_items.promo_affects_price,
+      menu_items.promo_discount_percent,
       menu_items.card_size,
+      menu_items.type,
       (
         SELECT CASE WHEN MIN(ii.current_stock - (mii.quantity_required / COALESCE(ii.usage_conversion, 1.0))) < 0 THEN 1 ELSE 0 END
         FROM menu_item_ingredients mii
@@ -128,6 +131,8 @@ const getMenu = async (req, res) => {
       is_available: !!row.is_available,
       is_popular: !!row.is_popular,
       is_promo: !!row.is_promo,
+      promo_affects_price: !!row.promo_affects_price,
+      promo_discount_percent: row.promo_discount_percent !== null && row.promo_discount_percent !== undefined ? Number(row.promo_discount_percent) : null,
       is_sold_out: !!row.is_sold_out,
       card_size: row.card_size || 'normal',
       default_pattern_image_url: defaultPatternImage,
@@ -341,12 +346,12 @@ const getRecommendations = async (req, res) => {
 };
 
 const createMenuItem = async (req, res) => {
-  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type } = req.body;
   try {
     const result = await run(
-      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description || '', price, category_id, image_url || '', pattern_id || null, repo_image_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal']
+      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description || '', price, category_id, image_url || '', pattern_id || null, repo_image_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal', promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null, type || 'food']
     );
     
     // Emit WebSocket event for menu update
@@ -363,13 +368,25 @@ const createMenuItem = async (req, res) => {
 
 const updateMenuItem = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type } = req.body;
   try {
     await run(
       `UPDATE menu_items 
-       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), repo_image_id = COALESCE(?, repo_image_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size)
+       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), repo_image_id = COALESCE(?, repo_image_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size), promo_affects_price = COALESCE(?, promo_affects_price), promo_discount_percent = ?, type = COALESCE(?, type)
        WHERE id = ?`,
-      [name, description, price, category_id, image_url, pattern_id !== undefined ? pattern_id : null, repo_image_id !== undefined ? repo_image_id : null, is_available !== undefined ? (is_available ? 1 : 0) : null, is_popular !== undefined ? (is_popular ? 1 : 0) : null, is_promo !== undefined ? (is_promo ? 1 : 0) : null, promo_label, card_size, id]
+      [
+        name, description, price, category_id, image_url, 
+        pattern_id !== undefined ? pattern_id : null, 
+        repo_image_id !== undefined ? repo_image_id : null, 
+        is_available !== undefined ? (is_available ? 1 : 0) : null, 
+        is_popular !== undefined ? (is_popular ? 1 : 0) : null, 
+        is_promo !== undefined ? (is_promo ? 1 : 0) : null, 
+        promo_label, card_size, 
+        promo_affects_price !== undefined ? (promo_affects_price ? 1 : 0) : null,
+        promo_discount_percent !== undefined ? promo_discount_percent : null,
+        type,
+        id
+      ]
     );
     
     // Emit WebSocket event for menu update
@@ -1263,6 +1280,62 @@ const getItemOptions = async (req, res) => {
   }
 };
 
+const getPromotionTemplates = async (req, res) => {
+  try {
+    const templates = await all("SELECT * FROM promotion_templates ORDER BY id DESC");
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const createPromotionTemplate = async (req, res) => {
+  const { promo_label, promo_affects_price, promo_discount_percent } = req.body;
+  if (!promo_label) {
+    return res.status(400).json({ error: "Promotion label is required" });
+  }
+  try {
+    const result = await run(
+      "INSERT INTO promotion_templates (promo_label, promo_affects_price, promo_discount_percent) VALUES (?, ?, ?)",
+      [promo_label, promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null]
+    );
+    res.json({ id: result.lastID, success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deletePromotionTemplate = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await run("DELETE FROM promotion_templates WHERE id = ?", [id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const applyPromotionToAll = async (req, res) => {
+  const { promo_label, promo_affects_price, promo_discount_percent } = req.body;
+  try {
+    await run(
+      `UPDATE menu_items 
+       SET is_promo = 1, promo_label = ?, promo_affects_price = ?, promo_discount_percent = ?`,
+      [promo_label || '', promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null]
+    );
+
+    // Emit WebSocket event for menu updates
+    const broadcast = getBroadcast();
+    if (broadcast) {
+      broadcast({ type: "MENU_UPDATE", payload: { all: true } });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getMenu, getCategories, recomputePopular, getRecommendations,
   createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
@@ -1281,6 +1354,8 @@ module.exports = {
   createOptionGroup, updateOptionGroup, deleteOptionGroup,
   createOption, updateOption, deleteOption,
   applyDefaultCardSize,
+  // Promotion template library
+  getPromotionTemplates, createPromotionTemplate, deletePromotionTemplate, applyPromotionToAll,
 };
 
 

@@ -28,7 +28,8 @@ import {
   createGlobalModifierGroup, updateGlobalModifierGroup, deleteGlobalModifierGroup,
   createGlobalModifierOption, updateGlobalModifierOption, deleteGlobalModifierOption,
   assignModifierToItem, unassignModifierFromItem, setModifierDefault,
-  type MenuItem, type Category, type Pattern, type RepoSection, type GlobalModifierGroup, type GlobalModifierOption,
+  fetchPromotionTemplates, createPromotionTemplate, deletePromotionTemplate, applyPromotionToAll,
+  type MenuItem, type Category, type Pattern, type RepoSection, type GlobalModifierGroup, type GlobalModifierOption, type PromotionTemplate,
 } from "@/lib/api";
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
@@ -580,6 +581,52 @@ export function MenuTab() {
   const [editingRepoSectionName, setEditingRepoSectionName] = useState("");
   const [editingRepoSectionMaxBytes, setEditingRepoSectionMaxBytes] = useState("100");
 
+  // ── Promotion Templates state and handlers
+  const [promoTemplates, setPromoTemplates] = useState<PromotionTemplate[]>([]);
+
+  const loadPromoTemplates = async () => {
+    try {
+      const data = await fetchPromotionTemplates();
+      setPromoTemplates(data || []);
+    } catch {
+      toast.error("Failed to load promotion templates");
+    }
+  };
+
+  const handleSavePromoTemplate = async () => {
+    if (!editingItem?.promo_label) {
+      toast.error("Promotion label is required to save template");
+      return;
+    }
+    try {
+      const promo_label = editingItem.promo_label;
+      const promo_affects_price = !!editingItem.promo_affects_price;
+      const promo_discount_percent = editingItem.promo_discount_percent || null;
+
+      if (promoTemplates.some(t => t.promo_label === promo_label && t.promo_affects_price === promo_affects_price && t.promo_discount_percent === promo_discount_percent)) {
+        toast.info("This promotion template tag already exists");
+        return;
+      }
+
+      await createPromotionTemplate({ promo_label, promo_affects_price, promo_discount_percent });
+      toast.success("Promotion template tag saved");
+      loadPromoTemplates();
+    } catch {
+      toast.error("Failed to save promotion template");
+    }
+  };
+
+  const handleApplyPromoToAll = async (promo: Omit<PromotionTemplate, "id">) => {
+    if (!confirm("Are you sure you want to apply this promotion to ALL products? This will override active promotions for all items.")) return;
+    try {
+      await applyPromotionToAll(promo);
+      toast.success("Promotion applied to all products successfully");
+      loadData();
+    } catch {
+      toast.error("Failed to apply promotion to all products");
+    }
+  };
+
   const selectedPattern = patterns.find(p => p.id === editingItem?.pattern_id);
   const selectedPatternImage = editingItem?.pattern_image_url
     || selectedPattern?.image_url
@@ -600,7 +647,7 @@ export function MenuTab() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  useEffect(() => { loadData(); loadPatterns(); loadRepoSections(); }, []);
+  useEffect(() => { loadData(); loadPatterns(); loadRepoSections(); loadPromoTemplates(); }, []);
   useWebSocket(["MENU_UPDATE"], () => { loadData(); });
 
   const loadPatterns = async () => {
@@ -1186,7 +1233,7 @@ export function MenuTab() {
             <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.menuMgmt")}</h2>
             <p className="text-sm text-gray-500">{t("m.menuMgmtDesc")}</p>
           </div>
-          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal' }); setIsDialogOpen(true); }}>
+          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal', type: 'food' }); setIsDialogOpen(true); }}>
             <Plus className="me-2 h-4 w-4" /> {t("m.addMenuItem")}
           </Button>
         </div>
@@ -1361,6 +1408,17 @@ export function MenuTab() {
                 <Label>{t("m.description")}</Label>
                 <Input value={editingItem?.description || ""} onChange={e => setEditingItem(p => ({ ...p, description: e.target.value }))} />
               </div>
+              <div className="grid gap-2">
+                <Label>{t("m.productType")}</Label>
+                <Select value={editingItem?.type || "food"} onValueChange={v => setEditingItem(p => ({ ...p, type: v as any }))}>
+                  <SelectTrigger><SelectValue placeholder={t("m.selectType")} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="food">{t("m.food")}</SelectItem>
+                    <SelectItem value="drink">{t("m.drink")}</SelectItem>
+                    <SelectItem value="merchandise">{t("m.merchandise")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               {/* Image */}
               <div className="grid gap-2">
@@ -1424,10 +1482,144 @@ export function MenuTab() {
                     <Switch checked={editingItem?.is_promo || false} onCheckedChange={c => setEditingItem(p => ({ ...p, is_promo: c }))} />
                   </div>
                   {editingItem?.is_promo && (
-                    <div className="grid gap-2 pt-1 animate-in fade-in slide-in-from-top-2">
-                      <Label>{t("m.promoBadgeLabel")}</Label>
-                      <Input placeholder={t("m.promoBadgePlaceholder")} value={editingItem?.promo_label || ""}
-                        onChange={e => setEditingItem(p => ({ ...p, promo_label: e.target.value }))} />
+                    <div className="space-y-4 pt-1 animate-in fade-in slide-in-from-top-2 text-start">
+                      <div className="flex items-start gap-3 sm:items-center sm:gap-4 bg-white/60 p-3 rounded-lg border border-gray-100">
+                        <div className="flex-1 space-y-0.5">
+                          <Label>{t("m.promoAffectsPrice", "Promotion affects price")}</Label>
+                          <p className="text-xs text-gray-500">{t("m.promoAffectsPriceDesc", "Determines if this promotion reduces the item's price.")}</p>
+                        </div>
+                        <Switch 
+                          checked={editingItem?.promo_affects_price || false} 
+                          onCheckedChange={c => {
+                            setEditingItem(p => {
+                              const updated = { ...p, promo_affects_price: c };
+                              if (!c) {
+                                updated.promo_discount_percent = null;
+                              } else {
+                                updated.promo_discount_percent = updated.promo_discount_percent || 10;
+                                updated.promo_label = `${updated.promo_discount_percent}% OFF`;
+                              }
+                              return updated;
+                            });
+                          }} 
+                        />
+                      </div>
+
+                      {editingItem?.promo_affects_price ? (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1">
+                          <Label>{t("m.promoDiscountPercent", "Discount Percentage")}</Label>
+                          <div className="relative flex items-center">
+                            <Input 
+                              type="number" 
+                              min={1} 
+                              max={100} 
+                              placeholder="e.g. 20" 
+                              value={editingItem?.promo_discount_percent ?? ""}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                const clamped = isNaN(val) ? null : Math.max(1, Math.min(100, val));
+                                setEditingItem(p => ({ 
+                                  ...p, 
+                                  promo_discount_percent: clamped,
+                                  promo_label: clamped ? `${clamped}% OFF` : ""
+                                }));
+                              }}
+                              className="pe-8"
+                            />
+                            <span className="absolute right-3 text-sm font-semibold text-gray-500">%</span>
+                          </div>
+                          <p className="text-xs text-gray-500">{t("m.promoDiscountPercentDesc", "Enter a percentage from 1% up to 100%.")}</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1">
+                          <Label>{t("m.promoBadgeLabel")}</Label>
+                          <Input 
+                            placeholder={t("m.promoBadgePlaceholder")} 
+                            value={editingItem?.promo_label || ""}
+                            onChange={e => setEditingItem(p => ({ ...p, promo_label: e.target.value }))} 
+                          />
+                        </div>
+                      )}
+
+                      {/* Actions for current promo config */}
+                      <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleSavePromoTemplate}
+                          className="text-xs bg-pink-50/50 hover:bg-pink-50 text-pink-700 border-pink-200"
+                          title="Save this promotion configuration as a reusable tag"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> {t("m.saveAsTag", "Save as Tag")}
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="destructive" 
+                          size="sm" 
+                          onClick={() => {
+                            const promo_label = editingItem.promo_label || "";
+                            const promo_affects_price = !!editingItem.promo_affects_price;
+                            const promo_discount_percent = editingItem.promo_discount_percent || null;
+                            handleApplyPromoToAll({ promo_label, promo_affects_price, promo_discount_percent });
+                          }}
+                          className="text-xs ml-auto font-semibold"
+                          title="Apply this promotion to all items in the restaurant menu"
+                        >
+                          <Layers className="h-3 w-3 mr-1" /> {t("m.applyToAll", "Apply to All Products")}
+                        </Button>
+                      </div>
+
+                      {/* Saved promo templates tags/chips */}
+                      {promoTemplates.length > 0 && (
+                        <div className="space-y-2 pt-3 border-t border-gray-100/60">
+                          <Label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t("m.quickPromotionTags", "Quick Promotion Tags")}</Label>
+                          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-0.5">
+                            {promoTemplates.map(tpl => (
+                              <div 
+                                key={tpl.id}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-pink-50 border border-pink-100 px-3 py-1 text-xs text-pink-700 shadow-sm animate-in zoom-in-95 duration-150"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItem(p => ({
+                                      ...p,
+                                      is_promo: true,
+                                      promo_label: tpl.promo_label,
+                                      promo_affects_price: !!tpl.promo_affects_price,
+                                      promo_discount_percent: tpl.promo_discount_percent
+                                    }));
+                                    toast.success("Applied promotion configuration");
+                                  }}
+                                  className="font-medium hover:underline text-left"
+                                >
+                                  {tpl.promo_label} {tpl.promo_affects_price ? `(${tpl.promo_discount_percent}%)` : ""}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Delete '${tpl.promo_label}' template tag?`)) {
+                                      try {
+                                        await deletePromotionTemplate(tpl.id);
+                                        toast.success("Template tag deleted");
+                                        loadPromoTemplates();
+                                      } catch {
+                                        toast.error("Failed to delete template tag");
+                                      }
+                                    }
+                                  }}
+                                  className="text-pink-400 hover:text-pink-600 rounded-full hover:bg-pink-100 p-0.5 ml-0.5 transition-colors"
+                                  title="Delete Tag"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="grid gap-2 pt-1">

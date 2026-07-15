@@ -41,7 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Eye, EyeOff, LogOut, SplitSquareHorizontal, Bell, CheckCircle2, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, LogOut, SplitSquareHorizontal, Bell, CheckCircle2, Plus, Trash2, AlertCircle, MessageSquare, Star } from "lucide-react";
 import {
   fetchUnpaidOrders,
   fetchPaidOrders,
@@ -56,6 +56,7 @@ import {
   fetchStaffAssistanceRequests,
   acknowledgeStaffAssistanceRequest,
   cancelOrder,
+  submitFeedback,
 } from "@/lib/api";
 import type { MenuItem, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -146,9 +147,14 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [loading, setLoading] = useState(true);
   const [posModalOpen, setPosModalOpen] = useState(false);
-  const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY">("TAKEAWAY");
+  const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER">("TAKEAWAY");
   const [posModalParentOrder, setPosModalParentOrder] = useState<PaymentOrder | null>(null);
   const [assistanceRequests, setAssistanceRequests] = useState<StaffAssistanceRequest[]>([]);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackOrder, setFeedbackOrder] = useState<PaymentOrder | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [activeAssistanceRequest, setActiveAssistanceRequest] = useState<StaffAssistanceRequest | null>(null);
   
   const [splitItemsQuantities, setSplitItemsQuantities] = useState<Record<number, number>>({});
@@ -590,6 +596,38 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   };
 
+  const handleSendFeedback = async () => {
+    const comment = feedbackComment.trim();
+    if (!comment || comment.length < 8) {
+      notify("error", t("feedback.commentLengthError", "Please write at least 8 characters."));
+      return;
+    }
+    if (!loggedInEmployee) return;
+
+    setFeedbackSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("sender_name", loggedInEmployee.name);
+      formData.append("comment", comment);
+      formData.append("rating_app", feedbackRating.toString());
+      if (feedbackOrder) {
+        formData.append("order_id", feedbackOrder.id.toString());
+        if (feedbackOrder.table_id) {
+          formData.append("table_id", feedbackOrder.table_id.toString());
+        }
+      }
+
+      await submitFeedback(qrCode, formData);
+      notify("success", t("feedback.submitSuccess", "Feedback submitted successfully!"));
+      setFeedbackModalOpen(false);
+      setFeedbackComment("");
+    } catch (err: any) {
+      notify("error", getErrorMessage(err, t("feedback.submitFailed", "Failed to submit feedback")));
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   // Render Login Screen if not logged in
   if (!loggedInEmployee) {
     return (
@@ -730,6 +768,22 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                   </div>
                 </PopoverContent>
               </Popover>
+
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={() => {
+                  setFeedbackOrder(null);
+                  setFeedbackComment("");
+                  setFeedbackRating(5);
+                  setFeedbackModalOpen(true);
+                }} 
+                className="rounded-full bg-white hover:bg-gray-50 border-gray-200"
+                title="Send general feedback"
+              >
+                <MessageSquare className="h-4 w-4 text-gray-600" />
+              </Button>
+
               <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
               <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
                 <LogOut className="h-4 w-4 mr-2" /> {t("payment.logout")}
@@ -741,6 +795,9 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         <div className="flex items-center gap-2 mb-8 bg-white/60 p-2 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto w-full">
           <span className="text-sm font-medium text-gray-500 pl-3 pr-2 shrink-0 uppercase tracking-widest">{t("payment.newOrder")}</span>
           <div className="flex items-center gap-2 shrink-0">
+            <Button onClick={() => { setPosModalInitialType("COUNTER"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-pink-700 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
+              + {t("payment.counterOrder", "Counter Order")}
+            </Button>
             <Button onClick={() => { setPosModalInitialType("TAKEAWAY"); setPosModalOpen(true); }} variant="ghost" className="rounded-full text-green-700 hover:bg-white hover:shadow-sm px-6 font-semibold bg-white/40">
               + {t("payment.takeawayBadge")}
             </Button>
@@ -763,7 +820,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 {unpaidOrders.length === 0 ? (
                   <p className="text-gray-500 italic">{t("payment.noUnpaid")}</p>
                 ) : unpaidOrders.map((order) => (
-                  <Card key={order.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
+                  <Card key={order.id} className="relative overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                     <CardHeader className="bg-white pb-4">
                       <CardTitle className="flex items-start justify-between">
                         <div className="flex flex-col gap-1">
@@ -775,10 +832,36 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                               {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">{t("payment.pickup")} {order.collection_time && `@ ${order.collection_time}`}</Badge>}
                               {order.order_type === 'DELIVERY' && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0">{t("payment.delivery")}</Badge>}
                               {order.order_type === 'TAKEAWAY' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0">{t("payment.takeawayBadge")}</Badge>}
+                              {order.order_type === 'COUNTER' && (
+                                <Badge className="bg-pink-100 text-pink-700 hover:bg-pink-200 border-0">
+                                  {t("payment.counterOrder", "Counter Order")}
+                                  {order.table_id !== 999 && order.table_number && ` @ ${order.table_number}`}
+                                </Badge>
+                              )}
                               {order.customer_name && <span className="text-sm text-gray-500 font-medium ml-1">{order.customer_name}</span>}
                             </div>
                           )}
                         </div>
+
+                        {/* Top Center Feedback Button */}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-4">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFeedbackOrder(order);
+                              setFeedbackComment("");
+                              setFeedbackRating(5);
+                              setFeedbackModalOpen(true);
+                            }}
+                            className="h-8 px-2 text-xs text-gray-500 hover:text-green-700 hover:bg-green-50 rounded-full gap-1 flex items-center bg-white/60 backdrop-blur-sm shadow-sm border border-gray-100"
+                            title="Report order issue"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            <span>{t("payment.reportIssue", "Feedback")}</span>
+                          </Button>
+                        </div>
+
                         <Badge variant={order.remaining > 0 ? "destructive" : "secondary"} className="text-sm px-3 py-1">
                           RM {order.remaining.toFixed(2)}
                         </Badge>
@@ -1076,6 +1159,25 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <CardHeader className="py-4">
                         <CardTitle className="flex items-center justify-between text-lg">
                           <span className="text-gray-700">{t("customer.atTable").replace('at ', '')} {order.table_number}</span>
+                          
+                          {/* Top Center Feedback Button for Paid Orders */}
+                          <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setFeedbackOrder(order);
+                                setFeedbackComment("");
+                                setFeedbackRating(5);
+                                setFeedbackModalOpen(true);
+                              }}
+                              className="h-8 px-2 text-xs text-gray-500 hover:text-green-700 hover:bg-green-50 rounded-full gap-1 flex items-center"
+                              title="Report order issue"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                              <span>{t("payment.reportIssue", "Feedback")}</span>
+                            </Button>
+                          </div>
                           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{t("payment.paid")}</Badge>
                         </CardTitle>
                       </CardHeader>
@@ -1174,6 +1276,107 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
            }
         }} 
       />
+
+      {/* Employee Feedback Dialog */}
+      <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
+        <DialogContent className="sm:max-w-[500px] p-6 bg-white rounded-2xl shadow-xl border-0">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-gray-800">
+              <MessageSquare className="h-5 w-5 text-green-600" />
+              {feedbackOrder 
+                ? `${t("feedback.orderFeedback", "Order Feedback")} #${feedbackOrder.id}`
+                : t("feedback.generalFeedback", "Send General Feedback")
+              }
+            </DialogTitle>
+            <DialogDescription className="text-gray-500 mt-1">
+              {feedbackOrder 
+                ? t("feedback.orderDesc", "Submit feedback specifically regarding this order's items or processing details.")
+                : t("feedback.generalDesc", "Help us improve. Report any bugs, inaccurate info, or usability issues you face.")
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 mt-4">
+            <div className="space-y-1">
+              <Label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("feedback.sender", "Sender")}</Label>
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100 text-sm font-medium text-gray-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                {loggedInEmployee?.name} (ID: {loggedInEmployee?.id})
+              </div>
+            </div>
+
+            {feedbackOrder && (
+              <div className="space-y-1">
+                <Label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("feedback.associatedOrder", "Associated Order")}</Label>
+                <div className="px-3 py-2 bg-gray-50 rounded-xl border border-gray-100 text-xs text-gray-600 space-y-1">
+                  <p><strong>{t("customer.total")}:</strong> RM {feedbackOrder.total_with_vat.toFixed(2)} ({feedbackOrder.order_type || "DINE_IN"})</p>
+                  <p><strong>{t("feedback.items", "Items")}:</strong> {feedbackOrder.items.map(i => `${i.quantity}x ${i.item_name}`).join(", ")}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label className="text-gray-700 font-semibold">{t("feedback.ratingApp", "Rate App Experience")}</Label>
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setFeedbackRating(star)}
+                    className="p-1 transition-transform hover:scale-110 active:scale-95"
+                  >
+                    <Star 
+                      className={`w-8 h-8 ${
+                        star <= feedbackRating 
+                          ? "fill-yellow-400 text-yellow-400" 
+                          : "text-gray-200 fill-gray-200"
+                      }`} 
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="feedback-comment" className="text-gray-700 font-semibold">{t("feedback.commentLabel", "Feedback Message")}</Label>
+              <textarea
+                id="feedback-comment"
+                value={feedbackComment}
+                onChange={(e) => setFeedbackComment(e.target.value)}
+                placeholder={feedbackOrder 
+                  ? t("feedback.orderPlaceholder", "What went wrong with this order? E.g., item options didn't calculate correctly...")
+                  : t("feedback.generalPlaceholder", "Describe the bug or broken layout you faced...")
+                }
+                rows={4}
+                className="flex w-full rounded-xl border border-gray-200 bg-background px-3.5 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-400 text-right">
+                {feedbackComment.trim().length} / 8 {t("feedback.charsMin", "chars minimum")}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFeedbackModalOpen(false)}
+              className="flex-1 h-12 rounded-xl"
+              disabled={feedbackSubmitting}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSendFeedback}
+              className="flex-1 h-12 rounded-xl"
+              disabled={feedbackSubmitting || feedbackComment.trim().length < 8}
+            >
+              {feedbackSubmitting ? t("common.processing") : t("feedback.sendBtn", "Submit")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

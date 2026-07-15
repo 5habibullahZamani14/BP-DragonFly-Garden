@@ -40,6 +40,8 @@ export type MenuItem = {
   is_popular?: boolean;
   is_promo?: boolean;
   promo_label?: string;
+  promo_affects_price?: boolean;
+  promo_discount_percent?: number | null;
   is_available?: boolean;
   card_size?: "normal" | "large" | "extra_large";
   is_sold_out?: boolean;
