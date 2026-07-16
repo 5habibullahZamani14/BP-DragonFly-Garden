@@ -274,6 +274,99 @@ const seedDatabase = async () => {
     }
   }
 
+  // Seed mock orders if there are no orders
+  const ordersCount = await get("SELECT COUNT(*) as count FROM orders");
+  if (ordersCount.count <= 10) {
+    console.log("Seeding mock orders and analytics data...");
+    
+    const tables = await all("SELECT id, table_number FROM tables");
+    const menuItems = await all("SELECT id, name, price, type FROM menu_items");
+    const paymentMethods = await all("SELECT id FROM payment_methods");
+
+    if (tables.length > 0 && menuItems.length > 0) {
+      for (let i = 1; i <= 60; i++) {
+        const daysAgo = Math.floor(Math.random() * 30);
+        const hoursAgo = Math.floor(Math.random() * 24);
+        const minsAgo = Math.floor(Math.random() * 60);
+        
+        const date = new Date();
+        date.setDate(date.getDate() - daysAgo);
+        date.setHours(date.getHours() - hoursAgo);
+        date.setMinutes(date.getMinutes() - minsAgo);
+        const dateStr = date.toISOString().replace('T', ' ').substring(0, 19);
+
+        const table = tables[Math.floor(Math.random() * tables.length)];
+        const orderTypes = ["DINE_IN", "TAKEAWAY", "DELIVERY", "COUNTER"];
+        const orderType = orderTypes[Math.floor(Math.random() * orderTypes.length)];
+        
+        const numItems = Math.floor(Math.random() * 3) + 1;
+        const selectedItems = [];
+        let totalPrice = 0;
+        for (let j = 0; j < numItems; j++) {
+          const item = menuItems[Math.floor(Math.random() * menuItems.length)];
+          const quantity = Math.floor(Math.random() * 2) + 1;
+          selectedItems.push({ item, quantity });
+          totalPrice += item.price * quantity;
+        }
+
+        const orderResult = await run(
+          `INSERT INTO orders (table_id, status, payment_status, total_price, order_type, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [table.id, "archived", "paid", totalPrice, orderType, dateStr]
+        );
+        const orderId = orderResult.lastID;
+
+        for (const sel of selectedItems) {
+          await run(
+            `INSERT INTO order_items (order_id, menu_item_id, quantity, price_at_order_time)
+             VALUES (?, ?, ?, ?)`,
+            [orderId, sel.item.id, sel.quantity, sel.item.price]
+          );
+        }
+
+        const payMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
+        await run(
+          `INSERT INTO payments (order_id, payment_method_id, amount_paid, payment_date)
+           VALUES (?, ?, ?, ?)`,
+          [orderId, payMethod.id, totalPrice, dateStr]
+        );
+
+        if (Math.random() < 0.25) {
+          const ratingStaff = Math.floor(Math.random() * 3) + 3;
+          const ratingApp = Math.floor(Math.random() * 3) + 3;
+          const ratingClean = Math.floor(Math.random() * 3) + 3;
+          const ratingFood = Math.floor(Math.random() * 3) + 3;
+          const ratingAtmos = Math.floor(Math.random() * 3) + 3;
+          const ratingValue = Math.floor(Math.random() * 3) + 3;
+          const viewToken = `feedback_token_${orderId}_${Math.random().toString(36).substring(2, 7)}`;
+          
+          await run(
+            `INSERT INTO customer_feedback (view_token, table_id, table_number, order_id, sender_name, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [viewToken, table.id, table.table_number, orderId, `Guest ${orderId}`, "Great food and prompt service!", ratingStaff, ratingApp, ratingClean, ratingFood, ratingAtmos, ratingValue, dateStr]
+          );
+        }
+      }
+
+      for (let i = 0; i < 40; i++) {
+        const daysAgo = Math.floor(Math.random() * 30);
+        const hoursAgo = Math.floor(Math.random() * 24);
+        
+        const date = new Date();
+        date.setDate(date.getDate() - daysAgo);
+        date.setHours(date.getHours() - hoursAgo);
+        const dateStr = date.toISOString().replace('T', ' ').substring(0, 19);
+
+        const table = tables[Math.floor(Math.random() * tables.length)];
+        await run(
+          `INSERT INTO staff_assistance_requests (table_id, table_number, requested_at, acknowledged_at, archived_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [table.id, table.table_number, dateStr, dateStr, dateStr]
+        );
+      }
+    }
+  }
+
   console.log("Seed data ready");
 };
 

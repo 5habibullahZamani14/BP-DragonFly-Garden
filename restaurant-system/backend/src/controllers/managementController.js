@@ -156,7 +156,7 @@ const deriveEmployeeJwtRole = (department) => {
 /* getFinanceData returns comprehensive financial data for the dashboard (P&L, Revenue, Cost of Goods Sold) */
 const getFinanceData = async (req, res, next) => {
   try {
-    const orders = await all("SELECT id, total_price, order_type, created_at FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
+    const orders = await all("SELECT id, total_price, order_type, table_id, created_at FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
     
     const items = await all(`
       SELECT 
@@ -204,15 +204,16 @@ const getFinanceData = async (req, res, next) => {
       WHERE o.payment_status = 'paid' OR o.status = 'archived'
     `);
 
-    const feedbackRatings = await all(`
+    const feedbacks = await all(`
       SELECT 
-        AVG(rating_staff) as avg_staff,
-        AVG(rating_app) as avg_app,
-        AVG(rating_cleanliness) as avg_cleanliness,
-        AVG(rating_food) as avg_food,
-        AVG(rating_atmosphere) as avg_atmosphere,
-        AVG(rating_value) as avg_value,
-        COUNT(*) as total_feedbacks
+        rating_staff, 
+        rating_app, 
+        rating_cleanliness, 
+        rating_food, 
+        rating_atmosphere, 
+        rating_value,
+        created_at,
+        order_id
       FROM customer_feedback
     `);
 
@@ -232,6 +233,12 @@ const getFinanceData = async (req, res, next) => {
         ii.max_stock,
         ii.unit,
         ii.low_stock_threshold_percent,
+        (
+          SELECT GROUP_CONCAT(DISTINCT mi.type)
+          FROM menu_item_ingredients mii
+          JOIN menu_items mi ON mii.menu_item_id = mi.id
+          WHERE mii.inventory_item_id = ii.id
+        ) as linked_types,
         IFNULL(
           (
             SELECT SUM(oi.quantity * mii.quantity_required)
@@ -257,17 +264,27 @@ const getFinanceData = async (req, res, next) => {
         max_stock: ii.max_stock,
         unit: ii.unit,
         burn_rate_day: burnRatePerDay,
-        days_remaining: daysRemaining !== null ? parseFloat(daysRemaining.toFixed(1)) : null
+        days_remaining: daysRemaining !== null ? parseFloat(daysRemaining.toFixed(1)) : null,
+        linked_types: ii.linked_types || ""
       };
     });
+
+    const recipeIngredients = await all(`
+      SELECT menu_item_id, inventory_item_id, quantity_required
+      FROM menu_item_ingredients
+    `);
+
+    const helpRequests = await all("SELECT table_id, requested_at FROM staff_assistance_requests");
 
     res.json({
       orders,
       items: itemsWithCosts,
       order_items: orderItems,
-      feedback_ratings: feedbackRatings[0] || null,
+      feedbacks: feedbacks,
       help_stats: helpStats,
-      inventory_forecast: inventoryForecastNormalized
+      inventory_forecast: inventoryForecastNormalized,
+      recipe_ingredients: recipeIngredients,
+      help_requests: helpRequests
     });
   } catch (error) { next(error); }
 };

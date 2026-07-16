@@ -295,7 +295,7 @@ export type ManagerProfile = {
 };
 
 export type FinanceData = {
-  orders: { id: number; total_price: number; order_type: string; created_at: string }[];
+  orders: { id: number; total_price: number; order_type: string; table_id: number | null; created_at: string }[];
   items: {
     id: number;
     name: string;
@@ -313,15 +313,16 @@ export type FinanceData = {
     type: string;
     created_at: string;
   }[];
-  feedback_ratings: {
-    avg_staff: number | null;
-    avg_app: number | null;
-    avg_cleanliness: number | null;
-    avg_food: number | null;
-    avg_atmosphere: number | null;
-    avg_value: number | null;
-    total_feedbacks: number;
-  } | null;
+  feedbacks: {
+    rating_staff: number | null;
+    rating_app: number | null;
+    rating_cleanliness: number | null;
+    rating_food: number | null;
+    rating_atmosphere: number | null;
+    rating_value: number | null;
+    created_at: string;
+    order_id: number | null;
+  }[];
   help_stats: {
     day_of_week: string;
     count: number;
@@ -334,6 +335,16 @@ export type FinanceData = {
     unit: string;
     burn_rate_day: number;
     days_remaining: number | null;
+    linked_types: string;
+  }[];
+  recipe_ingredients: {
+    menu_item_id: number;
+    inventory_item_id: number;
+    quantity_required: number;
+  }[];
+  help_requests: {
+    table_id: number;
+    requested_at: string;
   }[];
 };
 
