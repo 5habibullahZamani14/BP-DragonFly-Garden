@@ -30,9 +30,10 @@ import { fetchLogs } from "@/lib/api";
 import type { LogEntry } from "@/lib/api";
 import { FileText, Download, Activity, Search, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import ChartInfo from "@/components/ui/ChartInfo";
-import ChartTickWrap from "@/components/ui/ChartTickWrap";
-import ChartExport from "@/components/ui/ChartExport";
+import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartEmptyState from "@/components/ui/ChartEmptyState";
+import CardFilters from "@/components/ui/CardFilters";
+import { matchesTimeframe, type TimeframeValue } from "@/lib/parseDbTimestamp";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -44,19 +45,25 @@ export const LogsTab = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [timeFrame, setTimeFrame] = useState<string>("all");
+  const [orderChartTimeframe, setOrderChartTimeframe] = useState<TimeframeValue>("all");
+  const [orderChartStartDate, setOrderChartStartDate] = useState("");
+  const [orderChartEndDate, setOrderChartEndDate] = useState("");
+  const [systemChartTimeframe, setSystemChartTimeframe] = useState<TimeframeValue>("all");
+  const [systemChartStartDate, setSystemChartStartDate] = useState("");
+  const [systemChartEndDate, setSystemChartEndDate] = useState("");
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
 
   const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchLogs(categoryFilter);
+      const data = await fetchLogs("");
       setLogs(data || []);
     } catch (e) {
       safeConsoleError("Failed to load logs", e);
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter]);
+  }, []);
 
   useEffect(() => {
     loadLogs();
@@ -87,9 +94,13 @@ export const LogsTab = () => {
       
       result = result.filter(log => new Date(log.timestamp) >= cutoff);
     }
+
+    if (categoryFilter) {
+      result = result.filter(log => log.category === categoryFilter);
+    }
     
     return result;
-  }, [logs, searchQuery, timeFrame]);
+  }, [logs, searchQuery, timeFrame, categoryFilter]);
 
   const downloadExcel = async () => {
     if (filteredLogs.length === 0) return;
@@ -256,13 +267,41 @@ export const LogsTab = () => {
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // top 5 actions for clarity
+      .slice(0, 5);
   };
 
-  const orderLogs = logs.filter(l => l.category === 'ORDER');
-  const systemLogs = logs.filter(l => l.category !== 'ORDER');
-  const orderChartData = getActionCounts(orderLogs);
-  const systemChartData = getActionCounts(systemLogs);
+  const filterLogsByTimeframe = (
+    logArray: LogEntry[],
+    timeframe: TimeframeValue,
+    startDate: string,
+    endDate: string
+  ) => {
+    if (timeframe === "all") return logArray;
+    return logArray.filter((log) => matchesTimeframe(log.timestamp, timeframe, startDate, endDate));
+  };
+
+  const orderLogs = useMemo(
+    () => filterLogsByTimeframe(
+      logs.filter(l => l.category === 'ORDER'),
+      orderChartTimeframe,
+      orderChartStartDate,
+      orderChartEndDate
+    ),
+    [logs, orderChartTimeframe, orderChartStartDate, orderChartEndDate]
+  );
+
+  const systemLogs = useMemo(
+    () => filterLogsByTimeframe(
+      logs.filter(l => l.category !== 'ORDER'),
+      systemChartTimeframe,
+      systemChartStartDate,
+      systemChartEndDate
+    ),
+    [logs, systemChartTimeframe, systemChartStartDate, systemChartEndDate]
+  );
+
+  const orderChartData = useMemo(() => getActionCounts(orderLogs), [orderLogs]);
+  const systemChartData = useMemo(() => getActionCounts(systemLogs), [systemLogs]);
 
   if (loading && logs.length === 0) {
     return (
@@ -294,7 +333,19 @@ export const LogsTab = () => {
               <Activity className="h-5 w-5 text-emerald-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.orderRev")}</h3>
             </div>
-            <div id="order-events-chart" className="h-[380px] w-full">
+            <CardFilters
+              label={t("m.filterOrderEvents", "Filter for Order Events")}
+              timeframe={orderChartTimeframe}
+              onTimeframeChange={setOrderChartTimeframe}
+              startDate={orderChartStartDate}
+              onStartDateChange={setOrderChartStartDate}
+              endDate={orderChartEndDate}
+              onEndDateChange={setOrderChartEndDate}
+            />
+            <div id="order-events-chart" className="relative h-[380px] w-full">
+              {orderChartData.length === 0 && (
+                <ChartEmptyState message={t("m.noChartData", "No order events match the selected filters.")} />
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={orderChartData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -305,10 +356,12 @@ export const LogsTab = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <ChartInfo textKey="m.orderEventsInfo" />
-              <ChartExport targetId="order-events-chart" data={orderChartData} fileName="order-events" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.orderEventsInfo"
+              targetId="order-events-chart"
+              data={orderChartData}
+              fileName="order-events"
+            />
           </div>
 
           {/* System & Inventory Chart */}
@@ -317,7 +370,19 @@ export const LogsTab = () => {
               <Activity className="h-5 w-5 text-blue-500" />
               <h3 className="font-1 text-xl font-bold" style={{ color: "hsl(140, 30%, 20%)" }}>{t("m.sysInv")}</h3>
             </div>
-            <div id="system-events-chart" className="h-[380px] w-full">
+            <CardFilters
+              label={t("m.filterSystemEvents", "Filter for System Events")}
+              timeframe={systemChartTimeframe}
+              onTimeframeChange={setSystemChartTimeframe}
+              startDate={systemChartStartDate}
+              onStartDateChange={setSystemChartStartDate}
+              endDate={systemChartEndDate}
+              onEndDateChange={setSystemChartEndDate}
+            />
+            <div id="system-events-chart" className="relative h-[380px] w-full">
+              {systemChartData.length === 0 && (
+                <ChartEmptyState message={t("m.noChartData", "No system events match the selected filters.")} />
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={systemChartData} margin={{ top: 10, right: 10, left: -20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -328,25 +393,40 @@ export const LogsTab = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <ChartInfo textKey="m.systemEventsInfo" />
-              <ChartExport targetId="system-events-chart" data={systemChartData} fileName="system-events" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.systemEventsInfo"
+              targetId="system-events-chart"
+              data={systemChartData}
+              fileName="system-events"
+            />
           </div>
         </div>
       )}
 
       {/* Detailed Audit Log Table */}
       <div className="bg-white/80 backdrop-blur-md border border-white/50 shadow-xl rounded-3xl overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-foreground/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40">
-          <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="p-6 border-b border-foreground/5 flex flex-col gap-4 bg-white/40">
+          <div className="flex items-center gap-3">
             <h3 className="font-1 text-xl font-bold flex items-center gap-2" style={{ color: "hsl(140, 30%, 20%)" }}>
               <FileText className="h-5 w-5 text-accent" />
               {t("m.auditTrail")}
             </h3>
           </div>
+
+          <CardFilters
+            label={t("m.filterAuditTrail", "Filter for Audit Trail")}
+            secondaryValue={categoryFilter || "all"}
+            onSecondaryChange={(val) => setCategoryFilter(val === "all" ? "" : val)}
+            secondaryOptions={[
+              { value: "all", label: t("m.allCategories") },
+              { value: "EMPLOYEE", label: t("m.logCatEmployees") },
+              { value: "INVENTORY", label: t("m.logCatInventory") },
+              { value: "ORDER", label: t("m.logCatOrders") },
+              { value: "SYSTEM", label: t("m.logCatSystem") },
+            ]}
+          />
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
             {/* Search Bar */}
             <div className="relative group flex-1 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 group-focus-within:text-primary transition-colors" />
@@ -374,18 +454,7 @@ export const LogsTab = () => {
               </select>
             </div>
 
-            {/* Category Filter */}
-            <select 
-              className="h-10 w-full sm:w-auto rounded-full border-none bg-white shadow-sm px-4 py-1 text-sm font-semibold outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all text-foreground/70"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">{t("m.allCategories")}</option>
-              <option value="EMPLOYEE">{t("m.logCatEmployees")}</option>
-              <option value="INVENTORY">{t("m.logCatInventory")}</option>
-              <option value="ORDER">{t("m.logCatOrders")}</option>
-              <option value="SYSTEM">{t("m.logCatSystem")}</option>
-            </select>
+            {/* Category filter moved to CardFilters above */}
 
             <Button
               onClick={downloadExcel}

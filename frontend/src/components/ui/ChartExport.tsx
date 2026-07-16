@@ -1,9 +1,11 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 type ChartExportProps = {
   targetId: string;
   data?: any[];
   fileName?: string;
+  className?: string;
 };
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -59,7 +61,7 @@ async function svgToJpeg(svg: SVGElement, scale = 2) {
   return new Promise<Blob | null>((res) => canvas.toBlob(blob => res(blob), "image/jpeg", 0.92));
 }
 
-export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileName = "chart" }) => {
+export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileName = "chart", className }) => {
   const exportPng = async () => {
     const container = document.getElementById(targetId);
     if (!container) return alert("Chart container not found");
@@ -126,7 +128,7 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
   };
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div className={cn("mt-2 flex flex-wrap items-center gap-2", className)}>
       <div className="text-sm text-gray-600">Export:</div>
       <button onClick={exportPng} className="px-2 py-1 bg-gray-100 rounded text-sm">PNG</button>
       <button onClick={exportJpeg} className="px-2 py-1 bg-gray-100 rounded text-sm">JPG</button>

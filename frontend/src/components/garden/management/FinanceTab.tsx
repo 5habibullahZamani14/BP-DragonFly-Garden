@@ -11,11 +11,10 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Cell, LineChart, Line, Legend
 } from "recharts";
-import ChartInfo from "@/components/ui/ChartInfo";
-import ChartTickWrap from "@/components/ui/ChartTickWrap";
-import ChartExport from "@/components/ui/ChartExport";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartEmptyState from "@/components/ui/ChartEmptyState";
+import CardFilters from "@/components/ui/CardFilters";
+import { getLocalDateString, matchesTimeframe, parseDbTimestamp, type TimeframeValue } from "@/lib/parseDbTimestamp";
 import { safeConsoleError } from "@/lib/safeConsole";
 
 export const FinanceTab = () => {
@@ -25,43 +24,43 @@ export const FinanceTab = () => {
   const [topItemsCount, setTopItemsCount] = useState<number>(5);
 
   // --- Filter States for Card 1: Overview Metrics ---
-  const [metricsTimeframe, setMetricsTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [metricsTimeframe, setMetricsTimeframe] = useState<TimeframeValue>('all');
   const [metricsStartDate, setMetricsStartDate] = useState<string>("");
   const [metricsEndDate, setMetricsEndDate] = useState<string>("");
   const [metricsProductType, setMetricsProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 2: Revenue Timeline Chart ---
-  const [timelineTimeframe, setTimelineTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [timelineTimeframe, setTimelineTimeframe] = useState<TimeframeValue>('all');
   const [timelineStartDate, setTimelineStartDate] = useState<string>("");
   const [timelineEndDate, setTimelineEndDate] = useState<string>("");
   const [timelineProductType, setTimelineProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 3: Top Profit Drivers ---
-  const [driversTimeframe, setDriversTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [driversTimeframe, setDriversTimeframe] = useState<TimeframeValue>('all');
   const [driversStartDate, setDriversStartDate] = useState<string>("");
   const [driversEndDate, setDriversEndDate] = useState<string>("");
   const [driversProductType, setDriversProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 4: Customer Satisfaction ---
-  const [feedbackTimeframe, setFeedbackTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [feedbackTimeframe, setFeedbackTimeframe] = useState<TimeframeValue>('all');
   const [feedbackStartDate, setFeedbackStartDate] = useState<string>("");
   const [feedbackEndDate, setFeedbackEndDate] = useState<string>("");
   const [feedbackProductType, setFeedbackProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 5: Floor Assistance ---
-  const [assistanceTimeframe, setAssistanceTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [assistanceTimeframe, setAssistanceTimeframe] = useState<TimeframeValue>('all');
   const [assistanceStartDate, setAssistanceStartDate] = useState<string>("");
   const [assistanceEndDate, setAssistanceEndDate] = useState<string>("");
   const [assistanceProductType, setAssistanceProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 6: Order Type Popularity ---
-  const [popularityTimeframe, setPopularityTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [popularityTimeframe, setPopularityTimeframe] = useState<TimeframeValue>('all');
   const [popularityStartDate, setPopularityStartDate] = useState<string>("");
   const [popularityEndDate, setPopularityEndDate] = useState<string>("");
   const [popularityProductType, setPopularityProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
   // --- Filter States for Card 7: Stock Depletion Forecast ---
-  const [stockTimeframe, setStockTimeframe] = useState<'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom'>('all');
+  const [stockTimeframe, setStockTimeframe] = useState<TimeframeValue>('all');
   const [stockStartDate, setStockStartDate] = useState<string>("");
   const [stockEndDate, setStockEndDate] = useState<string>("");
   const [stockProductType, setStockProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
@@ -81,9 +80,8 @@ export const FinanceTab = () => {
     loadData();
   }, []);
 
-  // Shared Helper function to filter order items
   const filterOrderItems = (
-    timeframeVal: string,
+    timeframeVal: TimeframeValue,
     productTypeVal: string,
     startDateVal: string,
     endDateVal: string
@@ -91,128 +89,17 @@ export const FinanceTab = () => {
     if (!data) return [];
     let items = data.order_items || [];
 
-    // 1. Filter by product type
     if (productTypeVal !== 'all') {
       items = items.filter(item => item.type === productTypeVal);
     }
 
-    // 2. Filter by timeframe
     if (timeframeVal !== 'all') {
-      const now = new Date();
-      const getLocalDateString = (d: Date) => d.toISOString().split('T')[0];
-      const todayStr = getLocalDateString(now);
-      
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = getLocalDateString(yesterday);
-
-      items = items.filter(item => {
-        const itemDate = new Date(item.created_at);
-        const itemDateStr = getLocalDateString(itemDate);
-
-        if (timeframeVal === 'today') {
-          return itemDateStr === todayStr;
-        }
-        if (timeframeVal === 'yesterday') {
-          return itemDateStr === yesterdayStr;
-        }
-        if (timeframeVal === 'week') {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          return itemDate >= sevenDaysAgo;
-        }
-        if (timeframeVal === 'month') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          return itemDate >= thirtyDaysAgo;
-        }
-        if (timeframeVal === 'custom') {
-          if (startDateVal) {
-            const start = new Date(startDateVal);
-            start.setHours(0, 0, 0, 0);
-            if (itemDate < start) return false;
-          }
-          if (endDateVal) {
-            const end = new Date(endDateVal);
-            end.setHours(23, 59, 59, 999);
-            if (itemDate > end) return false;
-          }
-          return true;
-        }
-        return true;
-      });
+      items = items.filter(item =>
+        matchesTimeframe(item.created_at, timeframeVal, startDateVal, endDateVal)
+      );
     }
 
     return items;
-  };
-
-  // Reusable sub-renderer for card filters
-  const renderCardFilters = (
-    label: string,
-    timeframe: string,
-    setTimeframe: (val: any) => void,
-    productType: string,
-    setProductType: (val: any) => void,
-    startDate: string,
-    setStartDate: (val: string) => void,
-    endDate: string,
-    setEndDate: (val: string) => void
-  ) => {
-    return (
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-gray-50/70 p-3 rounded-2xl border border-gray-100/80 mb-4 text-xs">
-        <span className="font-bold text-gray-500 uppercase tracking-wider text-[10px] sm:mr-2">
-          {label}
-        </span>
-        <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
-          {/* Timeframe Select */}
-          <Select value={timeframe} onValueChange={setTimeframe}>
-            <SelectTrigger className="h-8 text-xs bg-white rounded-lg border-gray-200 min-w-[110px] w-auto">
-              <SelectValue placeholder={t("m.timeframe")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("m.allTime")}</SelectItem>
-              <SelectItem value="today">{t("m.today")}</SelectItem>
-              <SelectItem value="yesterday">{t("m.yesterday")}</SelectItem>
-              <SelectItem value="week">{t("m.last7Days")}</SelectItem>
-              <SelectItem value="month">{t("m.last30Days")}</SelectItem>
-              <SelectItem value="custom">{t("m.customRange")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Product Type Select */}
-          <Select value={productType} onValueChange={setProductType}>
-            <SelectTrigger className="h-8 text-xs bg-white rounded-lg border-gray-200 min-w-[110px] w-auto">
-              <SelectValue placeholder={t("m.productType")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("m.allCategories")}</SelectItem>
-              <SelectItem value="food">{t("m.food")}</SelectItem>
-              <SelectItem value="drink">{t("m.drink")}</SelectItem>
-              <SelectItem value="merchandise">{t("m.merchandise")}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Custom Date Range Picker */}
-          {timeframe === "custom" && (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-              <Input
-                type="date"
-                className="h-8 text-xs bg-white rounded-lg border-gray-200 w-[120px]"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-              <span className="text-[10px] text-gray-400">to</span>
-              <Input
-                type="date"
-                className="h-8 text-xs bg-white rounded-lg border-gray-200 w-[120px]"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
   };
 
   // --- Compute 1. Financial Overview Metrics ---
@@ -247,14 +134,22 @@ export const FinanceTab = () => {
   // --- Compute 2. Revenue Timeline Chart ---
   const revenueByDay = useMemo(() => {
     const filtered = filterOrderItems(timelineTimeframe, timelineProductType, timelineStartDate, timelineEndDate);
-    const days: Record<string, number> = {};
+    const days: Record<string, { date: string; total: number; sortKey: number }> = {};
     
     filtered.forEach(oi => {
-      const date = new Date(oi.created_at).toLocaleDateString('en-MY', { month: 'short', day: 'numeric' });
-      days[date] = (days[date] || 0) + (oi.quantity * oi.price_at_order_time);
+      const parsed = parseDbTimestamp(oi.created_at);
+      if (!parsed) return;
+      const date = parsed.toLocaleDateString('en-MY', { month: 'short', day: 'numeric' });
+      const sortKey = parsed.getTime();
+      if (!days[date]) {
+        days[date] = { date, total: 0, sortKey };
+      }
+      days[date].total += oi.quantity * oi.price_at_order_time;
     });
 
-    return Object.entries(days).map(([date, total]) => ({ date, total }));
+    return Object.values(days)
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map(({ date, total }) => ({ date, total }));
   }, [data, timelineTimeframe, timelineProductType, timelineStartDate, timelineEndDate]);
 
   // --- Compute 3. Top Profit Drivers Chart ---
@@ -300,45 +195,9 @@ export const FinanceTab = () => {
     
     // Timeframe Filter
     if (feedbackTimeframe !== 'all') {
-      const now = new Date();
-      const getLocalDateString = (d: Date) => d.toISOString().split('T')[0];
-      const todayStr = getLocalDateString(now);
-      
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = getLocalDateString(yesterday);
-
-      filteredFeedbacks = filteredFeedbacks.filter(fb => {
-        const fbDate = new Date(fb.created_at);
-        const fbDateStr = getLocalDateString(fbDate);
-
-        if (feedbackTimeframe === 'today') return fbDateStr === todayStr;
-        if (feedbackTimeframe === 'yesterday') return fbDateStr === yesterdayStr;
-        if (feedbackTimeframe === 'week') {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          return fbDate >= sevenDaysAgo;
-        }
-        if (feedbackTimeframe === 'month') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          return fbDate >= thirtyDaysAgo;
-        }
-        if (feedbackTimeframe === 'custom') {
-          if (feedbackStartDate) {
-            const start = new Date(feedbackStartDate);
-            start.setHours(0, 0, 0, 0);
-            if (fbDate < start) return false;
-          }
-          if (feedbackEndDate) {
-            const end = new Date(feedbackEndDate);
-            end.setHours(23, 59, 59, 999);
-            if (fbDate > end) return false;
-          }
-          return true;
-        }
-        return true;
-      });
+      filteredFeedbacks = filteredFeedbacks.filter(fb =>
+        matchesTimeframe(fb.created_at, feedbackTimeframe, feedbackStartDate, feedbackEndDate)
+      );
     }
 
     // Product Type Filter
@@ -407,51 +266,14 @@ export const FinanceTab = () => {
 
     // Timeframe Filter
     if (assistanceTimeframe !== 'all') {
-      const now = new Date();
-      const getLocalDateString = (d: Date) => d.toISOString().split('T')[0];
-      const todayStr = getLocalDateString(now);
-      
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = getLocalDateString(yesterday);
-
-      filteredHelp = filteredHelp.filter(hr => {
-        const hrDate = new Date(hr.requested_at);
-        const hrDateStr = getLocalDateString(hrDate);
-
-        if (assistanceTimeframe === 'today') return hrDateStr === todayStr;
-        if (assistanceTimeframe === 'yesterday') return hrDateStr === yesterdayStr;
-        if (assistanceTimeframe === 'week') {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          return hrDate >= sevenDaysAgo;
-        }
-        if (assistanceTimeframe === 'month') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          return hrDate >= thirtyDaysAgo;
-        }
-        if (assistanceTimeframe === 'custom') {
-          if (assistanceStartDate) {
-            const start = new Date(assistanceStartDate);
-            start.setHours(0, 0, 0, 0);
-            if (hrDate < start) return false;
-          }
-          if (assistanceEndDate) {
-            const end = new Date(assistanceEndDate);
-            end.setHours(23, 59, 59, 999);
-            if (hrDate > end) return false;
-          }
-          return true;
-        }
-        return true;
-      });
+      filteredHelp = filteredHelp.filter(hr =>
+        matchesTimeframe(hr.requested_at, assistanceTimeframe, assistanceStartDate, assistanceEndDate)
+      );
     }
 
     // Product Type Filter (Associated with table orders of selected type on same day)
     if (assistanceProductType !== 'all') {
       const validTableDates = new Set<string>();
-      const getLocalDateString = (d: Date) => d.toISOString().split('T')[0];
 
       const matchingOrderIds = new Set<number>();
       data.order_items.forEach(oi => {
@@ -462,14 +284,17 @@ export const FinanceTab = () => {
       
       data.orders.forEach(o => {
         if (o.table_id && matchingOrderIds.has(o.id)) {
-          const dateStr = getLocalDateString(new Date(o.created_at));
-          validTableDates.add(`${o.table_id}_${dateStr}`);
+          const parsed = parseDbTimestamp(o.created_at);
+          if (parsed) {
+            validTableDates.add(`${o.table_id}_${getLocalDateString(parsed)}`);
+          }
         }
       });
       
       filteredHelp = filteredHelp.filter(hr => {
-        const hrDateStr = getLocalDateString(new Date(hr.requested_at));
-        return validTableDates.has(`${hr.table_id}_${hrDateStr}`);
+        const parsed = parseDbTimestamp(hr.requested_at);
+        if (!parsed) return false;
+        return validTableDates.has(`${hr.table_id}_${getLocalDateString(parsed)}`);
       });
     }
 
@@ -477,7 +302,9 @@ export const FinanceTab = () => {
     dayNames.forEach(name => { counts[name] = 0; });
     
     filteredHelp.forEach(row => {
-      const dayIndex = new Date(row.requested_at).getDay();
+      const parsed = parseDbTimestamp(row.requested_at);
+      if (!parsed) return;
+      const dayIndex = parsed.getDay();
       if (dayIndex >= 0 && dayIndex < 7) {
         counts[dayNames[dayIndex]] += 1;
       }
@@ -502,45 +329,9 @@ export const FinanceTab = () => {
 
     // Timeframe Filter
     if (popularityTimeframe !== 'all') {
-      const now = new Date();
-      const getLocalDateString = (d: Date) => d.toISOString().split('T')[0];
-      const todayStr = getLocalDateString(now);
-      
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = getLocalDateString(yesterday);
-
-      filteredOrders = filteredOrders.filter(o => {
-        const oDate = new Date(o.created_at);
-        const oDateStr = getLocalDateString(oDate);
-
-        if (popularityTimeframe === 'today') return oDateStr === todayStr;
-        if (popularityTimeframe === 'yesterday') return oDateStr === yesterdayStr;
-        if (popularityTimeframe === 'week') {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          return oDate >= sevenDaysAgo;
-        }
-        if (popularityTimeframe === 'month') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          return oDate >= thirtyDaysAgo;
-        }
-        if (popularityTimeframe === 'custom') {
-          if (popularityStartDate) {
-            const start = new Date(popularityStartDate);
-            start.setHours(0, 0, 0, 0);
-            if (oDate < start) return false;
-          }
-          if (popularityEndDate) {
-            const end = new Date(popularityEndDate);
-            end.setHours(23, 59, 59, 999);
-            if (oDate > end) return false;
-          }
-          return true;
-        }
-        return true;
-      });
+      filteredOrders = filteredOrders.filter(o =>
+        matchesTimeframe(o.created_at, popularityTimeframe, popularityStartDate, popularityEndDate)
+      );
     }
 
     // Product Type Filter (Only count orders containing the selected type)
@@ -554,12 +345,14 @@ export const FinanceTab = () => {
       filteredOrders = filteredOrders.filter(o => matchingOrderIds.has(o.id));
     }
 
-    const days: Record<string, { date: string; dine_in: number; takeaway: number; delivery: number; counter: number }> = {};
+    const days: Record<string, { date: string; dine_in: number; takeaway: number; delivery: number; counter: number; sortKey: number }> = {};
     
     filteredOrders.forEach(order => {
-      const date = new Date(order.created_at).toLocaleDateString('en-MY', { month: 'short', day: 'numeric' });
+      const parsed = parseDbTimestamp(order.created_at);
+      if (!parsed) return;
+      const date = parsed.toLocaleDateString('en-MY', { month: 'short', day: 'numeric' });
       if (!days[date]) {
-        days[date] = { date, dine_in: 0, takeaway: 0, delivery: 0, counter: 0 };
+        days[date] = { date, dine_in: 0, takeaway: 0, delivery: 0, counter: 0, sortKey: parsed.getTime() };
       }
       
       const type = order.order_type || "DINE_IN";
@@ -569,7 +362,7 @@ export const FinanceTab = () => {
       else if (type === "COUNTER") days[date].counter += 1;
     });
 
-    return Object.values(days);
+    return Object.values(days).sort((a, b) => a.sortKey - b.sortKey);
   }, [data, popularityTimeframe, popularityProductType, popularityStartDate, popularityEndDate]);
 
   // --- Compute 7. Stock Depletion Forecast ---
@@ -597,12 +390,15 @@ export const FinanceTab = () => {
       }
     } else if (stockTimeframe === 'all') {
       if (data.orders.length > 0) {
-        const timestamps = data.orders.map(o => new Date(o.created_at).getTime());
-        const minTime = Math.min(...timestamps);
-        const maxTime = Math.max(...timestamps);
-        const diffTime = Math.abs(maxTime - minTime);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        daysCount = diffDays > 0 ? diffDays : 1;
+        const timestamps = data.orders
+          .map(o => parseDbTimestamp(o.created_at)?.getTime())
+          .filter((t): t is number => t != null);
+        if (timestamps.length > 0) {
+          const minTime = Math.min(...timestamps);
+          const maxTime = Math.max(...timestamps);
+          const diffDays = Math.ceil(Math.abs(maxTime - minTime) / (1000 * 60 * 60 * 24));
+          daysCount = diffDays > 0 ? diffDays : 1;
+        }
       }
     }
 
@@ -671,13 +467,17 @@ export const FinanceTab = () => {
       </div>
 
       {/* Overview Metrics Section Filter */}
-      {renderCardFilters(
-        "Filter for Financial Metrics",
-        metricsTimeframe, setMetricsTimeframe,
-        metricsProductType, setMetricsProductType,
-        metricsStartDate, setMetricsStartDate,
-        metricsEndDate, setMetricsEndDate
-      )}
+      <CardFilters
+        label="Filter for Financial Metrics"
+        timeframe={metricsTimeframe}
+        onTimeframeChange={setMetricsTimeframe}
+        productType={metricsProductType}
+        onProductTypeChange={setMetricsProductType}
+        startDate={metricsStartDate}
+        onStartDateChange={setMetricsStartDate}
+        endDate={metricsEndDate}
+        onEndDateChange={setMetricsEndDate}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -743,16 +543,23 @@ export const FinanceTab = () => {
             <h3 className="font-1 text-xl font-bold text-[#142d1f]">{t("m.revenueTimeline")}</h3>
           </div>
 
-          {renderCardFilters(
-            "Filter for Revenue Timeline",
-            timelineTimeframe, setTimelineTimeframe,
-            timelineProductType, setTimelineProductType,
-            timelineStartDate, setTimelineStartDate,
-            timelineEndDate, setTimelineEndDate
-          )}
+          <CardFilters
+            label="Filter for Revenue Timeline"
+            timeframe={timelineTimeframe}
+            onTimeframeChange={setTimelineTimeframe}
+            productType={timelineProductType}
+            onProductTypeChange={setTimelineProductType}
+            startDate={timelineStartDate}
+            onStartDateChange={setTimelineStartDate}
+            endDate={timelineEndDate}
+            onEndDateChange={setTimelineEndDate}
+          />
 
           <div className="flex-1 w-full">
-            <div id="revenue-timeline-chart" className="flex-1 w-full h-[260px]">
+            <div id="revenue-timeline-chart" className="relative flex-1 w-full h-[260px]">
+              {revenueByDay.length === 0 && (
+                <ChartEmptyState message={t("m.noChartData", "No paid order data available for the selected filters.")} />
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={revenueByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
@@ -769,10 +576,12 @@ export const FinanceTab = () => {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-2 flex justify-between items-center px-2">
-              <ChartInfo textKey="m.revenueTimelineInfo" />
-              <ChartExport targetId="revenue-timeline-chart" data={revenueByDay} fileName="revenue-timeline" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.revenueTimelineInfo"
+              targetId="revenue-timeline-chart"
+              data={revenueByDay}
+              fileName="revenue-timeline"
+            />
           </div>
         </div>
 
@@ -814,16 +623,23 @@ export const FinanceTab = () => {
             </div>
           </div>
 
-          {renderCardFilters(
-            "Filter for Top Profit Drivers",
-            driversTimeframe, setDriversTimeframe,
-            driversProductType, setDriversProductType,
-            driversStartDate, setDriversStartDate,
-            driversEndDate, setDriversEndDate
-          )}
+          <CardFilters
+            label="Filter for Top Profit Drivers"
+            timeframe={driversTimeframe}
+            onTimeframeChange={setDriversTimeframe}
+            productType={driversProductType}
+            onProductTypeChange={setDriversProductType}
+            startDate={driversStartDate}
+            onStartDateChange={setDriversStartDate}
+            endDate={driversEndDate}
+            onEndDateChange={setDriversEndDate}
+          />
 
           <div className="w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
-            <div id="top-profit-drivers-chart" className="w-full h-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
+            <div id="top-profit-drivers-chart" className="relative w-full h-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
+              {topItemsData.length === 0 && (
+                <ChartEmptyState message={t("m.noChartData", "No paid order data available for the selected filters.")} />
+              )}
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topItemsData} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -843,10 +659,12 @@ export const FinanceTab = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-2 px-6 flex justify-between items-center">
-              <ChartInfo textKey="m.topProfitDriversInfo" />
-              <ChartExport targetId="top-profit-drivers-chart" data={topItemsData} fileName="top-profit-drivers" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.topProfitDriversInfo"
+              targetId="top-profit-drivers-chart"
+              data={topItemsData}
+              fileName="top-profit-drivers"
+            />
           </div>
         </div>
       </div>
@@ -873,16 +691,23 @@ export const FinanceTab = () => {
               <p className="text-xs text-foreground/50 mt-1">Average ratings from customer feedback submissions (1.0 to 5.0 scale).</p>
             </div>
 
-            {renderCardFilters(
-              "Filter for Customer Satisfaction",
-              feedbackTimeframe, setFeedbackTimeframe,
-              feedbackProductType, setFeedbackProductType,
-              feedbackStartDate, setFeedbackStartDate,
-              feedbackEndDate, setFeedbackEndDate
-            )}
+            <CardFilters
+              label="Filter for Customer Satisfaction"
+              timeframe={feedbackTimeframe}
+              onTimeframeChange={setFeedbackTimeframe}
+              productType={feedbackProductType}
+              onProductTypeChange={setFeedbackProductType}
+              startDate={feedbackStartDate}
+              onStartDateChange={setFeedbackStartDate}
+              endDate={feedbackEndDate}
+              onEndDateChange={setFeedbackEndDate}
+            />
             
             <div className="flex-1 w-full h-[220px]">
-              <div id="feedback-bi-chart" className="w-full h-full">
+              <div id="feedback-bi-chart" className="relative w-full h-full">
+                {feedbackChartData.every(d => d.rating === 0) && (
+                  <ChartEmptyState message={t("m.noChartData", "No feedback ratings recorded for the selected filters.")} />
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={feedbackChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -907,10 +732,12 @@ export const FinanceTab = () => {
                 <p className="text-xs font-semibold text-indigo-800 leading-relaxed">{satisfactionAdvice}</p>
               </div>
             )}
-            <div className="mt-2 flex justify-between items-center px-2">
-              <ChartInfo textKey="m.feedbackBiInfo" />
-              <ChartExport targetId="feedback-bi-chart" data={feedbackChartData} fileName="feedback-ratings" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.feedbackBiInfo"
+              targetId="feedback-bi-chart"
+              data={feedbackChartData}
+              fileName="feedback-ratings"
+            />
           </div>
 
           {/* Card 2: Help Request Patterns */}
@@ -923,16 +750,23 @@ export const FinanceTab = () => {
               <p className="text-xs text-foreground/50 mt-1">Total customer calls for floor staff assistance grouped by day of the week.</p>
             </div>
 
-            {renderCardFilters(
-              "Filter for Floor Assistance",
-              assistanceTimeframe, setAssistanceTimeframe,
-              assistanceProductType, setAssistanceProductType,
-              assistanceStartDate, setAssistanceStartDate,
-              assistanceEndDate, setAssistanceEndDate
-            )}
+            <CardFilters
+              label="Filter for Floor Assistance"
+              timeframe={assistanceTimeframe}
+              onTimeframeChange={setAssistanceTimeframe}
+              productType={assistanceProductType}
+              onProductTypeChange={setAssistanceProductType}
+              startDate={assistanceStartDate}
+              onStartDateChange={setAssistanceStartDate}
+              endDate={assistanceEndDate}
+              onEndDateChange={setAssistanceEndDate}
+            />
             
             <div className="flex-1 w-full h-[220px]">
-              <div id="assistance-bi-chart" className="w-full h-full">
+              <div id="assistance-bi-chart" className="relative w-full h-full">
+                {helpRequestsData.every(d => d.count === 0) && (
+                  <ChartEmptyState message={t("m.noChartData", "No staff assistance requests recorded for the selected filters.")} />
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={helpRequestsData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -951,10 +785,12 @@ export const FinanceTab = () => {
                 <p className="text-xs font-semibold text-amber-800 leading-relaxed">{peakHelpDayText}</p>
               </div>
             )}
-            <div className="mt-2 flex justify-between items-center px-2">
-              <ChartInfo textKey="m.assistanceBiInfo" />
-              <ChartExport targetId="assistance-bi-chart" data={helpRequestsData} fileName="staff-assistance-calls" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.assistanceBiInfo"
+              targetId="assistance-bi-chart"
+              data={helpRequestsData}
+              fileName="staff-assistance-calls"
+            />
           </div>
 
           {/* Card 3: Order Type Popularity Timeline */}
@@ -967,16 +803,23 @@ export const FinanceTab = () => {
               <p className="text-xs text-foreground/50 mt-1">Timeline plotting order volumes across Dine-In, Takeaway, Delivery, and Counter Orders.</p>
             </div>
 
-            {renderCardFilters(
-              "Filter for Order Type Popularity",
-              popularityTimeframe, setPopularityTimeframe,
-              popularityProductType, setPopularityProductType,
-              popularityStartDate, setPopularityStartDate,
-              popularityEndDate, setPopularityEndDate
-            )}
+            <CardFilters
+              label="Filter for Order Type Popularity"
+              timeframe={popularityTimeframe}
+              onTimeframeChange={setPopularityTimeframe}
+              productType={popularityProductType}
+              onProductTypeChange={setPopularityProductType}
+              startDate={popularityStartDate}
+              onStartDateChange={setPopularityStartDate}
+              endDate={popularityEndDate}
+              onEndDateChange={setPopularityEndDate}
+            />
             
             <div className="flex-1 w-full h-[260px]">
-              <div id="popularity-bi-chart" className="w-full h-full">
+              <div id="popularity-bi-chart" className="relative w-full h-full">
+                {orderPopularityData.length === 0 && (
+                  <ChartEmptyState message={t("m.noChartData", "No paid orders found for the selected filters.")} />
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={orderPopularityData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
@@ -992,10 +835,12 @@ export const FinanceTab = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="mt-2 flex justify-between items-center px-2">
-              <ChartInfo textKey="m.popularityBiInfo" />
-              <ChartExport targetId="popularity-bi-chart" data={orderPopularityData} fileName="order-popularity-trends" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.popularityBiInfo"
+              targetId="popularity-bi-chart"
+              data={orderPopularityData}
+              fileName="order-popularity-trends"
+            />
           </div>
 
           {/* Card 4: Inventory Restocking Forecast */}
@@ -1008,15 +853,19 @@ export const FinanceTab = () => {
               <p className="text-xs text-foreground/50 mt-1">Calculates days of stock remaining based on daily burn rate computed from custom order ingredient consumption.</p>
             </div>
 
-            {renderCardFilters(
-              "Filter for Stock Depletion",
-              stockTimeframe, setStockTimeframe,
-              stockProductType, setStockProductType,
-              stockStartDate, setStockStartDate,
-              stockEndDate, setStockEndDate
-            )}
+            <CardFilters
+              label="Filter for Stock Depletion"
+              timeframe={stockTimeframe}
+              onTimeframeChange={setStockTimeframe}
+              productType={stockProductType}
+              onProductTypeChange={setStockProductType}
+              startDate={stockStartDate}
+              onStartDateChange={setStockStartDate}
+              endDate={stockEndDate}
+              onEndDateChange={setStockEndDate}
+            />
             
-            <div className="flex-1 overflow-x-auto">
+            <div id="stock-depletion-table" className="flex-1 overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
@@ -1054,9 +903,12 @@ export const FinanceTab = () => {
                 </tbody>
               </table>
             </div>
-            <div className="mt-4 flex justify-between items-center px-2">
-              <ChartInfo textKey="m.restockingBiInfo" />
-            </div>
+            <ChartCardFooter
+              infoKey="m.restockingBiInfo"
+              targetId="stock-depletion-table"
+              data={restockingForecastData}
+              fileName="stock-depletion-forecast"
+            />
           </div>
         </div>
       </div>

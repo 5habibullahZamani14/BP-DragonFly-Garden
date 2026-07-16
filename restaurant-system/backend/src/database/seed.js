@@ -274,9 +274,11 @@ const seedDatabase = async () => {
     }
   }
 
-  // Seed mock orders if there are no orders
-  const ordersCount = await get("SELECT COUNT(*) as count FROM orders");
-  if (ordersCount.count <= 10) {
+  // Seed mock orders if there are few paid/archived orders for analytics
+  const paidOrdersCount = await get(
+    "SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' OR status = 'archived'"
+  );
+  if (paidOrdersCount.count < 10) {
     console.log("Seeding mock orders and analytics data...");
     
     const tables = await all("SELECT id, table_number FROM tables");

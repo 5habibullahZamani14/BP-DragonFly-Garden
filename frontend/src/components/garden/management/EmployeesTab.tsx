@@ -32,9 +32,10 @@ import { fetchEmployees, createEmployee, updateEmployee } from "@/lib/api";
 import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import ChartInfo from "@/components/ui/ChartInfo";
+import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartEmptyState from "@/components/ui/ChartEmptyState";
+import CardFilters from "@/components/ui/CardFilters";
 import ChartTickWrap from "@/components/ui/ChartTickWrap";
-import ChartExport from "@/components/ui/ChartExport";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -45,6 +46,60 @@ export const EmployeesTab = () => {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  const [staffDistDeptFilter, setStaffDistDeptFilter] = useState("all");
+  const [staffDistEmpTypeFilter, setStaffDistEmpTypeFilter] = useState("all");
+  const [payrollDeptFilter, setPayrollDeptFilter] = useState("all");
+  const [payrollEmpTypeFilter, setPayrollEmpTypeFilter] = useState("all");
+
+  const deptFilterOptions = useMemo(
+    () => [
+      { value: "all", label: t("m.allCategories") },
+      ...Object.entries(DEPT_LABEL_KEYS)
+        .filter(([k]) => k !== "Other")
+        .map(([value, key]) => ({ value, label: t(key) })),
+    ],
+    [t]
+  );
+
+  const empTypeFilterOptions = useMemo(
+    () => [
+      { value: "all", label: t("m.allCategories") },
+      ...Object.entries(EMP_TYPE_LABEL_KEYS).map(([value, key]) => ({ value, label: t(key) })),
+    ],
+    [t]
+  );
+
+  const filterEmployees = (list: EmployeeRecord[], dept: string, empType: string) =>
+    list.filter((emp) => {
+      if (dept !== "all" && (emp.department || "Other") !== dept) return false;
+      if (empType !== "all" && (emp.employment_type || "") !== empType) return false;
+      return true;
+    });
+
+  const buildAnalytics = (list: EmployeeRecord[]) => {
+    const deptCounts: Record<string, number> = {};
+    const payroll: Record<string, number> = {};
+
+    list.forEach((emp) => {
+      const dept = emp.department || "Other";
+      deptCounts[dept] = (deptCounts[dept] || 0) + 1;
+      payroll[dept] = (payroll[dept] || 0) + Number(emp.salary || 0);
+    });
+
+    const pie = Object.entries(deptCounts).map(([name, value]) => ({
+      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
+      deptKey: name,
+      value,
+    }));
+    const bar = Object.entries(payroll).map(([name, totalSalary]) => ({
+      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
+      deptKey: name,
+      totalSalary,
+    }));
+
+    return { pie, bar };
+  };
 
   const [formData, setFormData] = useState({
     name: "",
@@ -143,36 +198,24 @@ export const EmployeesTab = () => {
 
   const { groupedEmployees, pieData, barData } = useMemo(() => {
     const grouped: Record<string, EmployeeRecord[]> = {};
-    const deptCounts: Record<string, number> = {};
-    const payroll: Record<string, number> = {};
 
     employees.forEach(emp => {
       const dept = emp.department || "Other";
-      
-      // Grouping
       if (!grouped[dept]) grouped[dept] = [];
       grouped[dept].push(emp);
-      
-      // Pie Chart (Count)
-      deptCounts[dept] = (deptCounts[dept] || 0) + 1;
-      
-      // Bar Chart (Payroll)
-      payroll[dept] = (payroll[dept] || 0) + Number(emp.salary || 0);
     });
 
-    const pie = Object.entries(deptCounts).map(([name, value]) => ({
-      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
-      deptKey: name,
-      value,
-    }));
-    const bar = Object.entries(payroll).map(([name, totalSalary]) => ({
-      name: labelForStoredValue(t, DEPT_LABEL_KEYS, name),
-      deptKey: name,
-      totalSalary,
-    }));
+    const staffFiltered = filterEmployees(employees, staffDistDeptFilter, staffDistEmpTypeFilter);
+    const payrollFiltered = filterEmployees(employees, payrollDeptFilter, payrollEmpTypeFilter);
+    const staffAnalytics = buildAnalytics(staffFiltered);
+    const payrollAnalytics = buildAnalytics(payrollFiltered);
 
-    return { groupedEmployees: grouped, pieData: pie, barData: bar };
-  }, [employees]);
+    return {
+      groupedEmployees: grouped,
+      pieData: staffAnalytics.pie,
+      barData: payrollAnalytics.bar,
+    };
+  }, [employees, staffDistDeptFilter, staffDistEmpTypeFilter, payrollDeptFilter, payrollEmpTypeFilter, t]);
 
   if (loading && employees.length === 0) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingEmployees")}</div>;
 
@@ -262,7 +305,19 @@ export const EmployeesTab = () => {
               <CardDescription>{t("m.staffDistDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div id="staff-dist-chart" className="h-[250px] w-full">
+              <CardFilters
+                label={t("m.filterStaffDist", "Filter for Staff Distribution")}
+                secondaryValue={staffDistDeptFilter}
+                onSecondaryChange={setStaffDistDeptFilter}
+                secondaryOptions={deptFilterOptions}
+                tertiaryValue={staffDistEmpTypeFilter}
+                onTertiaryChange={setStaffDistEmpTypeFilter}
+                tertiaryOptions={empTypeFilterOptions}
+              />
+              <div id="staff-dist-chart" className="relative h-[250px] w-full">
+                {pieData.length === 0 && (
+                  <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -282,11 +337,13 @@ export const EmployeesTab = () => {
                     <Tooltip formatter={(value: number) => [value, t("m.chartEmployees")]} />
                   </PieChart>
                 </ResponsiveContainer>
-              <div className="mt-2">
-                <ChartInfo textKey="m.staffDistInfo" />
-                <ChartExport targetId="staff-dist-chart" data={pieData} fileName="staff-distribution" />
               </div>
-              </div>
+              <ChartCardFooter
+                infoKey="m.staffDistInfo"
+                targetId="staff-dist-chart"
+                data={pieData}
+                fileName="staff-distribution"
+              />
             </CardContent>
           </Card>
 
@@ -296,7 +353,19 @@ export const EmployeesTab = () => {
               <CardDescription>{t("m.payrollDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div id="payroll-load-chart" className="h-[250px] w-full">
+              <CardFilters
+                label={t("m.filterPayroll", "Filter for Payroll Load")}
+                secondaryValue={payrollDeptFilter}
+                onSecondaryChange={setPayrollDeptFilter}
+                secondaryOptions={deptFilterOptions}
+                tertiaryValue={payrollEmpTypeFilter}
+                onTertiaryChange={setPayrollEmpTypeFilter}
+                tertiaryOptions={empTypeFilterOptions}
+              />
+              <div id="payroll-load-chart" className="relative h-[250px] w-full">
+                {barData.length === 0 && (
+                  <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -310,11 +379,13 @@ export const EmployeesTab = () => {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              <div className="mt-2">
-                <ChartInfo textKey="m.payrollInfo" />
-                <ChartExport targetId="payroll-load-chart" data={barData} fileName="payroll-load" />
               </div>
-              </div>
+              <ChartCardFooter
+                infoKey="m.payrollInfo"
+                targetId="payroll-load-chart"
+                data={barData}
+                fileName="payroll-load"
+              />
             </CardContent>
           </Card>
         </div>

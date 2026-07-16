@@ -32,9 +32,10 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
-import ChartInfo from "@/components/ui/ChartInfo";
+import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartEmptyState from "@/components/ui/ChartEmptyState";
+import CardFilters from "@/components/ui/CardFilters";
 import ChartTickWrap from "@/components/ui/ChartTickWrap";
-import ChartExport from "@/components/ui/ChartExport";
 import { INV_CATEGORY_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 
 const INV_CATEGORIES = ["Vegetables", "Meat", "Dairy", "Dry Goods", "Packaging"] as const;
@@ -84,6 +85,12 @@ export const InventoryTab = ({
   const [selectedMenuItem, setSelectedMenuItem] = useState<number | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<RecipeIngredient[]>([]);
   const [recipeSearchQuery, setRecipeSearchQuery] = useState("");
+
+  const [healthCategoryFilter, setHealthCategoryFilter] = useState("all");
+  const [healthLowStockOnly, setHealthLowStockOnly] = useState("all");
+  const [complexityLimit, setComplexityLimit] = useState("10");
+  const [stockCategoryFilter, setStockCategoryFilter] = useState("all");
+  const [stockSearchQuery, setStockSearchQuery] = useState("");
 
   useEffect(() => {
     loadData();
@@ -253,7 +260,9 @@ export const InventoryTab = ({
 
   // --- Analytics Data Prep ---
   const { healthData, menuComplexityData } = useMemo(() => {
-    const health = inventory.map(item => {
+    const health = inventory
+      .filter(item => healthCategoryFilter === "all" || item.category === healthCategoryFilter)
+      .map(item => {
       const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
       return {
         name: item.name,
@@ -262,18 +271,58 @@ export const InventoryTab = ({
         isLow: percent <= item.low_stock_threshold_percent,
         threshold: item.low_stock_threshold_percent
       };
-    }).sort((a, b) => a.percent - b.percent);
+    })
+      .filter(item => healthLowStockOnly !== "low" || item.isLow)
+      .sort((a, b) => a.percent - b.percent);
 
+    const limit = parseInt(complexityLimit, 10) || 10;
     const complexity = menuItems.map(m => {
       const rec = recipes.find(r => r.id === m.id);
       return {
         name: m.name,
         ingredientsCount: rec?.ingredients?.length || 0
       };
-    }).sort((a, b) => b.ingredientsCount - a.ingredientsCount).slice(0, 10);
+    }).sort((a, b) => b.ingredientsCount - a.ingredientsCount).slice(0, limit);
 
     return { healthData: health, menuComplexityData: complexity };
-  }, [inventory, menuItems, recipes]);
+  }, [inventory, menuItems, recipes, healthCategoryFilter, healthLowStockOnly, complexityLimit]);
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { value: "all", label: t("m.allCategories") },
+      ...INV_CATEGORIES.map((cat) => ({
+        value: cat,
+        label: labelForStoredValue(t, INV_CATEGORY_LABEL_KEYS, cat),
+      })),
+    ],
+    [t]
+  );
+
+  const lowStockFilterOptions = useMemo(
+    () => [
+      { value: "all", label: t("m.allCategories") },
+      { value: "low", label: t("m.lowStockOnly", "Low Stock Only") },
+    ],
+    [t]
+  );
+
+  const complexityLimitOptions = useMemo(
+    () => [
+      { value: "5", label: t("m.top5", "Top 5") },
+      { value: "10", label: t("m.top10", "Top 10") },
+      { value: "15", label: t("m.top15", "Top 15") },
+      { value: "20", label: t("m.top20", "Top 20") },
+    ],
+    [t]
+  );
+
+  const filteredStockItems = useMemo(() => {
+    return inventory.filter((item) => {
+      if (stockCategoryFilter !== "all" && item.category !== stockCategoryFilter) return false;
+      if (stockSearchQuery && !item.name.toLowerCase().includes(stockSearchQuery.toLowerCase())) return false;
+      return true;
+    });
+  }, [inventory, stockCategoryFilter, stockSearchQuery]);
 
 
   if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingInventory")}</div>;
@@ -336,7 +385,19 @@ export const InventoryTab = ({
                 <CardDescription>{t("m.healthChartDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div id="inv-health-chart" className="h-[300px] w-full">
+                <CardFilters
+                  label={t("m.filterInvHealth", "Filter for Inventory Health")}
+                  secondaryValue={healthCategoryFilter}
+                  onSecondaryChange={setHealthCategoryFilter}
+                  secondaryOptions={categoryFilterOptions}
+                  tertiaryValue={healthLowStockOnly}
+                  onTertiaryChange={setHealthLowStockOnly}
+                  tertiaryOptions={lowStockFilterOptions}
+                />
+                <div id="inv-health-chart" className="relative h-[300px] w-full">
+                  {healthData.length === 0 && (
+                    <ChartEmptyState message={t("m.noChartData", "No inventory items match the selected filters.")} />
+                  )}
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
@@ -351,15 +412,13 @@ export const InventoryTab = ({
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                  </div>
-                  <div>
-                    {/* Chart explanation for Inventory Health */}
-                    {/* @ts-ignore */}
-                    <ChartInfo textKey="m.healthChartInfo" />
-                    {/* Export controls */}
-                    {/* @ts-ignore */}
-                    <ChartExport targetId="inv-health-chart" data={healthData.slice(0,15)} fileName="inventory-health" />
-                  </div>
+                </div>
+                <ChartCardFooter
+                  infoKey="m.healthChartInfo"
+                  targetId="inv-health-chart"
+                  data={healthData.slice(0, 15)}
+                  fileName="inventory-health"
+                />
               </CardContent>
             </Card>
 
@@ -369,7 +428,16 @@ export const InventoryTab = ({
                 <CardDescription>{t("m.complexityChartDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div id="menu-complexity-chart" className="h-[300px] w-full">
+                <CardFilters
+                  label={t("m.filterMenuComplexity", "Filter for Menu Complexity")}
+                  secondaryValue={complexityLimit}
+                  onSecondaryChange={setComplexityLimit}
+                  secondaryOptions={complexityLimitOptions}
+                />
+                <div id="menu-complexity-chart" className="relative h-[300px] w-full">
+                  {menuComplexityData.length === 0 && (
+                    <ChartEmptyState message={t("m.noChartData", "No menu items available to display.")} />
+                  )}
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 80 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -380,15 +448,12 @@ export const InventoryTab = ({
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <div>
-                  {/* Chart explanation */}
-                  {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                  {/* @ts-ignore */}
-                  <ChartInfo textKey="m.menuComplexityInfo" />
-                  {/* Export */}
-                  {/* @ts-ignore */}
-                  <ChartExport targetId="menu-complexity-chart" data={menuComplexityData} fileName="menu-complexity" />
-                </div>
+                <ChartCardFooter
+                  infoKey="m.menuComplexityInfo"
+                  targetId="menu-complexity-chart"
+                  data={menuComplexityData}
+                  fileName="menu-complexity"
+                />
               </CardContent>
             </Card>
           </div>
@@ -499,8 +564,24 @@ export const InventoryTab = ({
             </Card>
           )}
 
+          <CardFilters
+            label={t("m.filterStockTable", "Filter for Stock Levels")}
+            secondaryValue={stockCategoryFilter}
+            onSecondaryChange={setStockCategoryFilter}
+            secondaryOptions={categoryFilterOptions}
+          />
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              className="pl-10"
+              placeholder={t("m.searchStock", "Search inventory items...")}
+              value={stockSearchQuery}
+              onChange={(e) => setStockSearchQuery(e.target.value)}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {inventory.map(item => {
+            {filteredStockItems.map(item => {
               const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
               const isLow = percent <= item.low_stock_threshold_percent;
               return (

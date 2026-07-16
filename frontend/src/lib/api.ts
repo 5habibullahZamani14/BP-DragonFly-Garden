@@ -1122,9 +1122,11 @@ export const updateRecipe = async (menuItemId: number, ingredients: RecipeIngred
     body: JSON.stringify({ ingredients })
   });
 
-export const fetchLogs = async (category?: string) => {
-  const query = category ? `?category=${category}` : "";
-  return safeFetch<LogEntry[]>(`/management/logs${query}`);
+export const fetchLogs = async (category?: string, limit = 500) => {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  params.set("limit", String(limit));
+  return safeFetch<LogEntry[]>(`/management/logs?${params.toString()}`);
 };
 
 export const fetchFinanceData = async (): Promise<FinanceData> => {
