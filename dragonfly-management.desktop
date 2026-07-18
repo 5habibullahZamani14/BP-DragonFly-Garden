@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DragonFly Garden - Management
+Comment=Launch DragonFly Garden Management View (Development Mode)
+Exec=/bin/bash "$(dirname %k)/start-management-dev.sh"
+Icon=preferences-system
+Terminal=true
+Categories=Development;
