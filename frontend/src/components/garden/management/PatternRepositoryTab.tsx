@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Edit2, ZoomIn, ZoomOut, RotateCw, FlipHorizontal, 
@@ -317,7 +319,19 @@ export function PatternRepositoryTab() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading patterns...</div>;
+    return (
+      <div className="space-y-6 p-6">
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-64 rounded-lg" />
+          <Skeleton className="h-5 w-96 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

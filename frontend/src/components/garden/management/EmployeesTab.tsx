@@ -33,9 +33,12 @@ import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartHeaderExport from "@/components/ui/ChartHeaderExport";
 import ChartEmptyState from "@/components/ui/ChartEmptyState";
 import CardFilters from "@/components/ui/CardFilters";
 import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import { ChartSkeleton, CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -217,7 +220,16 @@ export const EmployeesTab = () => {
     };
   }, [employees, staffDistDeptFilter, staffDistEmpTypeFilter, payrollDeptFilter, payrollEmpTypeFilter, t]);
 
-  if (loading && employees.length === 0) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingEmployees")}</div>;
+  if (loading && employees.length === 0) return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-5 w-96 rounded-lg" />
+      </div>
+      <ChartSkeleton />
+      <ChartSkeleton />
+    </div>
+  );
 
   return (
     <div className="space-y-6 pb-12">
@@ -298,23 +310,33 @@ export const EmployeesTab = () => {
 
       {/* Analytics Dashboards */}
       {employees.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("m.staffDist")}</CardTitle>
-              <CardDescription>{t("m.staffDistDesc")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CardFilters
-                label={t("m.filterStaffDist", "Filter for Staff Distribution")}
-                secondaryValue={staffDistDeptFilter}
-                onSecondaryChange={setStaffDistDeptFilter}
-                secondaryOptions={deptFilterOptions}
-                tertiaryValue={staffDistEmpTypeFilter}
-                onTertiaryChange={setStaffDistEmpTypeFilter}
-                tertiaryOptions={empTypeFilterOptions}
+        <div className="space-y-8 mb-8">
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.staffDist")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.staffDistDesc")}</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="staff-dist-chart"
+                data={pieData}
+                fileName="staff-distribution"
               />
-              <div id="staff-dist-chart" className="relative h-[250px] w-full">
+            </div>
+            <CardFilters
+              label={t("m.filterStaffDist", "Filter for Staff Distribution")}
+              secondaryValue={staffDistDeptFilter}
+              onSecondaryChange={setStaffDistDeptFilter}
+              secondaryOptions={deptFilterOptions}
+              tertiaryValue={staffDistEmpTypeFilter}
+              onTertiaryChange={setStaffDistEmpTypeFilter}
+              tertiaryOptions={empTypeFilterOptions}
+            />
+            <div className="flex-1 w-full h-[220px]">
+              <div id="staff-dist-chart" className="relative w-full h-full">
                 {pieData.length === 0 && (
                   <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
                 )}
@@ -338,41 +360,48 @@ export const EmployeesTab = () => {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <ChartCardFooter
-                infoKey="m.staffDistInfo"
-                targetId="staff-dist-chart"
-                data={pieData}
-                fileName="staff-distribution"
-              />
-            </CardContent>
-          </Card>
+            </div>
+            <ChartCardFooter
+              infoKey="m.staffDistInfo"
+            />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("m.payrollLoad")}</CardTitle>
-              <CardDescription>{t("m.payrollDesc")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CardFilters
-                label={t("m.filterPayroll", "Filter for Payroll Load")}
-                secondaryValue={payrollDeptFilter}
-                onSecondaryChange={setPayrollDeptFilter}
-                secondaryOptions={deptFilterOptions}
-                tertiaryValue={payrollEmpTypeFilter}
-                onTertiaryChange={setPayrollEmpTypeFilter}
-                tertiaryOptions={empTypeFilterOptions}
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-green-600" />
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.payrollLoad")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.payrollDesc")}</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="payroll-load-chart"
+                data={barData}
+                fileName="payroll-load"
               />
-              <div id="payroll-load-chart" className="relative h-[250px] w-full">
+            </div>
+            <CardFilters
+              label={t("m.filterPayroll", "Filter for Payroll Load")}
+              secondaryValue={payrollDeptFilter}
+              onSecondaryChange={setPayrollDeptFilter}
+              secondaryOptions={deptFilterOptions}
+              tertiaryValue={payrollEmpTypeFilter}
+              onTertiaryChange={setPayrollEmpTypeFilter}
+              tertiaryOptions={empTypeFilterOptions}
+            />
+            <div className="flex-1 w-full h-[220px]">
+              <div id="payroll-load-chart" className="relative w-full h-full">
                 {barData.length === 0 && (
                   <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
                 )}
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={<ChartTickWrap wordsPerLine={3} fontSize={12} />} />
-                    <YAxis tickFormatter={(val) => `${val / 1000}k`} />
-                    <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'transparent'}} />
-                    <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]}>
+                  <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} />} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} tickFormatter={(val) => `${val / 1000}k`} />
+                    <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                    <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]} barSize={24}>
                       {barData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
                       ))}
@@ -380,14 +409,11 @@ export const EmployeesTab = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <ChartCardFooter
-                infoKey="m.payrollInfo"
-                targetId="payroll-load-chart"
-                data={barData}
-                fileName="payroll-load"
-              />
-            </CardContent>
-          </Card>
+            </div>
+            <ChartCardFooter
+              infoKey="m.payrollInfo"
+            />
+          </div>
         </div>
       )}
 

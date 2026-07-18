@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTables, createTable, updateTable, deleteTable, fetchSettings } from "@/lib/api";
 import type { TableRecord } from "@/lib/api";
 import { buildWifiQrValue } from "@/lib/hotspotQr";
@@ -215,7 +217,19 @@ export const TablesTab = () => {
 
   const hotspotQrValue = buildWifiQrValue(hotspotSsid, hotspotPassword, hotspotSecurity);
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingTables")}</div>;
+  if (loading) return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-5 w-96 rounded-lg" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {[...Array(8)].map((_, i) => (
+          <CardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">

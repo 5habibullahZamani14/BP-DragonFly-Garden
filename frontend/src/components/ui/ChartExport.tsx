@@ -128,13 +128,13 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
   };
 
   return (
-    <div className={cn("mt-2 flex flex-wrap items-center gap-2", className)}>
-      <div className="text-sm text-gray-600">Export:</div>
-      <button onClick={exportPng} className="px-2 py-1 bg-gray-100 rounded text-sm">PNG</button>
-      <button onClick={exportJpeg} className="px-2 py-1 bg-gray-100 rounded text-sm">JPG</button>
-      <button onClick={exportPdf} className="px-2 py-1 bg-gray-100 rounded text-sm">PDF</button>
-      <button onClick={exportWord} className="px-2 py-1 bg-gray-100 rounded text-sm">Word</button>
-      <button onClick={exportCsv} className="px-2 py-1 bg-gray-100 rounded text-sm" disabled={!data}>CSV</button>
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+      <div className="text-sm text-gray-600 mr-2">Export:</div>
+      <button onClick={exportPng} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">PNG</button>
+      <button onClick={exportJpeg} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">JPG</button>
+      <button onClick={exportPdf} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">PDF</button>
+      <button onClick={exportWord} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">Word</button>
+      <button onClick={exportCsv} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled={!data}>CSV</button>
     </div>
   );
 };

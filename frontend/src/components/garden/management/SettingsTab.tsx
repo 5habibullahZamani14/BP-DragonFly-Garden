@@ -19,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
 import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -498,7 +500,18 @@ export const SettingsTab = () => {
     }
   };
 
-  if (hoursLoading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingSettings")}</div>;
+  if (hoursLoading) return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-5 w-96 rounded-lg" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    </div>
+  );
 
   return (
     <>

@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
+import { CardSkeleton, MenuItemSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -217,7 +219,13 @@ function VariationsEditor({ itemId }: { itemId: number }) {
     }
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground animate-pulse py-2">Loading modifiers…</p>;
+  if (loading) return (
+    <div className="space-y-3 py-2">
+      <Skeleton className="h-10 w-full rounded-lg" />
+      <Skeleton className="h-10 w-full rounded-lg" />
+      <Skeleton className="h-10 w-full rounded-lg" />
+    </div>
+  );
 
   const assignedGroups = allGroups.filter(g => assignedGroupIds.has(g.id));
   const libraryGroups  = allGroups.filter(g => !assignedGroupIds.has(g.id));
@@ -1191,7 +1199,10 @@ export function MenuTab() {
         )}
 
         {loading ? (
-          <div className="px-6 py-8 text-center text-muted-foreground animate-pulse">Loading sections…</div>
+          <div className="px-6 py-8 space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
         ) : sorted.length === 0 ? (
           <div className="px-6 py-8 text-center text-muted-foreground">No sections yet.</div>
         ) : (
@@ -1240,7 +1251,11 @@ export function MenuTab() {
         <Input placeholder={t("m.searchMenuItems")} value={search} onChange={e => setSearch(e.target.value)} className="max-w-md bg-white shadow-sm mb-4" />
 
         {loading ? (
-          <div className="text-center py-12"><p className="text-gray-500 animate-pulse">{t("m.loadingMenu")}</p></div>
+          <div className="space-y-4 py-12">
+            {[...Array(6)].map((_, i) => (
+              <MenuItemSkeleton key={i} />
+            ))}
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredItems.map(item => {

@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -623,7 +625,11 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-green-600" /></div>
+            <div className="space-y-4 py-6">
+              {[...Array(5)].map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
           ) : list.length === 0 ? (
             <p className="text-center text-gray-500 py-8">{t("manager.feedback.empty")}</p>
           ) : (

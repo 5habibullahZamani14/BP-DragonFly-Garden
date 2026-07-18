@@ -12,8 +12,10 @@ import {
   BarChart, Bar, Cell, LineChart, Line, Legend
 } from "recharts";
 import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartHeaderExport from "@/components/ui/ChartHeaderExport";
 import ChartEmptyState from "@/components/ui/ChartEmptyState";
 import CardFilters from "@/components/ui/CardFilters";
+import { PageSkeleton, ChartSkeleton, KpiSkeleton } from "@/components/ui/LoadingSkeletons";
 import { getLocalDateString, matchesTimeframe, parseDbTimestamp, type TimeframeValue } from "@/lib/parseDbTimestamp";
 import { safeConsoleError } from "@/lib/safeConsole";
 
@@ -236,8 +238,11 @@ export const FinanceTab = () => {
   // Actions recommendations based on dimensions averages
   const satisfactionAdvice = useMemo(() => {
     if (feedbackChartData.length === 0) return null;
+    
+    // Check if there's actual data (ratings > 0)
     const validRatings = feedbackChartData.filter(d => d.rating > 0);
-    if (validRatings.length === 0) return "No feedback ratings recorded yet for this criteria.";
+    if (validRatings.length === 0) return null;
+    
     const minItem = validRatings.reduce((prev, curr) => prev.rating < curr.rating ? prev : curr);
     
     let action = "";
@@ -456,6 +461,10 @@ export const FinanceTab = () => {
 
   return (
     <div className="space-y-6 animate-fade-in text-slate-800">
+      {loading ? (
+        <PageSkeleton />
+      ) : (
+        <>
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 px-2">
         <div>
@@ -538,9 +547,19 @@ export const FinanceTab = () => {
       <div className="flex flex-col gap-8">
         {/* Revenue Trend Area Chart */}
         <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 h-auto flex flex-col">
-          <div className="mb-4 flex items-center gap-2 px-2">
-            <Activity className="h-5 w-5 text-accent" />
-            <h3 className="font-1 text-xl font-bold text-[#142d1f]">{t("m.revenueTimeline")}</h3>
+          <div className="mb-4 flex items-center justify-between gap-4 px-2">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-accent" />
+              <div>
+                <h3 className="font-1 text-xl font-bold text-[#142d1f]">{t("m.revenueTimeline")}</h3>
+                <p className="text-xs text-foreground/50 mt-1">Daily revenue trends over time</p>
+              </div>
+            </div>
+            <ChartHeaderExport
+              targetId="revenue-timeline-chart"
+              data={revenueByDay}
+              fileName="revenue-timeline"
+            />
           </div>
 
           <CardFilters
@@ -578,9 +597,6 @@ export const FinanceTab = () => {
             </div>
             <ChartCardFooter
               infoKey="m.revenueTimelineInfo"
-              targetId="revenue-timeline-chart"
-              data={revenueByDay}
-              fileName="revenue-timeline"
             />
           </div>
         </div>
@@ -588,38 +604,45 @@ export const FinanceTab = () => {
         {/* Top Sellers Ranking Bar Chart */}
         <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col">
           <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center px-2 gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-blue-500" />
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <div>
                 <h3 className="font-1 text-xl font-bold text-[#142d1f]">{t("m.topProfitDrivers")}</h3>
+                <p className="text-xs text-foreground/50 mt-1">{t("m.topProfitDesc")}</p>
               </div>
-              <p className="text-xs text-foreground/50 mt-1">{t("m.topProfitDesc")}</p>
             </div>
 
-            <div className="flex items-center gap-2 bg-white/80 rounded-full px-4 py-1.5 shadow-sm border border-foreground/5">
-              <span className="text-xs font-semibold text-foreground/60 whitespace-nowrap">{t("m.showTop")}</span>
-              <input 
-                type="number" 
-                min={1}
-                max={data?.items.length || 100}
-                className="w-12 h-6 bg-transparent border-b-2 border-primary/20 hover:border-primary/50 focus:border-primary text-sm font-bold outline-none text-center text-primary transition-colors"
-                value={topItemsCount || ""}
-                onChange={(e) => setTopItemsCount(parseInt(e.target.value) || 1)}
-                onBlur={(e) => {
-                  let val = parseInt(e.target.value);
-                  if (isNaN(val) || val < 1) val = 1;
-                  const maxItems = data?.items.length || 100;
-                  if (val > maxItems) val = maxItems;
-                  setTopItemsCount(val);
-                }}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white/80 rounded-full px-4 py-1.5 shadow-sm border border-foreground/5">
+                <span className="text-xs font-semibold text-foreground/60 whitespace-nowrap">{t("m.showTop")}</span>
+                <input 
+                  type="number" 
+                  min={1}
+                  max={data?.items.length || 100}
+                  className="w-12 h-6 bg-transparent border-b-2 border-primary/20 hover:border-primary/50 focus:border-primary text-sm font-bold outline-none text-center text-primary transition-colors"
+                  value={topItemsCount || ""}
+                  onChange={(e) => setTopItemsCount(parseInt(e.target.value) || 1)}
+                  onBlur={(e) => {
+                    let val = parseInt(e.target.value);
+                    if (isNaN(val) || val < 1) val = 1;
+                    const maxItems = data?.items.length || 100;
+                    if (val > maxItems) val = maxItems;
+                    setTopItemsCount(val);
+                  }}
+                />
+                <span className="text-xs font-semibold text-foreground/60 mr-1">{t("m.itemsLabel")}</span>
+                <button 
+                  onClick={() => setTopItemsCount(data?.items.length || 100)}
+                  className="text-[0.65rem] uppercase tracking-wider font-bold bg-primary/10 text-primary hover:bg-primary/20 px-2 py-1 rounded-full transition-colors"
+                >
+                  {t("m.all")}
+                </button>
+              </div>
+              <ChartHeaderExport
+                targetId="top-profit-drivers-chart"
+                data={topItemsData}
+                fileName="top-profit-drivers"
               />
-              <span className="text-xs font-semibold text-foreground/60 mr-1">{t("m.itemsLabel")}</span>
-              <button 
-                onClick={() => setTopItemsCount(data?.items.length || 100)}
-                className="text-[0.65rem] uppercase tracking-wider font-bold bg-primary/10 text-primary hover:bg-primary/20 px-2 py-1 rounded-full transition-colors"
-              >
-                {t("m.all")}
-              </button>
             </div>
           </div>
 
@@ -635,8 +658,8 @@ export const FinanceTab = () => {
             onEndDateChange={setDriversEndDate}
           />
 
-          <div className="w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
-            <div id="top-profit-drivers-chart" className="relative w-full h-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
+          <div className="flex flex-col">
+            <div id="top-profit-drivers-chart" className="relative w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
               {topItemsData.length === 0 && (
                 <ChartEmptyState message={t("m.noChartData", "No paid order data available for the selected filters.")} />
               )}
@@ -661,9 +684,6 @@ export const FinanceTab = () => {
             </div>
             <ChartCardFooter
               infoKey="m.topProfitDriversInfo"
-              targetId="top-profit-drivers-chart"
-              data={topItemsData}
-              fileName="top-profit-drivers"
             />
           </div>
         </div>
@@ -680,15 +700,22 @@ export const FinanceTab = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-8">
           {/* Card 1: Customer Satisfaction */}
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
-            <div className="mb-4">
-              <h3 className="font-1 text-lg font-bold text-[#142d1f] flex items-center gap-2">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
                 <PieChart className="w-5 h-5 text-indigo-500" />
-                Customer Satisfaction Dimensions
-              </h3>
-              <p className="text-xs text-foreground/50 mt-1">Average ratings from customer feedback submissions (1.0 to 5.0 scale).</p>
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Customer Satisfaction Dimensions</h3>
+                  <p className="text-xs text-foreground/50 mt-1">Average ratings from customer feedback submissions (1.0 to 5.0 scale).</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="feedback-bi-chart"
+                data={feedbackChartData}
+                fileName="customer-satisfaction"
+              />
             </div>
 
             <CardFilters
@@ -734,20 +761,24 @@ export const FinanceTab = () => {
             )}
             <ChartCardFooter
               infoKey="m.feedbackBiInfo"
-              targetId="feedback-bi-chart"
-              data={feedbackChartData}
-              fileName="feedback-ratings"
             />
           </div>
 
           {/* Card 2: Help Request Patterns */}
           <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
-            <div className="mb-4">
-              <h3 className="font-1 text-lg font-bold text-[#142d1f] flex items-center gap-2">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-amber-500" />
-                Floor Assistance Peak Days
-              </h3>
-              <p className="text-xs text-foreground/50 mt-1">Total customer calls for floor staff assistance grouped by day of the week.</p>
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Floor Assistance Peak Days</h3>
+                  <p className="text-xs text-foreground/50 mt-1">Total customer calls for floor staff assistance grouped by day of the week.</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="assistance-bi-chart"
+                data={helpRequestsData}
+                fileName="staff-assistance-calls"
+              />
             </div>
 
             <CardFilters
@@ -787,20 +818,24 @@ export const FinanceTab = () => {
             )}
             <ChartCardFooter
               infoKey="m.assistanceBiInfo"
-              targetId="assistance-bi-chart"
-              data={helpRequestsData}
-              fileName="staff-assistance-calls"
             />
           </div>
 
           {/* Card 3: Order Type Popularity Timeline */}
-          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px] lg:col-span-2">
-            <div className="mb-4">
-              <h3 className="font-1 text-lg font-bold text-[#142d1f] flex items-center gap-2">
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
                 <Utensils className="w-5 h-5 text-emerald-500" />
-                Order Type Popularity Trends
-              </h3>
-              <p className="text-xs text-foreground/50 mt-1">Timeline plotting order volumes across Dine-In, Takeaway, Delivery, and Counter Orders.</p>
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Order Type Popularity Trends</h3>
+                  <p className="text-xs text-foreground/50 mt-1">Timeline plotting order volumes across Dine-In, Takeaway, Delivery, and Counter Orders.</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="popularity-bi-chart"
+                data={orderPopularityData}
+                fileName="order-popularity-trends"
+              />
             </div>
 
             <CardFilters
@@ -837,20 +872,24 @@ export const FinanceTab = () => {
             </div>
             <ChartCardFooter
               infoKey="m.popularityBiInfo"
-              targetId="popularity-bi-chart"
-              data={orderPopularityData}
-              fileName="order-popularity-trends"
             />
           </div>
 
           {/* Card 4: Inventory Restocking Forecast */}
-          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px] lg:col-span-2">
-            <div className="mb-4">
-              <h3 className="font-1 text-lg font-bold text-[#142d1f] flex items-center gap-2">
+          <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+            <div className="mb-4 flex items-center justify-between gap-4 px-2">
+              <div className="flex items-center gap-2">
                 <PackageOpen className="w-5 h-5 text-rose-500" />
-                Raw Stock Depletion Forecast
-              </h3>
-              <p className="text-xs text-foreground/50 mt-1">Calculates days of stock remaining based on daily burn rate computed from custom order ingredient consumption.</p>
+                <div>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Raw Stock Depletion Forecast</h3>
+                  <p className="text-xs text-foreground/50 mt-1">Calculates days of stock remaining based on daily burn rate computed from custom order ingredient consumption.</p>
+                </div>
+              </div>
+              <ChartHeaderExport
+                targetId="stock-depletion-table"
+                data={restockingForecastData}
+                fileName="stock-depletion-forecast"
+              />
             </div>
 
             <CardFilters
@@ -905,13 +944,12 @@ export const FinanceTab = () => {
             </div>
             <ChartCardFooter
               infoKey="m.restockingBiInfo"
-              targetId="stock-depletion-table"
-              data={restockingForecastData}
-              fileName="stock-depletion-forecast"
             />
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

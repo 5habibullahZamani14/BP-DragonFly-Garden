@@ -40,6 +40,7 @@ import { CustomerFeedbackPanel } from "./customer/CustomerFeedbackPanel";
 import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
+import { MenuItemSkeleton } from "@/components/ui/LoadingSkeletons";
 import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
 import {
   Dialog,
@@ -1293,9 +1294,9 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         {/* Sticky category icons removed and relocated to Sidebar */}
 
         {loading ? (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted/60" />
+          <div className="space-y-4">
+            {[...Array(6)].map((_, i) => (
+              <MenuItemSkeleton key={i} />
             ))}
           </div>
         ) : filtered.length === 0 ? (

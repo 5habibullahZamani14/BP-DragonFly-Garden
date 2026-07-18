@@ -33,9 +33,12 @@ import { safeConsoleError } from "@/lib/safeConsole";
 import { Package, UtensilsCrossed, AlertTriangle, Plus, Save, TrendingUp, Activity, Info, Pencil, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
 import ChartCardFooter from "@/components/ui/ChartCardFooter";
+import ChartHeaderExport from "@/components/ui/ChartHeaderExport";
 import ChartEmptyState from "@/components/ui/ChartEmptyState";
 import CardFilters from "@/components/ui/CardFilters";
 import ChartTickWrap from "@/components/ui/ChartTickWrap";
+import { ChartSkeleton, TableSkeleton } from "@/components/ui/LoadingSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { INV_CATEGORY_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 
 const INV_CATEGORIES = ["Vegetables", "Meat", "Dairy", "Dry Goods", "Packaging"] as const;
@@ -325,7 +328,16 @@ export const InventoryTab = ({
   }, [inventory, stockCategoryFilter, stockSearchQuery]);
 
 
-  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">{t("m.loadingInventory")}</div>;
+  if (loading) return (
+    <div className="space-y-6 p-6">
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-5 w-96 rounded-lg" />
+      </div>
+      <ChartSkeleton />
+      <ChartSkeleton />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -379,22 +391,32 @@ export const InventoryTab = ({
             </AccordionItem>
           </Accordion>
           <div className="grid grid-cols-1 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("m.invHealth")}</CardTitle>
-                <CardDescription>{t("m.healthChartDesc")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CardFilters
-                  label={t("m.filterInvHealth", "Filter for Inventory Health")}
-                  secondaryValue={healthCategoryFilter}
-                  onSecondaryChange={setHealthCategoryFilter}
-                  secondaryOptions={categoryFilterOptions}
-                  tertiaryValue={healthLowStockOnly}
-                  onTertiaryChange={setHealthLowStockOnly}
-                  tertiaryOptions={lowStockFilterOptions}
+            <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+              <div className="mb-4 flex items-center justify-between gap-4 px-2">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-emerald-500" />
+                  <div>
+                    <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.invHealth")}</h3>
+                    <p className="text-xs text-foreground/50 mt-1">{t("m.healthChartDesc")}</p>
+                  </div>
+                </div>
+                <ChartHeaderExport
+                  targetId="inv-health-chart"
+                  data={healthData.slice(0, 15)}
+                  fileName="inventory-health"
                 />
-                <div id="inv-health-chart" className="relative h-[300px] w-full">
+              </div>
+              <CardFilters
+                label={t("m.filterInvHealth", "Filter for Inventory Health")}
+                secondaryValue={healthCategoryFilter}
+                onSecondaryChange={setHealthCategoryFilter}
+                secondaryOptions={categoryFilterOptions}
+                tertiaryValue={healthLowStockOnly}
+                onTertiaryChange={setHealthLowStockOnly}
+                tertiaryOptions={lowStockFilterOptions}
+              />
+              <div className="flex-1 w-full h-[220px]">
+                <div id="inv-health-chart" className="relative w-full h-full">
                   {healthData.length === 0 && (
                     <ChartEmptyState message={t("m.noChartData", "No inventory items match the selected filters.")} />
                   )}
@@ -413,28 +435,35 @@ export const InventoryTab = ({
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <ChartCardFooter
-                  infoKey="m.healthChartInfo"
-                  targetId="inv-health-chart"
-                  data={healthData.slice(0, 15)}
-                  fileName="inventory-health"
-                />
-              </CardContent>
-            </Card>
+              </div>
+              <ChartCardFooter
+                infoKey="m.healthChartInfo"
+              />
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-orange-500" /> {t("m.menuComplexity")}</CardTitle>
-                <CardDescription>{t("m.complexityChartDesc")}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CardFilters
-                  label={t("m.filterMenuComplexity", "Filter for Menu Complexity")}
-                  secondaryValue={complexityLimit}
-                  onSecondaryChange={setComplexityLimit}
-                  secondaryOptions={complexityLimitOptions}
+            <div className="bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-3xl p-6 flex flex-col min-h-[400px]">
+              <div className="mb-4 flex items-center justify-between gap-4 px-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-orange-500" />
+                  <div>
+                    <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.menuComplexity")}</h3>
+                    <p className="text-xs text-foreground/50 mt-1">{t("m.complexityChartDesc")}</p>
+                  </div>
+                </div>
+                <ChartHeaderExport
+                  targetId="menu-complexity-chart"
+                  data={menuComplexityData}
+                  fileName="menu-complexity"
                 />
-                <div id="menu-complexity-chart" className="relative h-[300px] w-full">
+              </div>
+              <CardFilters
+                label={t("m.filterMenuComplexity", "Filter for Menu Complexity")}
+                secondaryValue={complexityLimit}
+                onSecondaryChange={setComplexityLimit}
+                secondaryOptions={complexityLimitOptions}
+              />
+              <div className="flex-1 w-full h-[220px]">
+                <div id="menu-complexity-chart" className="relative w-full h-full">
                   {menuComplexityData.length === 0 && (
                     <ChartEmptyState message={t("m.noChartData", "No menu items available to display.")} />
                   )}
@@ -444,18 +473,15 @@ export const InventoryTab = ({
                       <XAxis dataKey="name" height={100} interval={0} tick={<ChartTickWrap wordsPerLine={4} fontSize={12} textAnchor="end" />} />
                       <YAxis allowDecimals={false} />
                       <Tooltip formatter={(value: number) => [value, t("m.chartIngredients")]} cursor={{ fill: 'transparent' }} />
-                      <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} barSize={24} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <ChartCardFooter
-                  infoKey="m.menuComplexityInfo"
-                  targetId="menu-complexity-chart"
-                  data={menuComplexityData}
-                  fileName="menu-complexity"
-                />
-              </CardContent>
-            </Card>
+              </div>
+              <ChartCardFooter
+                infoKey="m.menuComplexityInfo"
+              />
+            </div>
           </div>
         </div>
       )}
