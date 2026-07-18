@@ -425,6 +425,85 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || 5000;
 const HOST = process.env.HOST || "0.0.0.0";
 
+// Store references to all timers/intervals for cleanup
+const scheduledTasks = {
+  archiveTimeout: null,
+  archiveInterval: null,
+  cloudBackupTimeout: null,
+  cloudBackupInterval: null,
+  salesReportInterval: null,
+};
+
+/*
+ * Graceful shutdown handler - ensures proper cleanup of all resources
+ * when the server receives termination signals (SIGINT, SIGTERM)
+ */
+const gracefulShutdown = (signal) => {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+  // Clear all scheduled tasks
+  if (scheduledTasks.archiveTimeout) clearTimeout(scheduledTasks.archiveTimeout);
+  if (scheduledTasks.archiveInterval) clearInterval(scheduledTasks.archiveInterval);
+  if (scheduledTasks.cloudBackupTimeout) clearTimeout(scheduledTasks.cloudBackupTimeout);
+  if (scheduledTasks.cloudBackupInterval) clearInterval(scheduledTasks.cloudBackupInterval);
+  if (scheduledTasks.salesReportInterval) clearInterval(scheduledTasks.salesReportInterval);
+  console.log('All scheduled tasks cleared');
+
+  // Close WebSocket server with proper client notification
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) { // OPEN state
+      try {
+        client.send(JSON.stringify({ type: 'SERVER_SHUTDOWN', message: 'Server is shutting down' }));
+        client.close(1000, 'Server shutdown');
+      } catch (e) {
+        console.warn('Error closing WebSocket client:', e.message);
+      }
+    }
+  });
+
+  wss.close(() => {
+    console.log('WebSocket server closed');
+
+    // Close HTTP server
+    server.close(() => {
+      console.log('HTTP server closed');
+
+      // Close database connection
+      db.close((err) => {
+        if (err) {
+          console.error('Error closing database:', err);
+          process.exit(1);
+        } else {
+          console.log('Database connection closed');
+          console.log('Graceful shutdown completed successfully');
+          process.exit(0);
+        }
+      });
+    });
+  });
+
+  // Force shutdown after 15 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 15000);
+};
+
+// Register signal handlers for graceful shutdown
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle uncaught exceptions to prevent zombie processes
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
+});
+
 /*
  * startServer runs the database setup steps in the correct order before the
  * HTTP server begins accepting connections. The order matters: the schema must
@@ -486,9 +565,9 @@ const startServer = async () => {
         };
 
         console.log(`Daily archive scheduled for ${nextRun.toLocaleString()}`);
-        setTimeout(() => {
+        scheduledTasks.archiveTimeout = setTimeout(() => {
           runArchive();
-          setInterval(runArchive, 24 * 60 * 60 * 1000);
+          scheduledTasks.archiveInterval = setInterval(runArchive, 24 * 60 * 60 * 1000);
         }, delay);
       };
 
@@ -512,9 +591,9 @@ const startServer = async () => {
         };
 
         console.log(`Cloud backup scheduled for ${nextRun.toLocaleString()}`);
-        setTimeout(() => {
+        scheduledTasks.cloudBackupTimeout = setTimeout(() => {
           runCloudBackup();
-          setInterval(runCloudBackup, 24 * 60 * 60 * 1000);
+          scheduledTasks.cloudBackupInterval = setInterval(runCloudBackup, 24 * 60 * 60 * 1000);
         }, delay);
       };
 
@@ -597,7 +676,7 @@ const startServer = async () => {
 
         // Run check immediately and then every 60 seconds
         checkAndPrintSalesReport();
-        setInterval(checkAndPrintSalesReport, 60 * 1000);
+        scheduledTasks.salesReportInterval = setInterval(checkAndPrintSalesReport, 60 * 1000);
       };
 
       scheduleDailyArchive();
