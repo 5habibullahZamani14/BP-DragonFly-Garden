@@ -22,7 +22,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -96,6 +96,34 @@ export const SettingsTab = () => {
   const [updateInProgress, setUpdateInProgress] = useState(false);
   const [updateMsg, setUpdateMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
+  // Printer management state
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [printersLoading, setPrintersLoading] = useState(false);
+  const [selectedPrinter, setSelectedPrinter] = useState("");
+  const [defaultPrinter, setDefaultPrinter] = useState("");
+  const [printerPreferences, setPrinterPreferences] = useState<any>({});
+  const [printerProfiles, setPrinterProfiles] = useState<any>({});
+  const [testPrintLoading, setTestPrintLoading] = useState<string | null>(null);
+  const [printerSettingsLoading, setPrinterSettingsLoading] = useState(false);
+  const [printerSettingsSaved, setPrinterSettingsSaved] = useState(false);
+  const [platformInfo, setPlatformInfo] = useState<any>(null);
+  const [printDelaySeconds, setPrintDelaySeconds] = useState(0);
+  const [emptyLinesBefore, setEmptyLinesBefore] = useState(2);
+  const [emptyLinesAfter, setEmptyLinesAfter] = useState(3);
+  const [selectedPrinterProfile, setSelectedPrinterProfile] = useState<any>(null);
+  
+  // Receipt copy counts
+  const [orderCustomerCopies, setOrderCustomerCopies] = useState(1);
+  const [orderKitchenCopies, setOrderKitchenCopies] = useState(1);
+  const [addonCustomerCopies, setAddonCustomerCopies] = useState(1);
+  const [addonKitchenCopies, setAddonKitchenCopies] = useState(1);
+  const [finalReceiptCopies, setFinalReceiptCopies] = useState(1);
+  const [dailySalesReportCopies, setDailySalesReportCopies] = useState(1);
+  const [printingDailyReport, setPrintingDailyReport] = useState(false);
+  const [printingTestTicket, setPrintingTestTicket] = useState(false);
+  const [activeAccordion, setActiveAccordion] = useState<string | undefined>();
+  const [hasAutoDiscovered, setHasAutoDiscovered] = useState(false);
+
   // Confirmation dialog state
 
   const [confirmationDialog, setConfirmationDialog] = useState<{
@@ -120,7 +148,7 @@ export const SettingsTab = () => {
     try {
       data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
-      if (data?.kitchen_passcode) setKitchenPasscode(data.kitchen_passcode);
+      if (data?.kitchen_passcode) setKitchenPasscode(String(data.kitchen_passcode));
       if (data?.captive_portal_target) setCaptivePortalTarget(data.captive_portal_target);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
       if (data?.hotspot_ssid) setHotspotSsid(String(data.hotspot_ssid));
@@ -288,6 +316,305 @@ export const SettingsTab = () => {
     );
   };
 
+  // Printer management functions
+  const [printerError, setPrinterError] = useState<string | null>(null);
+
+  const getManagerToken = () => {
+    const managerLogin = localStorage.getItem("managerLogin");
+    if (managerLogin) {
+      try {
+        const parsed = JSON.parse(managerLogin);
+        return parsed.token;
+      } catch (e) {
+        console.error("Failed to parse managerLogin:", e);
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const discoverPrinters = async () => {
+    setPrinterError(null);
+    setPrintersLoading(true);
+    try {
+      const token = getManagerToken();
+      
+      if (!token) {
+        setPrinterError("Manager authentication required. Please log in to access printer management.");
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      console.log("Discovering printers...");
+      const response = await fetch("/management/printers/discover", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+      
+      console.log("Response status:", response.status);
+      
+      if (response.status === 401) {
+        const errorText = await response.text();
+        console.log("401 Error response:", errorText);
+        setPrinterError("Authentication failed. Your session may have expired. Please log in again.");
+        return;
+      }
+      
+      const data = await response.json();
+      console.log("Response data:", data);
+      
+      if (data.success) {
+        setPrinters(data.printers);
+        setPlatformInfo(data.platform);
+      } else {
+        setPrinterError(`Failed to discover printers: ${data.message}`);
+        safeConsoleError("Failed to discover printers", data.message);
+      }
+    } catch (err: any) {
+      setPrinterError(`Error discovering printers: ${err.message}`);
+      safeConsoleError("Printer discovery failed", err);
+    } finally {
+      setPrintersLoading(false);
+    }
+  };
+
+  const loadPrinterSettings = async () => {
+    setPrinterSettingsLoading(true);
+    try {
+      const token = getManagerToken();
+      if (!token) {
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      const response = await fetch("/management/printers/settings", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSelectedPrinter(data.selectedPrinter || "");
+        setDefaultPrinter(data.defaultPrinter || "");
+        setPrinterPreferences(data.printerPreferences || {});
+        setPrinterProfiles(data.printerProfiles || {});
+        
+        // Load settings from selected printer profile
+        if (data.selectedPrinter && data.printerProfiles[data.selectedPrinter]) {
+          const profile = data.printerProfiles[data.selectedPrinter];
+          setSelectedPrinterProfile(profile);
+          setPrintDelaySeconds(profile.print_delay_seconds || 0);
+          setEmptyLinesBefore(profile.empty_lines_before || 2);
+          setEmptyLinesAfter(profile.empty_lines_after || 3);
+        } else {
+          // Fallback to defaults if no profile
+          setPrintDelaySeconds(0);
+          setEmptyLinesBefore(2);
+          setEmptyLinesAfter(3);
+        }
+        
+        // Load receipt copy counts
+        if (data.printerPreferences.receipt_copies && data.printerPreferences.receipt_copies.global) {
+          const copies = data.printerPreferences.receipt_copies.global;
+          setOrderCustomerCopies(copies.order_customer || 1);
+          setOrderKitchenCopies(copies.order_kitchen || 1);
+          setAddonCustomerCopies(copies.addon_customer || 1);
+          setAddonKitchenCopies(copies.addon_kitchen || 1);
+          setFinalReceiptCopies(copies.final_receipt || 1);
+          setDailySalesReportCopies(copies.daily_sales_report || 1);
+        }
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to load printer settings", err);
+    } finally {
+      setPrinterSettingsLoading(false);
+    }
+  };
+
+  const printDailySalesReport = async () => {
+    setPrintingDailyReport(true);
+    try {
+      const token = getManagerToken();
+      if (!token) {
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      const response = await fetch("/management/printers/daily-sales-report", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log("Daily sales report printed successfully");
+      } else {
+        safeConsoleError("Failed to print daily sales report", data.message);
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to print daily sales report", err);
+    } finally {
+      setPrintingDailyReport(false);
+    }
+  };
+
+  const printTestTicket = async () => {
+    setPrintingTestTicket(true);
+    try {
+      const token = getManagerToken();
+      if (!token) {
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      const response = await fetch("/management/printers/test", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ printerName: selectedPrinter })
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log("Test ticket printed successfully");
+      } else {
+        safeConsoleError("Failed to print test ticket", data.message);
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to print test ticket", err);
+    } finally {
+      setPrintingTestTicket(false);
+    }
+  };
+
+  const savePrinterSettings = async () => {
+    setPrinterSettingsLoading(true);
+    try {
+      const token = getManagerToken();
+      if (!token) {
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      console.log("Saving printer settings with values:", {
+        printDelaySeconds,
+        emptyLinesBefore,
+        emptyLinesAfter,
+        selectedPrinter
+      });
+      
+      // Update printer profile for selected printer
+      const updatedProfiles = { ...printerProfiles };
+      if (selectedPrinter) {
+        updatedProfiles[selectedPrinter] = {
+          width: 80,
+          print_delay_seconds: printDelaySeconds,
+          empty_lines_before: emptyLinesBefore,
+          empty_lines_after: emptyLinesAfter,
+          has_auto_cutter: printDelaySeconds === 0,
+          connection_type: "USB",
+          notes: `Printer profile for ${selectedPrinter}`
+        };
+      }
+      
+      console.log("Updated printer profiles:", updatedProfiles);
+      
+      // Update local state immediately so it persists during the session
+      setPrinterProfiles(updatedProfiles);
+      
+      // Update receipt copy counts
+      const updatedPrefs = { ...printerPreferences };
+      updatedPrefs.receipt_copies = {
+        global: {
+          order_customer: orderCustomerCopies,
+          order_kitchen: orderKitchenCopies,
+          addon_customer: addonCustomerCopies,
+          addon_kitchen: addonKitchenCopies,
+          final_receipt: finalReceiptCopies,
+          daily_sales_report: dailySalesReportCopies
+        }
+      };
+      
+      const response = await fetch("/management/printers/settings", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          selectedPrinter,
+          defaultPrinter,
+          printerProfiles: updatedProfiles,
+          printerPreferences: updatedPrefs
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log("Save successful, updating local state");
+        setPrinterProfiles(updatedProfiles);
+        setPrinterPreferences(updatedPrefs);
+        setPrinterSettingsSaved(true);
+        setTimeout(() => setPrinterSettingsSaved(false), 2500);
+      } else {
+        safeConsoleError("Failed to save printer settings", data.message);
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to save printer settings", err);
+    } finally {
+      setPrinterSettingsLoading(false);
+    }
+  };
+
+  const testPrinter = async (printerName: string) => {
+    setTestPrintLoading(printerName);
+    try {
+      const token = getManagerToken();
+      if (!token) {
+        safeConsoleError("Manager token not found");
+        return;
+      }
+      
+      const response = await fetch("/management/printers/test", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ printerName })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(`Test print sent successfully to ${printerName}`);
+      } else {
+        alert(`Test print failed: ${data.message}`);
+      }
+    } catch (err: any) {
+      safeConsoleError("Test print failed", err);
+      alert(`Test print failed: ${err.message}`);
+    } finally {
+      setTestPrintLoading(null);
+    }
+  };
+
+  const getConnectionIcon = (connectionType: string) => {
+    switch (connectionType.toLowerCase()) {
+      case "wifi":
+        return <Wifi className="h-4 w-4 text-blue-600" />;
+      case "wire":
+        return <Cable className="h-4 w-4 text-green-600" />;
+      case "bluetooth":
+        return <Bluetooth className="h-4 w-4 text-purple-600" />;
+      default:
+        return <Printer className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
   const clearDefaultPattern = async () => {
     showConfirmation(
       "Clear default pattern",
@@ -436,6 +763,22 @@ export const SettingsTab = () => {
     }
   };
 
+  // Load printer settings on mount
+  useEffect(() => {
+    loadPrinterSettings();
+  }, []);
+
+  // Don't reload printer settings when switching printers - use local state
+  // Only reload on initial mount
+
+  // Auto-discover printers when printer accordion opens
+  useEffect(() => {
+    if (activeAccordion === "printers" && !hasAutoDiscovered) {
+      discoverPrinters();
+      setHasAutoDiscovered(true);
+    }
+  }, [activeAccordion]);
+
   const handleCreateBackup = async (overwrite: boolean = false) => {
     if (!backupName.trim()) return;
     setBackupLoading(true);
@@ -579,7 +922,7 @@ export const SettingsTab = () => {
       </Card>
     </div>
 
-    <Accordion type="single" collapsible className="space-y-6">
+    <Accordion type="single" collapsible className="space-y-6" value={activeAccordion} onValueChange={setActiveAccordion}>
 
       {/* ── Tax & Service Charge ─────────────────────────── */}
       <AccordionItem value="tax" className="border rounded-xl bg-card text-card-foreground shadow-sm">
@@ -840,6 +1183,297 @@ export const SettingsTab = () => {
                 : hotspotSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
                 : "Save Hotspot Settings"}
             </Button>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      {/* ── Printer Management ───────────────────────────────────────────── */}
+      <AccordionItem value="printers" className="border rounded-xl bg-card text-card-foreground shadow-sm">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="text-left flex flex-col gap-1.5">
+            <h3 className="font-semibold leading-none tracking-tight text-lg">Printer Management</h3>
+            <p className="text-sm text-muted-foreground font-normal">Discover, test, and configure printers for order receipts and kitchen tickets.</p>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
+          <div className="space-y-6">
+            {/* Platform Info */}
+            {platformInfo && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-blue-800">
+                  Platform: {platformInfo.platform} ({platformInfo.arch}) | Host: {platformInfo.hostname}
+                </p>
+              </div>
+            )}
+
+            {/* Discover Printers Button */}
+            <div className="flex gap-3">
+              <Button 
+                onClick={() => {
+                  setHasAutoDiscovered(false);
+                  discoverPrinters();
+                }} 
+                disabled={printersLoading}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
+              >
+                {printersLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Refreshing...</> : <><RefreshCw className="h-4 w-4" /> Refresh Printers</>}
+              </Button>
+            </div>
+
+            {/* Error Message */}
+            {printerError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-red-800">{printerError}</p>
+              </div>
+            )}
+
+            {/* Printer List */}
+            {printers.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm">Available Printers ({printers.length})</h4>
+                <div className="space-y-2">
+                  {printers.map((printer, index) => (
+                    <div key={index} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            {getConnectionIcon(printer.connectionType)}
+                            <span className="font-medium text-sm">{printer.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              printer.status === 'online' || printer.status === 'idle' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {printer.status}
+                            </span>
+                          </div>
+                          <div className="space-y-1 text-xs text-gray-600">
+                            <p><span className="font-medium">Driver:</span> {printer.driver || 'N/A'}</p>
+                            <p><span className="font-medium">Connection:</span> {printer.connectionType.toUpperCase()}</p>
+                            {printer.port && <p><span className="font-medium">Port:</span> {printer.port}</p>}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => testPrinter(printer.name)}
+                          disabled={testPrintLoading === printer.name}
+                          className="shrink-0"
+                        >
+                          {testPrintLoading === printer.name ? (
+                            <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Testing...</>
+                          ) : (
+                            <><Printer className="h-3 w-3 mr-1" /> Test Print</>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Printer Settings */}
+            <div className="space-y-4 pt-4 border-t">
+              <h4 className="font-semibold text-sm">Printer Settings</h4>
+              
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label>Selected Printer (Active)</Label>
+                  <Select value={selectedPrinter} onValueChange={(value) => {
+                    setSelectedPrinter(value);
+                    // Load profile for newly selected printer
+                    if (printerProfiles[value]) {
+                      setSelectedPrinterProfile(printerProfiles[value]);
+                      setPrintDelaySeconds(printerProfiles[value].print_delay_seconds || 0);
+                      setEmptyLinesBefore(printerProfiles[value].empty_lines_before || 2);
+                      setEmptyLinesAfter(printerProfiles[value].empty_lines_after || 3);
+                    }
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a printer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {printers.map((printer, index) => (
+                        <SelectItem key={index} value={printer.name}>
+                          {printer.name} ({printer.connectionType})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">This printer will be used for all printing operations.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Default Printer (Fallback)</Label>
+                  <Select value={defaultPrinter} onValueChange={setDefaultPrinter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select default printer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {printers.map((printer, index) => (
+                        <SelectItem key={index} value={printer.name}>
+                          {printer.name} ({printer.connectionType})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Used if selected printer is unavailable.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Print Delay (seconds)</Label>
+                  <Input 
+                    type="number" 
+                    min="0" 
+                    max="60"
+                    value={printDelaySeconds}
+                    onChange={(e) => setPrintDelaySeconds(parseInt(e.target.value) || 0)}
+                  />
+                  <p className="text-xs text-muted-foreground">Delay between receipts (0 = no delay). Useful for printers without auto-cutter.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Empty Lines Before Receipt</Label>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      max="10"
+                      value={emptyLinesBefore}
+                      onChange={(e) => setEmptyLinesBefore(parseInt(e.target.value) || 0)}
+                    />
+                    <p className="text-xs text-muted-foreground">Spacing before printing.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Empty Lines After Receipt</Label>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      max="10"
+                      value={emptyLinesAfter}
+                      onChange={(e) => setEmptyLinesAfter(parseInt(e.target.value) || 0)}
+                    />
+                    <p className="text-xs text-muted-foreground">Spacing after printing.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Receipt Copy Counts */}
+              <div className="space-y-4 pt-4 border-t">
+                <h4 className="font-semibold text-sm">Receipt Copy Counts</h4>
+                <p className="text-xs text-muted-foreground">Set how many copies of each receipt type to print globally.</p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Order Receipt (Customer)</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={orderCustomerCopies}
+                      onChange={(e) => setOrderCustomerCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Order Receipt (Kitchen)</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={orderKitchenCopies}
+                      onChange={(e) => setOrderKitchenCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Add-on Receipt (Customer)</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={addonCustomerCopies}
+                      onChange={(e) => setAddonCustomerCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Add-on Receipt (Kitchen)</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={addonKitchenCopies}
+                      onChange={(e) => setAddonKitchenCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Final Receipt</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={finalReceiptCopies}
+                      onChange={(e) => setFinalReceiptCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Daily Sales Report</Label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      max="5"
+                      value={dailySalesReportCopies}
+                      onChange={(e) => setDailySalesReportCopies(parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Sales Report Button */}
+              <div className="space-y-4 pt-4 border-t">
+                <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
+                <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={printDailySalesReport} 
+                    disabled={printingDailyReport}
+                    className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
+                  >
+                    {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
+                      : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>
+                    }
+                  </Button>
+                  
+                  <Button 
+                    onClick={printTestTicket} 
+                    disabled={printingTestTicket}
+                    variant="outline"
+                    className="flex gap-2"
+                  >
+                    {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Testing...</>
+                      : <><Printer className="h-4 w-4" /> Print Test Ticket</>
+                    }
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Use Test Ticket to verify printer width and spacing before printing actual receipts.</p>
+              </div>
+
+              <Button 
+                onClick={savePrinterSettings} 
+                disabled={printerSettingsLoading}
+                className="bg-green-700 hover:bg-green-800 text-white flex gap-2"
+              >
+                {printerSettingsLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                  : printerSettingsSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
+                  : "Save Printer Settings"}
+              </Button>
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>

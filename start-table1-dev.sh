@@ -37,13 +37,22 @@ echo "Waiting for frontend to start..."
 sleep 8
 
 echo ""
+echo "Detecting local IP address..."
+SERVER_IP=$(hostname -I | awk '{print $1}')
+if [ -z "$SERVER_IP" ]; then
+    echo "Could not detect IP address, using localhost..."
+    SERVER_IP=localhost
+else
+    echo "Using server IP: $SERVER_IP"
+fi
+echo ""
 echo "Opening browser to Table 1 Customer View..."
 if command -v xdg-open > /dev/null; then
-    xdg-open http://localhost:5173/?qr=table-1
+    xdg-open http://$SERVER_IP:3000/?qr=table-1
 elif command -v open > /dev/null; then
-    open http://localhost:5173/?qr=table-1
+    open http://$SERVER_IP:3000/?qr=table-1
 else
-    echo "Please open http://localhost:5173/?qr=table-1 in your browser"
+    echo "Please open http://$SERVER_IP:3000/?qr=table-1 in your browser"
 fi
 
 echo ""

@@ -705,6 +705,41 @@ const initializeDatabase = async () => {
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('service_charge_rate', '0.10')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('captive_portal_target', 'http://10.42.0.1:5000/')`);
 
+  /* Printer settings for printer management system */
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('selected_printer', 'BP_DragonFly_Garden_Confirmed')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('default_printer', 'BP_DragonFly_Garden_Confirmed')`);
+  
+  /* Printer profiles - stores per-printer settings as JSON */
+  const defaultPrinterProfiles = {
+    printer_profiles: {
+      "BP_DragonFly_Garden_Confirmed": {
+        width: 80,
+        print_delay_seconds: 0,
+        empty_lines_before: 2,
+        empty_lines_after: 3,
+        has_auto_cutter: true,
+        connection_type: "USB",
+        notes: "Default 80mm thermal printer with auto-cutter"
+      }
+    },
+    receipt_copies: {
+      global: {
+        order_customer: 1,
+        order_kitchen: 1,
+        addon_customer: 1,
+        addon_kitchen: 1,
+        final_receipt: 1,
+        daily_sales_report: 1
+      }
+    }
+  };
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('printer_preferences', '${JSON.stringify(defaultPrinterProfiles)}')`);
+
+  /* Global print settings (fallback when printer-specific settings not available) */
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('print_delay_seconds', '0')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('empty_lines_before_receipt', '2')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('empty_lines_after_receipt', '3')`);
+
   try {
     const categories = await all("SELECT id, name FROM categories");
     for (const cat of categories) {

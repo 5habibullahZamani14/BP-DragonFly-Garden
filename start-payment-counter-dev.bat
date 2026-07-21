@@ -1,65 +1,61 @@
 @echo off
-title DragonFly Garden - Payment Counter View (Development Mode)
-cd /d "c:\Anything Important\BP-DragonFly-Garden"
-
+setlocal enabledelayedexpansion
 echo ========================================
 echo DragonFly Garden - Payment Counter View
 echo Development Mode
 echo ========================================
 echo.
 
-REM Check if backend is already running
+cd /d "c:\Anything Important\BP-DragonFly-Garden"
+
 echo Checking if backend is running...
-tasklist /FI "IMAGENAME eq node.exe" 2>NUL | find /I /N "node.exe">NUL
-if "%ERRORLEVEL%"=="0" (
-    echo Backend is already running.
-    echo WARNING: Will not kill existing backend on exit.
-    set BACKEND_EXISTS=1
-) else (
+netstat -ano | findstr ":5000" | findstr "LISTENING" >nul
+if errorlevel 1 (
     echo Starting backend server...
     start "DragonFly Backend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\restaurant-system\backend && npm run dev"
+    set BACKEND_STARTED=1
     echo Waiting for backend to start...
     timeout /t 5 /nobreak >nul
-    echo Backend started.
-    set BACKEND_EXISTS=0
+) else (
+    echo Backend is already running.
+    set BACKEND_STARTED=0
 )
 
 echo.
-echo Starting frontend development server...
-start "DragonFly Frontend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\frontend && npm run dev"
+echo Checking if frontend is running...
+netstat -ano | findstr ":3000" | findstr "LISTENING" >nul
+if errorlevel 1 (
+    echo Starting frontend development server...
+    start "DragonFly Frontend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\frontend && npm run dev"
+    set FRONTEND_STARTED=1
+    echo Waiting for frontend to start...
+    timeout /t 8 /nobreak >nul
+) else (
+    echo Frontend is already running.
+    set FRONTEND_STARTED=0
+)
 
 echo.
-echo Waiting for frontend to start...
-timeout /t 8 /nobreak >nul
-
+echo Detecting local IP address...
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /i "IPv4"') do (
+    for /f "tokens=*" %%b in ("%%a") do (
+        set SERVER_IP=%%b
+        set SERVER_IP=!SERVER_IP: =!
+    )
+)
+if "%SERVER_IP%"=="" (
+    echo Could not detect IP address, using localhost...
+    set SERVER_IP=localhost
+)
+echo Using server IP: %SERVER_IP%
 echo.
 echo Opening browser to Payment Counter View...
-start http://localhost:5173/?qr=payment-counter-1
+start http://%SERVER_IP%:3000/?qr=payment-counter-1
 
 echo.
 echo ========================================
 echo Payment Counter View launched successfully!
 echo ========================================
 echo.
-echo Press any key to close this window and stop all servers...
-echo (Servers started by this script will be stopped)
-pause >nul
-
-echo.
-echo Stopping servers...
-
-REM Stop frontend (always started by this script)
-echo Stopping frontend...
-taskkill /FI "WINDOWTITLE eq DragonFly Frontend*" /F >nul 2>&1
-
-REM Stop backend only if we started it
-if "%BACKEND_EXISTS%"=="0" (
-    echo Stopping backend...
-    taskkill /FI "WINDOWTITLE eq DragonFly Backend*" /F >nul 2>&1
-) else (
-    echo Skipping backend shutdown (was already running)
-)
-
-echo.
-echo All servers stopped. Goodbye!
-timeout /t 2 /nobreak >nul
+echo This window will close automatically in 5 seconds...
+timeout /t 5 /nobreak >nul

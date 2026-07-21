@@ -410,6 +410,259 @@ router.delete("/promotions/:id", deletePromotionTemplate);
 /* POST /management/promotions/apply-all        — apply template to all menu items */
 router.post("/promotions/apply-all", applyPromotionToAll);
 
+// ── Printer Management ───────────────────────────────────────────────────────
+
+const printerDiscoveryService = require("../services/printerDiscoveryService");
+
+/*
+ * GET /management/printers/discover
+ * Discovers all available printers on the system
+ * Returns: { printers: [{ name, driver, port, status, connectionType, platform }] }
+ */
+router.get("/printers/discover", requireManagerToken, async (req, res) => {
+  try {
+    const printers = await printerDiscoveryService.discoverPrinters();
+    const platformInfo = printerDiscoveryService.getPlatformInfo();
+    res.json({ success: true, printers, platform: platformInfo });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
+ * POST /management/printers/test
+ * Tests printing to a specific printer
+ * Body: { printerName: string }
+ * Returns: { success: true, message: string }
+ */
+router.post("/printers/test", requireManagerToken, async (req, res) => {
+  try {
+    const { printerName } = req.body;
+    if (!printerName) {
+      return res.status(400).json({ success: false, message: "Printer name is required" });
+    }
+    const result = await printerDiscoveryService.testPrint(printerName);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
+ * GET /management/printers/settings
+ * Gets current printer settings from database
+ * Returns: { selectedPrinter, defaultPrinter, printerPreferences }
+ */
+router.get("/printers/settings", requireManagerToken, async (req, res) => {
+  try {
+    const db = require("../database/db");
+    const getSetting = (key) =>
+      new Promise((resolve, reject) => {
+        db.get("SELECT value FROM restaurant_settings WHERE key = ?", [key], (err, row) => {
+          if (err) reject(err);
+          else resolve(row ? row.value : null);
+        });
+      });
+
+    const selectedPrinter = await getSetting("selected_printer");
+    const defaultPrinter = await getSetting("default_printer");
+    const printerPreferences = await getSetting("printer_preferences");
+    const printDelaySeconds = await getSetting("print_delay_seconds");
+    const emptyLinesBefore = await getSetting("empty_lines_before_receipt");
+    const emptyLinesAfter = await getSetting("empty_lines_after_receipt");
+
+    let parsedPrefs = {};
+    try {
+      parsedPrefs = printerPreferences ? JSON.parse(printerPreferences) : {};
+    } catch (e) {
+      console.error("Error parsing printer preferences:", e);
+    }
+
+    res.json({
+      success: true,
+      selectedPrinter,
+      defaultPrinter,
+      printerPreferences: parsedPrefs,
+      printerProfiles: parsedPrefs.printer_profiles || {},
+      printDelaySeconds: printDelaySeconds ? parseInt(printDelaySeconds) : 0,
+      emptyLinesBefore: emptyLinesBefore ? parseInt(emptyLinesBefore) : 2,
+      emptyLinesAfter: emptyLinesAfter ? parseInt(emptyLinesAfter) : 3
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
+ * PUT /management/printers/settings
+ * Updates printer settings
+ * Body: { selectedPrinter?, defaultPrinter?, printerPreferences?, printerProfiles?, printDelaySeconds?, emptyLinesBefore?, emptyLinesAfter? }
+ * Returns: { success: true, message: string }
+ */
+router.put("/printers/settings", requireManagerToken, async (req, res) => {
+  try {
+    const db = require("../database/db");
+    const { selectedPrinter, defaultPrinter, printerPreferences, printerProfiles } = req.body;
+
+    console.log("Received printer settings update:", JSON.stringify({ selectedPrinter, defaultPrinter, printerProfiles }, null, 2));
+
+    const run = (sql, params = []) =>
+      new Promise((resolve, reject) => {
+        db.run(sql, params, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+    if (selectedPrinter !== undefined) {
+      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [selectedPrinter]);
+    }
+    if (defaultPrinter !== undefined) {
+      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'default_printer'", [defaultPrinter]);
+    }
+    
+    // Handle printer profiles - if printerProfiles is provided, update the entire structure
+    if (printerProfiles !== undefined) {
+      const currentPrefs = await new Promise((resolve, reject) => {
+        db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
+          if (err) reject(err);
+          else resolve(row ? row.value : null);
+        });
+      });
+      
+      let parsedPrefs = {};
+      try {
+        parsedPrefs = currentPrefs ? JSON.parse(currentPrefs) : {};
+      } catch (e) {
+        console.error("Error parsing current printer preferences:", e);
+      }
+      
+      parsedPrefs.printer_profiles = printerProfiles;
+      parsedPrefs.receipt_copies = printerPreferences.receipt_copies || parsedPrefs.receipt_copies;
+      
+      console.log("Saving updated printer preferences:", JSON.stringify(parsedPrefs, null, 2));
+      
+      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'printer_preferences'", [JSON.stringify(parsedPrefs)]);
+      
+      // Verify the save
+      const savedPrefs = await new Promise((resolve, reject) => {
+        db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
+          if (err) reject(err);
+          else resolve(row ? row.value : null);
+        });
+      });
+      console.log("Verified saved preferences:", savedPrefs);
+    }
+    
+    // Legacy support - if printerPreferences is provided (old format)
+    if (printerPreferences !== undefined && printerProfiles === undefined) {
+      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'printer_preferences'", [JSON.stringify(printerPreferences)]);
+    }
+
+    res.json({ success: true, message: "Printer settings updated successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
+ * POST /management/printers/daily-sales-report
+ * Prints on-demand daily sales report for current day
+ * Returns: { success: true, message: string }
+ */
+router.post("/printers/daily-sales-report", requireManagerToken, async (req, res) => {
+  try {
+    const db = require("../database/db");
+    const printerService = require("../services/printerService");
+    
+    // Get today's orders
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+    
+    const orders = await new Promise((resolve, reject) => {
+      db.all(
+        "SELECT * FROM orders WHERE created_at >= ? AND created_at < ? ORDER BY created_at ASC",
+        [todayStart, todayEnd],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        }
+      );
+    });
+    
+    // Load items for each order
+    for (const order of orders) {
+      order.items = await new Promise((resolve, reject) => {
+        db.all(
+          "SELECT * FROM order_items WHERE order_id = ?",
+          [order.id],
+          (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+          }
+        );
+      });
+    }
+    
+    // Print the report
+    await printerService.printDailySalesReport(orders);
+    
+    res.json({ success: true, message: "Daily sales report printed successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
+ * POST /management/printers/test
+ * Prints a minimal test ticket to verify printer settings
+ * Returns: { success: true, message: string }
+ */
+router.post("/printers/test", requireManagerToken, async (req, res) => {
+  try {
+    const printerService = require("../services/printerService");
+    const { printerName } = req.body;
+    
+    if (!printerName) {
+      return res.status(400).json({ success: false, message: "Printer name is required" });
+    }
+    
+    // Temporarily set the selected printer for this test
+    const db = require("../database/db");
+    const currentSelected = await new Promise((resolve, reject) => {
+      db.get("SELECT value FROM restaurant_settings WHERE key = 'selected_printer'", (err, row) => {
+        if (err) reject(err);
+        else resolve(row ? row.value : null);
+      });
+    });
+    
+    // Set the test printer as selected temporarily
+    await new Promise((resolve, reject) => {
+      db.run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [printerName], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    
+    await printerService.printTestTicket();
+    
+    // Restore original selected printer if it existed
+    if (currentSelected) {
+      await new Promise((resolve, reject) => {
+        db.run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [currentSelected], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+    
+    res.json({ success: true, message: "Test ticket printed successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
 
 module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;

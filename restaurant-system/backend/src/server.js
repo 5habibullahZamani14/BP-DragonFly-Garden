@@ -663,8 +663,17 @@ const startServer = async () => {
                 return orderDate.toLocaleDateString() === todayLocalStr;
               });
 
-              // Format and execute print
-              await printerService.printDailySalesReport(todayOrders);
+              // Get configured copy count for daily sales report
+              const copyCounts = await printerService.getReceiptCopyCounts();
+              const dailyReportCopies = copyCounts.daily_sales_report || 1;
+
+              // Print according to configured copy count
+              for (let i = 0; i < dailyReportCopies; i++) {
+                await printerService.printDailySalesReport(todayOrders);
+                if (i < dailyReportCopies - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+              }
 
               lastPrintedDay = currentDay;
               console.log(`[Scheduler] Daily sales report printed successfully for ${currentDay}.`);

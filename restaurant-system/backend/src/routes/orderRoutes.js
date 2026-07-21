@@ -117,21 +117,30 @@ const orderRoutes = (broadcast) => {
     
     // If the cashier adds an item at the counter right before paying, they can pass silent: true to skip kitchen print
     if (!req.body.silent) {
-      // Print exactly 1 Customer copy and 2 Kitchen copies for all order types and tickets
+      // Print according to configured copy counts
       (async () => {
         try {
           const itemsToPrint = isAddOn ? newItems : order.items;
+          const copyCounts = await printerService.getReceiptCopyCounts();
           
-          // 1. Customer copy (Copy 1)
-          await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 1);
+          const customerCopies = isAddOn ? copyCounts.addon_customer : copyCounts.order_customer;
+          const kitchenCopies = isAddOn ? copyCounts.addon_kitchen : copyCounts.order_kitchen;
           
-          // 2. Kitchen copy (Copy 2)
-          await new Promise(resolve => setTimeout(resolve, 6000));
-          await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 2);
-
-          // 3. Kitchen copy (Copy 3)
-          await new Promise(resolve => setTimeout(resolve, 6000));
-          await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 2);
+          // Print customer copies
+          for (let i = 0; i < customerCopies; i++) {
+            await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 1);
+            if (i < customerCopies - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+          
+          // Print kitchen copies
+          for (let i = 0; i < kitchenCopies; i++) {
+            await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 2);
+            if (i < kitchenCopies - 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
         } catch (err) {
           console.error("Printer failed:", err);
         }
@@ -220,7 +229,16 @@ const orderRoutes = (broadcast) => {
     }
     
     try {
-      await printerService.printFinalReceipt(order, cashierName || "Cashier");
+      const copyCounts = await printerService.getReceiptCopyCounts();
+      const finalReceiptCopies = copyCounts.final_receipt || 1;
+      
+      // Print final receipt according to configured copy count
+      for (let i = 0; i < finalReceiptCopies; i++) {
+        await printerService.printFinalReceipt(order, cashierName || "Cashier");
+        if (i < finalReceiptCopies - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
     } catch (err) {
       console.error("Printer failed:", err);
     }
