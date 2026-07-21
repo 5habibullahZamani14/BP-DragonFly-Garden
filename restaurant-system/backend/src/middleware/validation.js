@@ -491,6 +491,177 @@ const errorHandler = (err, req, res, next) => {
   return res.status(err.statusCode || 500).json(payload);
 };
 
+// ── Application-Level Constraint Validation ───────────────────────────────────
+
+/**
+ * Validate that a menu item exists and is available.
+ * Used to ensure data integrity before order operations.
+ */
+const validateMenuItemExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const menuItemId = toPositiveInteger(req.body?.menu_item_id || req.params?.menuItemId);
+  
+  if (!menuItemId) {
+    return next(createHttpError(400, "Valid menu_item_id is required."));
+  }
+  
+  db.get("SELECT id, is_available FROM menu_items WHERE id = ?", [menuItemId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Menu item not found."));
+    }
+    if (!row.is_available) {
+      return next(createHttpError(400, "Menu item is not available for ordering."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a table exists.
+ * Used to ensure data integrity before order operations.
+ */
+const validateTableExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const tableId = toPositiveInteger(req.body?.table_id || req.params?.tableId);
+  
+  if (!tableId) {
+    return next(createHttpError(400, "Valid table_id is required."));
+  }
+  
+  db.get("SELECT id FROM tables WHERE id = ?", [tableId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Table not found."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a category exists.
+ * Used to ensure data integrity before menu operations.
+ */
+const validateCategoryExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const categoryId = toPositiveInteger(req.body?.category_id || req.params?.categoryId);
+  
+  if (!categoryId) {
+    return next(createHttpError(400, "Valid category_id is required."));
+  }
+  
+  db.get("SELECT id FROM categories WHERE id = ?", [categoryId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Category not found."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a modifier group exists.
+ * Used to ensure data integrity before modifier operations.
+ */
+const validateModifierGroupExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const groupId = toPositiveInteger(req.body?.group_id || req.params?.groupId);
+  
+  if (!groupId) {
+    return next(createHttpError(400, "Valid group_id is required."));
+  }
+  
+  db.get("SELECT id FROM modifier_groups WHERE id = ?", [groupId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Modifier group not found."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a modifier option exists and belongs to the specified group.
+ * Used to ensure data integrity before modifier operations.
+ */
+const validateModifierOptionExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const optionId = toPositiveInteger(req.body?.option_id || req.params?.optionId);
+  const groupId = toPositiveInteger(req.body?.group_id || req.params?.groupId);
+  
+  if (!optionId) {
+    return next(createHttpError(400, "Valid option_id is required."));
+  }
+  
+  if (!groupId) {
+    return next(createHttpError(400, "Valid group_id is required."));
+  }
+  
+  db.get("SELECT id FROM modifier_options WHERE id = ? AND group_id = ?", [optionId, groupId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Modifier option not found or does not belong to the specified group."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a pattern exists.
+ * Used to ensure data integrity before pattern operations.
+ */
+const validatePatternExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const patternId = toPositiveInteger(req.body?.pattern_id || req.params?.patternId);
+  
+  if (!patternId) {
+    return next(createHttpError(400, "Valid pattern_id is required."));
+  }
+  
+  db.get("SELECT id FROM patterns WHERE id = ?", [patternId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Pattern not found."));
+    }
+    next();
+  });
+};
+
+/**
+ * Validate that a repository image exists.
+ * Used to ensure data integrity before image operations.
+ */
+const validateRepoImageExists = async (req, res, next) => {
+  const db = require("../database/db");
+  const imageId = toPositiveInteger(req.body?.repo_image_id || req.params?.imageId);
+  
+  if (!imageId) {
+    return next(createHttpError(400, "Valid repo_image_id is required."));
+  }
+  
+  db.get("SELECT id FROM repo_images WHERE id = ?", [imageId], (err, row) => {
+    if (err) {
+      return next(err);
+    }
+    if (!row) {
+      return next(createHttpError(404, "Repository image not found."));
+    }
+    next();
+  });
+};
+
 module.exports = {
   ORDER_STATUSES,
   asyncHandler,
@@ -504,6 +675,13 @@ module.exports = {
   validateSplitPayment,
   validateVATEdit,
   validateAddItem,
+  validateMenuItemExists,
+  validateTableExists,
+  validateCategoryExists,
+  validateModifierGroupExists,
+  validateModifierOptionExists,
+  validatePatternExists,
+  validateRepoImageExists,
   notFoundHandler,
   errorHandler
 };

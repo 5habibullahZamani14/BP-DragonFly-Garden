@@ -11,29 +11,7 @@
  */
 
 const db = require("../database/db");
-
-/* Promise wrappers for SQLite operations. */
-const all = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(rows);
-    });
-  });
-
-const run = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.run(sql, params, function callback(err) {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(this);
-    });
-  });
+const { all, run, getDefaultPatternImage, invalidateDefaultPatternCache, clearCachePattern } = require("../utils/dbUtils");
 
 const fs = require("fs");
 const path = require("path");
@@ -115,15 +93,8 @@ const getMenu = async (req, res) => {
   `;
 
   try {
-    const settingsRows = await all(`SELECT value FROM restaurant_settings WHERE key = ?`, ["default_pattern_id"]);
-    let defaultPatternImage = null;
-    if (settingsRows.length > 0) {
-      const parsedId = parseInt(settingsRows[0].value, 10);
-      if (!Number.isNaN(parsedId)) {
-        const patternRows = await all(`SELECT image_url FROM patterns WHERE id = ?`, [parsedId]);
-        if (patternRows.length > 0) defaultPatternImage = patternRows[0].image_url;
-      }
-    }
+    // Use cached default pattern image to avoid repeated queries
+    const defaultPatternImage = await getDefaultPatternImage();
 
     const rows = await all(query);
     const normalized = rows.map((row) => ({
@@ -184,7 +155,6 @@ const getMenu = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 
 
 

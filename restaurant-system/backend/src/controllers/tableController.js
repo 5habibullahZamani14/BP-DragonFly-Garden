@@ -11,6 +11,7 @@ const QRCode = require("qrcode");
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const { pickPreferredLocalIp } = require("../utils/networkAddress");
+const { all, run, get: dbGet } = require("../utils/dbUtils");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
 const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
@@ -19,9 +20,9 @@ const normalizeUrl = (value) => {
   if (!value || typeof value !== "string") return DEFAULT_CAPTIVE_PORTAL_TARGET;
   const trimmed = value.trim();
   if (!trimmed) return DEFAULT_CAPTIVE_PORTAL_TARGET;
-  return trimmed.replace(/\/+$|\s+$/g, "").replace(/\/$/, "") + "/";
+  return trimmed.replace(/\/+$/, "").replace(/\s+$/, "") + "/";
 };
-
+ 
 const normalizeBaseUrl = (value) => normalizeUrl(value).replace(/\/$/, "");
 
 const isLocalHostHeader = (host) =>
@@ -100,27 +101,11 @@ const resolveOrderingBaseUrl = async (req) => {
 };
 
 /*
- * In-memory SVG cache keyed by ordering URL. Generating SVG QR images is
- * CPU-intensive; caching means each unique URL is only rendered once per
- * server process lifetime.
+ * LRU Cache for QR SVG images to prevent unbounded memory growth.
+ * Uses a simple Map with access-order tracking.
  */
+const MAX_QR_CACHE_SIZE = 200;
 const qrSvgCache = new Map();
-
-const run = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
-
-const all = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) { reject(err); return; }
-      resolve(rows);
-    });
-  });
 
 const get = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -129,6 +114,34 @@ const get = (sql, params = []) =>
       resolve(row);
     });
   });
+
+/**
+ * Get QR SVG from cache, updating access order for LRU.
+ * @param {string} key - Cache key
+ * @returns {string|null} - Cached SVG or null
+ */
+const getQrFromCache = (key) => {
+  if (!qrSvgCache.has(key)) return null;
+  const value = qrSvgCache.get(key);
+  // Update access order (delete and re-add to move to end)
+  qrSvgCache.delete(key);
+  qrSvgCache.set(key, value);
+  return value;
+};
+
+/**
+ * Set QR SVG in cache with LRU eviction.
+ * @param {string} key - Cache key
+ * @param {string} value - SVG value to cache
+ */
+const setQrCache = (key, value) => {
+  // Evict oldest entry if cache is full
+  if (qrSvgCache.size >= MAX_QR_CACHE_SIZE) {
+    const firstKey = qrSvgCache.keys().next().value;
+    qrSvgCache.delete(firstKey);
+  }
+  qrSvgCache.set(key, value);
+};
 
 // Broadcast function for WebSocket events
 let broadcastFn = null;
@@ -149,11 +162,11 @@ const buildOrderingUrl = async (req, table) => {
 /* withQrCode appends the ordering URL and cached SVG to any table object. */
 const withQrCode = async (req, table) => {
   const orderingUrl = await buildOrderingUrl(req, table);
-  let qrSvg = qrSvgCache.get(orderingUrl);
+  let qrSvg = getQrFromCache(orderingUrl);
 
   if (!qrSvg) {
     qrSvg = await QRCode.toString(orderingUrl, { type: "svg", margin: 1, width: 220 });
-    qrSvgCache.set(orderingUrl, qrSvg);
+    setQrCache(orderingUrl, qrSvg);
   }
 
   return { ...table, ordering_url: orderingUrl, qr_svg: qrSvg };

@@ -12,11 +12,14 @@ require("dotenv").config({ path: path.resolve(__dirname, "../../.env.local"), ov
  * To fully activate this, the restaurant manager must provide their AWS/GCP
  * credentials in the .env file. If credentials are missing, this service gracefully
  * logs a warning and skips the upload.
+ * 
+ * Updated with circuit breaker pattern for resilience.
  */
 
 const AWS = require("aws-sdk");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const { withCircuitBreaker } = require("./circuitBreaker");
 
 const createS3Client = () => {
   if (!process.env.B2_KEY_ID || !process.env.B2_APPLICATION_KEY || !process.env.B2_ENDPOINT || !process.env.B2_BUCKET_NAME) {
@@ -32,23 +35,50 @@ const createS3Client = () => {
   });
 };
 
-const uploadToCloud = async (filePath) => {
+/**
+ * Internal upload function (not wrapped with circuit breaker).
+ * This is the actual implementation that gets wrapped.
+ */
+const _uploadToCloud = async (filePath) => {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Backup file not found at ${filePath}`);
   }
 
+  const s3 = createS3Client();
+  console.log(`[Cloud Backup] Authenticating with secure cloud provider...`);
+  await s3.upload({
+    Bucket: process.env.B2_BUCKET_NAME,
+    Key: path.basename(filePath),
+    Body: fs.createReadStream(filePath),
+  }).promise();
+  console.log(`[Cloud Backup] Successfully uploaded ${path.basename(filePath)} to secure cloud storage.`);
+  return true;
+};
+
+/**
+ * uploadToCloud - Wrapped with circuit breaker for resilience.
+ * The circuit breaker prevents repeated failed upload attempts and
+ * allows the service to recover gracefully.
+ */
+const uploadToCloud = async (filePath) => {
+  const breaker = withCircuitBreaker('cloudBackup', _uploadToCloud, {
+    failureThreshold: 3,
+    timeoutMs: 120000,
+    successThreshold: 2
+  });
+  
   try {
-    const s3 = createS3Client();
-    console.log(`[Cloud Backup] Authenticating with secure cloud provider...`);
-    await s3.upload({
-      Bucket: process.env.B2_BUCKET_NAME,
-      Key: path.basename(filePath),
-      Body: fs.createReadStream(filePath),
-    }).promise();
-    console.log(`[Cloud Backup] Successfully uploaded ${path.basename(filePath)} to secure cloud storage.`);
-    return true;
+    return await breaker(filePath);
   } catch (error) {
-    console.error("[Cloud Backup] Cloud upload failed:", error);
+    if (error.message.includes('Circuit is OPEN')) {
+      console.error("[Cloud Backup] Circuit breaker is OPEN - upload temporarily unavailable");
+      return {
+        success: false,
+        message: 'Cloud backup service temporarily unavailable. Please try again later.',
+        error: error.message,
+        circuitState: 'OPEN'
+      };
+    }
     throw error;
   }
 };
@@ -379,14 +409,22 @@ const ensureCloudBackupUpToDate = async () => {
   console.log("[Cloud Backup] Up-to-date local and cloud backups already exist.");
 };
 
-module.exports = { executeNightlyCloudBackup, uploadToCloud, ensureCloudBackupUpToDate, listCloudBackups, downloadCloudBackup, decryptFile, encryptFile };
-module.exports.downloadAndDecryptBackup = async (keyName, destinationPath) => {
-  const tmpDir = path.join(__dirname, "../../../backups");
-  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const encLocalPath = path.join(tmpDir, path.basename(keyName));
-  await downloadCloudBackup(keyName, encLocalPath);
-  const decTarPath = encLocalPath.replace(/\.enc$/, "");
-  decryptFile(encLocalPath, decTarPath, process.env.BACKUP_ENC_KEY);
-  // Caller may extract the returned tar.gz path
-  return decTarPath;
+module.exports = { 
+  executeNightlyCloudBackup, 
+  uploadToCloud, 
+  ensureCloudBackupUpToDate, 
+  listCloudBackups, 
+  downloadCloudBackup, 
+  decryptFile, 
+  encryptFile,
+  downloadAndDecryptBackup: async (keyName, destinationPath) => {
+    const tmpDir = path.join(__dirname, "../../../backups");
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const encLocalPath = path.join(tmpDir, path.basename(keyName));
+    await downloadCloudBackup(keyName, encLocalPath);
+    const decTarPath = encLocalPath.replace(/\.enc$/, "");
+    decryptFile(encLocalPath, decTarPath, process.env.BACKUP_ENC_KEY);
+    // Caller may extract the returned tar.gz path
+    return decTarPath;
+  }
 };

@@ -2,12 +2,34 @@
  * printerService.js — Thermal printer integration for order tickets.
  * Rewritten to support Advanced C# GDI Printing with Rich Text tags
  * on Windows, and clean plain-text fallback on Linux (Raspberry Pi).
+ * 
+ * Updated with circuit breaker pattern for resilience.
  */
 
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const db = require("../database/db");
+const { withCircuitBreaker, STATE } = require("./circuitBreaker");
+
+// Load thermalPrinterService with explicit error logging
+let thermalPrinterService;
+try {
+  thermalPrinterService = require("./thermalPrinterService");
+  console.log("[thermal] thermalPrinterService loaded successfully");
+} catch (err) {
+  console.error("[thermal] FAILED to load thermalPrinterService:", err.message);
+  // Create a stub so the rest of the code doesn't crash
+  thermalPrinterService = {
+    convertTicketToEscPos: () => Buffer.from(""),
+    addEmptyLines: (buf) => buf,
+    sendRawToPrinter: () => Promise.reject(new Error("thermalPrinterService not loaded")),
+    ensurePrinterShared: () => Promise.resolve(false),
+    getPrinterShareName: () => Promise.resolve(""),
+    getPrinterConnectionType: () => Promise.resolve("unknown"),
+    shouldUseRawMode: () => false
+  };
+}
 
 const centerText = (text, width = 80) => {
   const pad = Math.max(0, Math.floor((width - text.length) / 2));
@@ -81,7 +103,6 @@ const getPrinterSettings = (printerName) => {
       }
       
       if (!row) {
-        // No printer preferences at all, use defaults
         resolve(defaultSettings);
         return;
       }
@@ -92,7 +113,6 @@ const getPrinterSettings = (printerName) => {
         const printerProfile = printerProfiles[printerName];
         
         if (printerProfile) {
-          // Use printer-specific settings
           resolve({
             width: printerProfile.width || 80,
             delaySeconds: printerProfile.print_delay_seconds || 0,
@@ -101,7 +121,6 @@ const getPrinterSettings = (printerName) => {
             hasAutoCutter: printerProfile.has_auto_cutter || false
           });
         } else {
-          // No printer-specific settings, use global defaults
           resolve(defaultSettings);
         }
       } catch (e) {
@@ -124,7 +143,6 @@ const getSelectedPrinter = () => {
       } else {
         const selectedPrinter = row ? row.value : null;
         
-        // If no selected printer, try default printer
         if (!selectedPrinter) {
           db.get("SELECT value FROM restaurant_settings WHERE key = 'default_printer'", (err, row) => {
             if (err) {
@@ -206,13 +224,256 @@ const stripGdiTags = (ticket, width = 80) => {
 };
 
 /**
- * Format ticket with dynamic width based on printer settings
+ * Internal print execution logic (not wrapped with circuit breaker).
+ * This is the actual implementation that gets wrapped.
  */
-const formatTicketWithWidth = (ticket, width) => {
-  // This function is a placeholder for dynamic width formatting
-  // The actual formatting is done in the ticket generation functions
-  // which now use the width parameter directly
-  return ticket;
+const _executePrint = (ticket, filenamePrefix) =>
+  new Promise((resolve, reject) => {
+    try {
+      console.log(`\n========== PRINTING ${filenamePrefix} ==========`);
+      console.log(ticket);
+      console.log("=====================================\n");
+
+      const logsDir = path.join(__dirname, "../../logs");
+      if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `${filenamePrefix}_${timestamp}.txt`;
+      const filepath = path.join(logsDir, filename);
+
+      getSelectedPrinter()
+        .then(printerName => {
+          console.log(`Using printer: ${printerName}`);
+          return getPrinterSettings(printerName).then(settings => ({ printerName, settings }));
+        })
+        .then(({ printerName, settings }) => {
+          console.log(`Printer settings: width=${settings.width}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
+          
+          const cleanTicket = stripGdiTags(ticket, settings.width);
+          const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
+          const afterLines = '\n'.repeat(settings.emptyLinesAfter);
+          const finalTicket = beforeLines + cleanTicket + afterLines;
+          
+          console.log(`Ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
+
+          if (process.platform === "win32") {
+            console.log(`[thermal] Windows platform detected, attempting raw ESC/POS for ${printerName}`);
+            
+            const doRawPrint = async () => {
+              console.log(`[thermal] doRawPrint() called for ${printerName}`);
+              
+              const escPosBuffer = thermalPrinterService.convertTicketToEscPos(
+                ticket,
+                settings.width,
+                settings.hasAutoCutter
+              );
+              
+              const finalBuffer = thermalPrinterService.addEmptyLines(
+                escPosBuffer,
+                settings.emptyLinesBefore,
+                settings.emptyLinesAfter
+              );
+              
+              try {
+                const binPath = filepath.replace('.txt', '.bin');
+                fs.writeFileSync(binPath, finalBuffer);
+                console.log(`ESC/POS binary saved to ${binPath} (${finalBuffer.length} bytes)`);
+              } catch (binErr) {
+                console.error('Failed to save ESC/POS binary:', binErr.message);
+              }
+              
+              const result = await thermalPrinterService.sendRawToPrinter(printerName, finalBuffer);
+              console.log(`Raw ESC/POS print successful: ${result.message}`);
+              if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                setTimeout(() => resolve({ ...result, filename }), settings.delaySeconds * 1000);
+              } else {
+                resolve({ ...result, filename });
+              }
+            };
+            
+            const doStandardPrint = () => new Promise((stdResolve, stdReject) => {
+              console.log(`Using standard Out-Printer for ${printerName}`);
+              const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
+              fs.writeFileSync(filepath, formattedTicketCRLF);
+
+              const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${printerName}'`;
+
+              const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
+              let stdout = "";
+              let stderr = "";
+              proc.stdout.on("data", (data) => stdout += data);
+              proc.stderr.on("data", (data) => stderr += data);
+              
+              proc.on("close", (code) => {
+                if (code === 0) {
+                  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                    setTimeout(() => {
+                      stdResolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
+                    }, settings.delaySeconds * 1000);
+                  } else {
+                    stdResolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
+                  }
+                } else {
+                  stdReject(new Error(`Windows native print failed: ${stderr || stdout}`));
+                }
+              });
+              proc.on("error", (err) => stdReject(new Error(`Windows native print execution failed: ${err.message}`)));
+            });
+            
+            doRawPrint()
+              .catch(err => {
+                console.warn(`Raw ESC/POS failed, falling back to standard Out-Printer: ${err.message}`);
+                return doStandardPrint();
+              })
+              .catch(err => {
+                console.error(`Standard Out-Printer also failed: ${err.message}`);
+                reject(err);
+              });
+          } else {
+            fs.writeFileSync(filepath, finalTicket);
+
+            const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
+            let stdout = "";
+            let stderr = "";
+            proc.stdout.on("data", (data) => stdout += data);
+            proc.stderr.on("data", (data) => stderr += data);
+            
+            proc.on("close", (code) => {
+              if (code === 0) {
+                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                  setTimeout(() => {
+                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
+                  }, settings.delaySeconds * 1000);
+                } else {
+                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
+                }
+              } else {
+                reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
+              }
+            });
+            proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
+          }
+        })
+        .catch(err => {
+          console.error("Error getting printer settings, using default:", err);
+          const defaultPrinter = "BP_DragonFly_Garden_Confirmed";
+          
+          getPrinterSettings(defaultPrinter)
+            .then(settings => {
+              console.log(`Using default printer: ${defaultPrinter} with settings:`, settings);
+              
+              const cleanTicket = stripGdiTags(ticket, settings.width);
+              const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
+              const afterLines = '\n'.repeat(settings.emptyLinesAfter);
+              const finalTicket = beforeLines + cleanTicket + afterLines;
+              
+              console.log(`Fallback ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
+
+              if (process.platform === "win32") {
+                console.log(`[thermal] Fallback attempting raw ESC/POS for ${defaultPrinter}`);
+                const escPosBuffer = thermalPrinterService.convertTicketToEscPos(
+                  ticket,
+                  settings.width,
+                  settings.hasAutoCutter
+                );
+                const finalBuffer = thermalPrinterService.addEmptyLines(
+                  escPosBuffer,
+                  settings.emptyLinesBefore,
+                  settings.emptyLinesAfter
+                );
+                
+                thermalPrinterService.sendRawToPrinter(defaultPrinter, finalBuffer)
+                  .then(result => {
+                    console.log(`[thermal] Fallback raw ESC/POS success: ${result.message}`);
+                    resolve({ ...result, filename });
+                  })
+                  .catch(err => {
+                    console.warn(`[thermal] Fallback raw ESC/POS failed: ${err.message}, using standard Out-Printer`);
+                    const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
+                    fs.writeFileSync(filepath, formattedTicketCRLF);
+
+                    const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${defaultPrinter}'`;
+
+                    const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
+                    let stdout = "";
+                    let stderr = "";
+                    proc.stdout.on("data", (data) => stdout += data);
+                    proc.stderr.on("data", (data) => stderr += data);
+                    
+                    proc.on("close", (code) => {
+                      if (code === 0) {
+                        if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                          setTimeout(() => {
+                            resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
+                          }, settings.delaySeconds * 1000);
+                        } else {
+                          resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
+                        }
+                      } else {
+                        reject({ success: false, message: "Windows native print failed", error: stderr || stdout });
+                      }
+                    });
+                    proc.on("error", (err) => reject({ success: false, message: "Windows native print execution failed", error: err.message }));
+                  });
+              } else {
+                fs.writeFileSync(filepath, finalTicket);
+
+                const proc = spawn("lp", ["-d", defaultPrinter, filepath], { shell: false });
+                let stdout = "";
+                let stderr = "";
+                proc.stdout.on("data", (data) => stdout += data);
+                proc.stderr.on("data", (data) => stderr += data);
+                
+                proc.on("close", (code) => {
+                  if (code === 0) {
+                    if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                      setTimeout(() => {
+                        resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
+                      }, settings.delaySeconds * 1000);
+                    } else {
+                      resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
+                    }
+                  } else {
+                    reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
+                  }
+                });
+                proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
+              }
+            })
+            .catch(err => {
+              reject({ success: false, message: "Error getting default printer settings", error: err.message });
+            });
+        });
+    } catch (error) {
+      reject({ success: false, message: "Error printing ticket", error: error.message });
+    }
+  });
+
+/**
+ * executePrint - Wrapped with circuit breaker for resilience.
+ * The circuit breaker prevents repeated failed print attempts and
+ * allows the service to recover gracefully.
+ */
+const executePrint = async (ticket, filenamePrefix) => {
+  const breaker = withCircuitBreaker('printer', _executePrint, {
+    failureThreshold: 3,
+    timeoutMs: 60000,
+    successThreshold: 2
+  });
+  
+  try {
+    return await breaker(ticket, filenamePrefix);
+  } catch (error) {
+    if (error.message.includes('Circuit is OPEN')) {
+      return {
+        success: false,
+        message: 'Printer service temporarily unavailable. Please try again in a moment.',
+        error: error.message,
+        circuitState: 'OPEN'
+      };
+    }
+    throw error;
+  }
 };
 
 const printerService = {
@@ -252,7 +513,6 @@ const printerService = {
     ticket += "================================================================================\n";
     
     itemsToPrint.forEach(item => {
-      // Pro Way: Clean and robust word wrapping
       const nameLines = [];
       const words = item.item_name.split(/\s+/);
       let curLine = "";
@@ -297,7 +557,6 @@ const printerService = {
         if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
       }
 
-      // Print selected options (modifiers/variations)
       if (item.options_json) {
         try {
           const opts = JSON.parse(item.options_json);
@@ -308,7 +567,7 @@ const printerService = {
         } catch { /* ignore malformed JSON */ }
       }
 
-      ticket += "[RIGHT][SQUARE]\n"; // Checkbox on the right
+      ticket += "[RIGHT][SQUARE]\n";
       ticket += "================================================================================\n";
     });
     
@@ -361,7 +620,6 @@ const printerService = {
       
       ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
       
-      // Calculate price before and after variations
       let deltasSum = 0;
       let hasPriceDelta = false;
       if (item.options_json) {
@@ -384,7 +642,6 @@ const printerService = {
         ticket += `    (Unit: RM ${item.price_at_order_time.toFixed(2)})\n`;
       }
       
-      // Print selected options (modifiers/variations)
       if (item.options_json) {
         try {
           const opts = JSON.parse(item.options_json);
@@ -396,7 +653,6 @@ const printerService = {
         } catch { /* ignore */ }
       }
 
-      // Print item notes if present
       if (item.notes) {
         const noteWords = item.notes.split(' ');
         let curNote = "    Note: ";
@@ -452,17 +708,17 @@ const printerService = {
   printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {
     const copyTitle = copyNum === 1 ? "CUSTOMER COPY" : "KITCHEN COPY";
     const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle);
-    return await printerService.executePrint(ticket, `order_${order.id}_checklist`);
+    return await executePrint(ticket, `order_${order.id}_checklist`);
   },
 
   printFinalReceipt: async (order, cashierName) => {
     const ticket = printerService.formatFinalReceipt(order, cashierName);
-    return await printerService.executePrint(ticket, `order_${order.id}_final`);
+    return await executePrint(ticket, `order_${order.id}_final`);
   },
 
   printDailySalesReport: async (todayOrders) => {
     const timestamp = formatDateTime(new Date());
-    const todayDateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const todayDateStr = new Date().toLocaleDateString('en-GB');
     
     let ticket = "\n";
     ticket += "[CENTER][H1] DAILY SALES REPORT\n";
@@ -490,7 +746,7 @@ const printerService = {
     ticket += "================================================================================\n";
     ticket += "\n\n";
     
-    return await printerService.executePrint(ticket, `daily_sales_report`);
+    return await executePrint(ticket, `daily_sales_report`);
   },
 
   printTestTicket: async () => {
@@ -505,172 +761,8 @@ const printerService = {
     ticket += "================================================================================\n";
     ticket += "\n\n";
     
-    return await printerService.executePrint(ticket, `printer_test`);
-  },
-
-  executePrint: (ticket, filenamePrefix) =>
-    new Promise((resolve, reject) => {
-      try {
-        console.log(`\n========== PRINTING ${filenamePrefix} ==========`);
-        console.log(ticket);
-        console.log("=====================================\n");
-
-        const logsDir = path.join(__dirname, "../../logs");
-        if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `${filenamePrefix}_${timestamp}.txt`;
-        const filepath = path.join(logsDir, filename);
-
-        // Get the selected printer and its specific settings
-        getSelectedPrinter()
-          .then(printerName => {
-            console.log(`Using printer: ${printerName}`);
-            
-            return getPrinterSettings(printerName).then(settings => ({ printerName, settings }));
-          })
-          .then(({ printerName, settings }) => {
-            console.log(`Printer settings: width=${settings.width}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
-            
-            // Format ticket with printer-specific width
-            const cleanTicket = stripGdiTags(ticket, settings.width);
-            
-            // Add configurable empty lines before and after receipt
-            const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
-            const afterLines = '\n'.repeat(settings.emptyLinesAfter);
-            const finalTicket = beforeLines + cleanTicket + afterLines;
-            
-            console.log(`Ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
-
-            if (process.platform === "win32") {
-              const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
-              fs.writeFileSync(filepath, formattedTicketCRLF);
-
-              const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${printerName}'`;
-
-              const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
-              let stdout = "";
-              let stderr = "";
-              proc.stdout.on("data", (data) => stdout += data);
-              proc.stderr.on("data", (data) => stderr += data);
-              
-              proc.on("close", (code) => {
-                if (code === 0) {
-                  // Apply delay if configured and printer doesn't have auto-cutter
-                  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                    setTimeout(() => {
-                      resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                    }, settings.delaySeconds * 1000);
-                  } else {
-                    resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                  }
-                } else {
-                  reject({ success: false, message: "Windows native print failed", error: stderr || stdout });
-                }
-              });
-              proc.on("error", (err) => reject({ success: false, message: "Windows native print execution failed", error: err.message }));
-            } else {
-              fs.writeFileSync(filepath, finalTicket);
-
-              const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
-              let stdout = "";
-              let stderr = "";
-              proc.stdout.on("data", (data) => stdout += data);
-              proc.stderr.on("data", (data) => stderr += data);
-              
-              proc.on("close", (code) => {
-                if (code === 0) {
-                  // Apply delay if configured and printer doesn't have auto-cutter
-                  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                    setTimeout(() => {
-                      resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                    }, settings.delaySeconds * 1000);
-                  } else {
-                    resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                  }
-                } else {
-                  reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
-                }
-              });
-              proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
-            }
-          })
-          .catch(err => {
-            // Fallback to default printer if selected fails
-            console.error("Error getting printer settings, using default:", err);
-            const defaultPrinter = "BP_DragonFly_Garden_Confirmed";
-            
-            getPrinterSettings(defaultPrinter)
-              .then(settings => {
-                console.log(`Using default printer: ${defaultPrinter} with settings:`, settings);
-                
-                const cleanTicket = stripGdiTags(ticket, settings.width);
-                const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
-                const afterLines = '\n'.repeat(settings.emptyLinesAfter);
-                const finalTicket = beforeLines + cleanTicket + afterLines;
-                
-                console.log(`Fallback ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
-
-                if (process.platform === "win32") {
-                  const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
-                  fs.writeFileSync(filepath, formattedTicketCRLF);
-
-                  const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${defaultPrinter}'`;
-
-                  const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
-                  let stdout = "";
-                  let stderr = "";
-                  proc.stdout.on("data", (data) => stdout += data);
-                  proc.stderr.on("data", (data) => stderr += data);
-                  
-                  proc.on("close", (code) => {
-                    if (code === 0) {
-                      if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                        setTimeout(() => {
-                          resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
-                        }, settings.delaySeconds * 1000);
-                      } else {
-                        resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                      }
-                    } else {
-                      reject({ success: false, message: "Windows native print failed", error: stderr || stdout });
-                    }
-                  });
-                  proc.on("error", (err) => reject({ success: false, message: "Windows native print execution failed", error: err.message }));
-                } else {
-                  fs.writeFileSync(filepath, finalTicket);
-
-                  const proc = spawn("lp", ["-d", defaultPrinter, filepath], { shell: false });
-                  let stdout = "";
-                  let stderr = "";
-                  proc.stdout.on("data", (data) => stdout += data);
-                  proc.stderr.on("data", (data) => stderr += data);
-                  
-                  proc.on("close", (code) => {
-                    if (code === 0) {
-                      if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                        setTimeout(() => {
-                          resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
-                        }, settings.delaySeconds * 1000);
-                      } else {
-                        resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                      }
-                    } else {
-                      reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
-                    }
-                  });
-                  proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
-                }
-              })
-              .catch(err => {
-                reject({ success: false, message: "Error getting default printer settings", error: err.message });
-              });
-          });
-      } catch (error) {
-        reject({ success: false, message: "Error printing ticket", error: error.message });
-      }
-    })
+    return await executePrint(ticket, `printer_test`);
+  }
 };
 
-module.exports = printerService;
-module.exports.getReceiptCopyCounts = getReceiptCopyCounts;
+module.exports = { ...printerService, getReceiptCopyCounts };
