@@ -1910,7 +1910,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="shrink-0 font-1 text-foreground/55">
                         {(() => {
                           const st = Number(o.total_price);
-                          const rT = st + (st * 0.10) + (st * 1.10 * 0.06);
+                          const scRate = Number(o.service_charge_rate ?? 0.10);
+                          const vatRate = Number(o.vat_rate ?? 0.06);
+                          const sc = st * scRate;
+                          const vat = (st + sc) * vatRate;
+                          const rT = st + sc + vat;
                           return formatRM(Math.round(rT * 20) / 20);
                         })()}
                       </span>
@@ -1937,7 +1941,14 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                       <span className="truncate font-medium text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</span>
                       <span className="truncate text-foreground/40">· {t((o.items?.length || 0) === 1 ? "customer.historyItemCount_one" : "customer.historyItemCount_other", { count: o.items?.length || 0 })}</span>
                     </div>
-                    <span className="shrink-0 font-1 text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || o.total_price * 1.166))}</span>
+                    <span className="shrink-0 font-1 text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || (() => {
+                      const st = Number(o.total_price);
+                      const scRate = Number(o.service_charge_rate ?? 0.10);
+                      const vatRate = Number(o.vat_rate ?? 0.06);
+                      const sc = st * scRate;
+                      const vat = (st + sc) * vatRate;
+                      return Math.round((st + sc + vat) * 20) / 20;
+                    })()))}</span>
                   </li>
                 ))}
               </ul>

@@ -168,8 +168,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         const selectedQty = splitItemsQuantities[item.id] || 0;
         return sum + ((item.price_at_order_time ?? 0) * selectedQty);
       }, 0);
-      const service = splitSubtotal * (selectedOrder.service_charge_rate || 0.1);
-      const tax = (splitSubtotal + service) * (selectedOrder.vat_rate || 0.06);
+      const service = splitSubtotal * (selectedOrder.service_charge_rate || 0);
+      const tax = (splitSubtotal + service) * (selectedOrder.vat_rate || 0);
       setPaymentAmount((splitSubtotal + service + tax).toFixed(2));
     }
   }, [splitItemsQuantities, isSplitMode, selectedOrder]);

@@ -119,44 +119,6 @@ const initializeDatabase = async () => {
   `);
 
   /* Pattern assets represent decorative overlays managers can apply to menu cards. */
-  await run(`
-    CREATE TABLE IF NOT EXISTS patterns (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      image_url TEXT NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      opacity REAL NOT NULL DEFAULT 0.4,
-      zoom REAL NOT NULL DEFAULT 1.0,
-      rotation REAL NOT NULL DEFAULT 0,
-      flip_horizontal INTEGER NOT NULL DEFAULT 0,
-      flip_vertical INTEGER NOT NULL DEFAULT 0,
-      fade_direction TEXT NOT NULL DEFAULT 'none',
-      fade_intensity REAL NOT NULL DEFAULT 0.5
-    )
-  `);
-
-  /* Repository sections allow managers to group reusable menu images. */
-  await run(`
-    CREATE TABLE IF NOT EXISTS image_repository_sections (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      display_order INTEGER NOT NULL DEFAULT 0,
-      max_bytes INTEGER NOT NULL DEFAULT 102400,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS repo_images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      section_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      image_url TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (section_id) REFERENCES image_repository_sections(id) ON DELETE CASCADE
-    )
-  `);
 
   /* Tables represent the physical tables in the restaurant. */
   await run(`

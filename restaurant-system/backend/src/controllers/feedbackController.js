@@ -401,7 +401,7 @@ exports.runAnalysis = async (req, res) => {
       analysisMethod = "ai";
     } else {
       // Fall back to rule-based analysis
-      console.log("AI analysis failed, falling back to rule-based:", aiAnalysisResult.reason);
+      console.error("AI analysis failed, falling back to rule-based:", aiAnalysisResult.reason);
       const ruleBased = analyzeFeedback(current, previous, periodFrom, periodTo);
       summary = ruleBased.summary;
       findings = ruleBased.findings;

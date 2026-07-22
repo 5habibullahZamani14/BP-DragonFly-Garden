@@ -16,7 +16,7 @@ const STOP_WORDS = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "is", "was",
   "are", "were", "be", "been", "it", "this", "that", "with", "from", "as", "by", "not",
   "no", "so", "if", "my", "our", "we", "they", "you", "your", "i", "me", "very", "too",
-  "also", "just", "had", "have", "has", "was", "were", "would", "could", "should",
+  "also", "just", "had", "have", "has", "would", "could", "should",
 ]);
 
 const tokenize = (text) =>

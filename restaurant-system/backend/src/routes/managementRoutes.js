@@ -436,14 +436,19 @@ router.get("/printers/discover", requireManagerToken, async (req, res) => {
  * Returns: { success: true, message: string }
  */
 router.post("/printers/test", requireManagerToken, async (req, res) => {
+  console.log(`[thermal] Test print route called for printer: ${req.body.printerName}`);
   try {
     const { printerName } = req.body;
     if (!printerName) {
+      console.log(`[thermal] Test print rejected: no printer name`);
       return res.status(400).json({ success: false, message: "Printer name is required" });
     }
+    console.log(`[thermal] Calling printerDiscoveryService.testPrint("${printerName}")`);
     const result = await printerDiscoveryService.testPrint(printerName);
+    console.log(`[thermal] Test print result:`, result);
     res.json(result);
   } catch (error) {
+    console.error(`[thermal] Test print route error:`, error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -620,13 +625,17 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
  * Returns: { success: true, message: string }
  */
 router.post("/printers/test", requireManagerToken, async (req, res) => {
+  console.log(`[thermal] ROUTE B (printerService) hit for: ${req.body.printerName}`);
   try {
     const printerService = require("../services/printerService");
     const { printerName } = req.body;
     
     if (!printerName) {
+      console.log(`[thermal] ROUTE B rejected: no printer name`);
       return res.status(400).json({ success: false, message: "Printer name is required" });
     }
+    
+    console.log(`[thermal] ROUTE B calling printerService.printTestTicket()`);
     
     // Temporarily set the selected printer for this test
     const db = require("../database/db");
@@ -657,8 +666,10 @@ router.post("/printers/test", requireManagerToken, async (req, res) => {
       });
     }
     
+    console.log(`[thermal] ROUTE B success`);
     res.json({ success: true, message: "Test ticket printed successfully" });
   } catch (error) {
+    console.error(`[thermal] ROUTE B error:`, error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

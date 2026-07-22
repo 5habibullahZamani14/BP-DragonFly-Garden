@@ -80,8 +80,8 @@ const printerDiscoveryService = {
    */
   discoverLinuxPrinters: async () => {
     return new Promise((resolve, reject) => {
-      // First check if CUPS is available
-      const cupsCheck = spawn("which", ["lpstat"], { shell: false });
+      // First check if CUPS is available (use command -v instead of which for better compatibility)
+      const cupsCheck = spawn("command", ["-v", "lpstat"], { shell: false });
       
       cupsCheck.on("close", (code) => {
         if (code !== 0) {
@@ -293,32 +293,63 @@ is working correctly!
    */
   testPrintWindows: async (printerName, content) => {
     return new Promise((resolve, reject) => {
-      const psCommand = `
-        $content = @'
-${content}
-'@
-        $content | Out-Printer -Name '${printerName}'
-      `;
+      // Try raw ESC/POS first via thermalPrinterService
+      const thermalPrinterService = require('./thermalPrinterService');
       
-      const proc = spawn("powershell", [
-        "-NoProfile",
-        "-NonInteractive", 
-        "-Command",
-        psCommand
-      ], { shell: false });
+      // Convert test content to ESC/POS
+      const escPosBuffer = thermalPrinterService.convertTicketToEscPos(content, 80, true);
+      const finalBuffer = thermalPrinterService.addEmptyLines(escPosBuffer, 2, 3);
       
-      let stderr = "";
-      proc.stderr.on("data", (data) => stderr += data);
+      // Save binary for debugging
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const binPath = path.join(__dirname, '../../logs', `testprint_${Date.now()}.bin`);
+        fs.writeFileSync(binPath, finalBuffer);
+        console.log(`[thermal] Test print ESC/POS binary saved to ${binPath} (${finalBuffer.length} bytes)`);
+      } catch (binErr) {
+        console.error('[thermal] Failed to save test print binary:', binErr.message);
+      }
       
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve({ success: true, message: "Test print sent successfully" });
-        } else {
-          reject(new Error(`PowerShell failed: ${stderr}`));
-        }
-      });
-      
-      proc.on("error", (err) => reject(err));
+      // Try raw methods
+      thermalPrinterService.sendRawToPrinter(printerName, finalBuffer)
+        .then(result => {
+          console.log(`[thermal] Test print raw success: ${result.message}`);
+          resolve({ success: true, message: "Test print sent successfully (raw ESC/POS)" });
+        })
+        .catch(rawErr => {
+          console.warn(`[thermal] Test print raw failed: ${rawErr.message}, falling back to Out-Printer`);
+          
+          // Fallback to standard Out-Printer - write to temp file first
+          const fs = require('fs');
+          const path = require('path');
+          const tempFile = path.join(require('os').tmpdir(), `testprint_${Date.now()}.txt`);
+          fs.writeFileSync(tempFile, content);
+          
+          const psCommand = `Get-Content -Path '${tempFile}' -Raw | Out-Printer -Name '${printerName}'`;
+          
+          const proc = spawn("powershell", [
+            "-NoProfile",
+            "-NonInteractive", 
+            "-Command",
+            psCommand
+          ], { shell: false });
+          
+          let stderr = "";
+          proc.stderr.on("data", (data) => stderr += data);
+          
+          proc.on("close", (code) => {
+            try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
+            
+            if (code === 0) {
+              resolve({ success: true, message: "Test print sent successfully (standard)" });
+            } else {
+              reject(new Error(`PowerShell failed: ${stderr}`));
+            }
+          });
+          
+          proc.on("error", (err) => reject(err));
+        });
     });
   },
 
