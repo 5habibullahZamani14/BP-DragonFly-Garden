@@ -40,3 +40,8 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Backups
+restaurant-system/backups/
+*.tar.gz
+*.tar.gz.enc
