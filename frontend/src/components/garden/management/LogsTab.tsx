@@ -521,12 +521,11 @@ export const LogsTab = () => {
             />
             <div className="flex-1 w-full h-[220px]">
               <div id="category-chart" className="relative w-full h-full">
-                {categoryChartData.length === 0 || categoryChartData.every(d => d.count === 0) && (
+                {categoryChartData.length === 0 || categoryChartData.every(d => d.count === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No activity data available for the selected filters.")} />
-                )}
-                {categoryChartData.length > 0 && categoryChartData.some(d => d.count > 0) && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <BarChart data={categoryChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={800} height={220}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
@@ -538,7 +537,7 @@ export const LogsTab = () => {
                         })}
                       </Bar>
                     </BarChart>
-                  </ResponsiveContainer>
+                  </div>
                 )}
               </div>
             </div>
@@ -592,19 +591,18 @@ Understanding activity distribution helps you:
             </div>
             <div className="flex-1 w-full h-[220px]">
               <div id="activity-trend-chart" className="relative w-full h-full">
-                {activityChartData.length === 0 || activityChartData.every(d => d.count === 0) && (
+                {activityChartData.length === 0 || activityChartData.every(d => d.count === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No activity trend data available.")} />
-                )}
-                {activityChartData.length > 0 && activityChartData.some(d => d.count > 0) && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={activityChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <BarChart data={activityChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={800} height={220}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} tickFormatter={(val) => new Date(val).toLocaleDateString('en-MY', { day: '2-digit', month: 'short' })} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                       <Tooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} labelFormatter={(val) => new Date(val).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' })} />
                       <Bar dataKey="count" name="Events" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={24} />
                     </BarChart>
-                  </ResponsiveContainer>
+                  </div>
                 )}
               </div>
             </div>

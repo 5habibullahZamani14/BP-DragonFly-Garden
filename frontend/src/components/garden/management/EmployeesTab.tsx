@@ -24,6 +24,7 @@
 
 import { useTranslation } from "react-i18next";
 import { useState, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -179,14 +180,19 @@ export const EmployeesTab = () => {
   };
 
   const handleArchive = async (id: number) => {
-    if (confirm(t("m.confirmArchive"))) {
-      try {
-        await updateEmployee(id, { is_archived: 1 });
-        loadEmployees();
-      } catch (e) {
-        safeConsoleError("Failed to archive employee", e);
-      }
-    }
+    toast(t("m.confirmArchive"), {
+      action: {
+        text: t("m.archive"),
+        onClick: async () => {
+          try {
+            await updateEmployee(id, { is_archived: 1 });
+            loadEmployees();
+          } catch (e) {
+            safeConsoleError("Failed to archive employee", e);
+          }
+        },
+      },
+    });
   };
 
   // --- Analytics & Grouping Logic ---
@@ -196,7 +202,8 @@ export const EmployeesTab = () => {
     "Chef": "#ef4444",   // red
     "Chef Assistant": "#f97316", // orange
     "Cashier": "#10b981", // emerald
-    "Manager": "#8b5cf6" // violet
+    "Manager": "#8b5cf6", // violet
+    "Front": "#06b6d4"   // cyan
   };
 
   const { groupedEmployees, pieData, barData } = useMemo(() => {
@@ -337,28 +344,29 @@ export const EmployeesTab = () => {
             />
             <div className="flex-1 w-full h-[220px]">
               <div id="staff-dist-chart" className="relative w-full h-full">
-                {pieData.length === 0 && (
+                {pieData.length === 0 || pieData.every(d => d.value === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <PieChart width={400} height={220}>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [value, t("m.chartEmployees")]} />
+                    </PieChart>
+                  </div>
                 )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value: number) => [value, t("m.chartEmployees")]} />
-                  </PieChart>
-                </ResponsiveContainer>
               </div>
             </div>
             <ChartCardFooter
@@ -392,22 +400,23 @@ export const EmployeesTab = () => {
             />
             <div className="flex-1 w-full h-[220px]">
               <div id="payroll-load-chart" className="relative w-full h-full">
-                {barData.length === 0 && (
+                {barData.length === 0 || barData.every(d => d.totalSalary === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No employees match the selected filters.")} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={600} height={220}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} tickFormatter={(val) => `${val / 1000}k`} />
+                      <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                      <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]} barSize={24}>
+                        {barData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </div>
                 )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={<ChartTickWrap wordsPerLine={3} fontSize={11} />} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} tickFormatter={(val) => `${val / 1000}k`} />
-                    <Tooltip formatter={(value: number) => [`RM ${value.toFixed(2)}`, t("m.chartTotalSalary")]} cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                    <Bar dataKey="totalSalary" radius={[4, 4, 0, 0]} barSize={24}>
-                      {barData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={departmentColors[entry.deptKey] || '#94a3b8'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
               </div>
             </div>
             <ChartCardFooter

@@ -13,6 +13,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -590,13 +591,13 @@ export const SettingsTab = () => {
       });
       const data = await response.json();
       if (data.success) {
-        alert(`Test print sent successfully to ${printerName}`);
+        toast.success(`Test print sent successfully to ${printerName}`);
       } else {
-        alert(`Test print failed: ${data.message}`);
+        toast.error(`Test print failed: ${data.message}`);
       }
     } catch (err: any) {
       safeConsoleError("Test print failed", err);
-      alert(`Test print failed: ${err.message}`);
+      toast.error(`Test print failed: ${err.message}`);
     } finally {
       setTestPrintLoading(null);
     }
@@ -643,7 +644,7 @@ export const SettingsTab = () => {
           await updateSetting("default_card_size", defaultCardSize);
           setCardSizeSaved(true);
           setTimeout(() => setCardSizeSaved(false), 2500);
-        } catch (e) { safeConsoleError("Failed to apply card size", e); alert("Failed to apply card size"); }
+        } catch (e) { safeConsoleError("Failed to apply card size", e); toast.error("Failed to apply card size"); }
         finally { setApplyingCardSize(false); }
       }
     );

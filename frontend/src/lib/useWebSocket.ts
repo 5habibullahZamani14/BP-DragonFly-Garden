@@ -106,16 +106,16 @@ export const useWebSocket = (
   }, [eventTypes]);
 
   useEffect(() => {
-    authValueRef.current = authValue;
-  }, [authValue]);
-
-  useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let reconnectAttempts = 0;
     let cleanupRequested = false;
     let currentWs: WebSocket | null = null;
 
     const connect = () => {
+      // Synchronously update the ref to avoid race condition where
+      // the effect runs before the authValueRef update effect fires.
+      authValueRef.current = authValue;
+      
       if (authParamGetter && !authValueRef.current) {
         setIsConnected(false);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);

@@ -80,6 +80,7 @@ const fetchOrderById = async (orderId) => {
         o.delivery_address,
         o.vat_rate,
         o.service_charge_rate,
+        o.order_remarks,
         (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat
       FROM orders o
       INNER JOIN tables t ON t.id = o.table_id
@@ -141,7 +142,8 @@ const createOrder = async (orderData) => {
     customer_phone = null,
     collection_time = null,
     delivery_address = null,
-    parent_order_id = null
+    parent_order_id = null,
+    order_remarks = null
   } = orderData;
   const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
 
@@ -243,10 +245,10 @@ const createOrder = async (orderData) => {
       /* Insert the parent order row with status "queue". */
       const orderInsert = await run(
         `
-          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address, daily_ticket_number, vat_rate, service_charge_rate)
-          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (table_id, status, total_price, payment_status, order_type, customer_name, customer_phone, collection_time, delivery_address, daily_ticket_number, vat_rate, service_charge_rate, order_remarks)
+          VALUES (?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address, nextTicketNumber, effectiveVatRate, effectiveServiceChargeRate]
+        [tableId, "queue", additionalPrice, order_type, customer_name, customer_phone, collection_time, delivery_address, nextTicketNumber, effectiveVatRate, effectiveServiceChargeRate, order_remarks]
       );
       orderId = orderInsert.lastID;
     }
@@ -445,7 +447,7 @@ const getOrders = async (filters) => {
 const getKitchenOrders = async (filters) => {
   const { status } = filters;
 
-  let query = `
+    let query = `
     SELECT
       o.id,
       o.table_id,
@@ -460,6 +462,7 @@ const getKitchenOrders = async (filters) => {
       o.delivery_address,
       o.vat_rate,
       o.service_charge_rate,
+      o.order_remarks,
       (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat,
       oi.id AS order_item_id,
       oi.menu_item_id,
@@ -505,6 +508,7 @@ const getKitchenOrders = async (filters) => {
         delivery_address: row.delivery_address,
         vat_rate: row.vat_rate,
         service_charge_rate: row.service_charge_rate,
+        order_remarks: row.order_remarks,
         total_with_vat: row.total_with_vat,
         items: []
       };

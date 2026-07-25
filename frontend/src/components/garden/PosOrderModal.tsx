@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { createCounterOrder, fetchTables, type TableRecord } from "@/lib/api";
 import type { MenuItem, Order } from "@/lib/api";
-import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check, Layers } from "lucide-react";
+import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check, Layers, MessageSquare } from "lucide-react";
 
 interface PosOrderModalProps {
   isOpen: boolean;
@@ -40,14 +40,15 @@ interface CartItem {
 export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItems, qrCode, notify, onOrderCreated, parentOrder = null }: PosOrderModalProps) {
   const { t } = useTranslation();
   const [orderType, setOrderType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER">(initialOrderType);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [collectionTime, setCollectionTime] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [tables, setTables] = useState<TableRecord[]>([]);
-  const [selectedTableId, setSelectedTableId] = useState<number>(999);
+   const [customerName, setCustomerName] = useState("");
+   const [customerPhone, setCustomerPhone] = useState("");
+   const [collectionTime, setCollectionTime] = useState("");
+   const [deliveryAddress, setDeliveryAddress] = useState("");
+   const [orderRemarks, setOrderRemarks] = useState("");
+   const [cart, setCart] = useState<CartItem[]>([]);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+   const [tables, setTables] = useState<TableRecord[]>([]);
+   const [selectedTableId, setSelectedTableId] = useState<number>(999);
 
   const [configuringItem, setConfiguringItem] = useState<MenuItem | null>(null);
   const [selectedGroupOptions, setSelectedGroupOptions] = useState<Record<number, { optionId: number; name: string; delta: number }[]>>({});
@@ -189,6 +190,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
         collection_time: parentOrder ? parentOrder.collection_time : collectionTime,
         delivery_address: parentOrder ? parentOrder.delivery_address : deliveryAddress,
         parent_order_id: parentOrder?.id,
+        order_remarks: orderRemarks,
         items: cart.map(item => ({
           menu_item_id: item.menuItem.id,
           quantity: item.quantity,
@@ -213,6 +215,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
       setCustomerPhone("");
       setCollectionTime("");
       setDeliveryAddress("");
+      setOrderRemarks("");
     } catch (e) {
       notify("error", t("pos.orderCreateFailed"));
     } finally {
@@ -299,6 +302,29 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                           <Input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} placeholder={t("pos.deliveryAddress")} />
                         </div>
                       )}
+                      {/* Order Remarks - for all order types */}
+                      <div className="space-y-2 col-span-2">
+                        <Label className="flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> {t("pos.orderRemarks", "Order Remarks")}</Label>
+                        <Input 
+                          value={orderRemarks} 
+                          onChange={e => setOrderRemarks(e.target.value)} 
+                          placeholder={t("pos.orderRemarksPlaceholder", "Any special instructions for the order...")} 
+                        />
+                      </div>
+                    </div>
+                  </section>
+                )}
+                {/* Order Remarks for TAKEAWAY orders (not in the form section) */}
+                {!parentOrder && orderType === "TAKEAWAY" && (
+                  <section className="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
+                    <h3 className="font-semibold text-gray-800 mb-2">{t("pos.orderRemarks", "Order Remarks")}</h3>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> {t("pos.orderRemarks", "Order Remarks")}</Label>
+                      <Input 
+                        value={orderRemarks} 
+                        onChange={e => setOrderRemarks(e.target.value)} 
+                        placeholder={t("pos.orderRemarksPlaceholder", "Any special instructions for the order...")} 
+                      />
                     </div>
                   </section>
                 )}

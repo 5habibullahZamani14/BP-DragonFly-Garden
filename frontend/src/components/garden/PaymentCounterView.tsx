@@ -1182,9 +1182,32 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="py-0 pb-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center mb-2">
                           <p className="font-medium text-gray-900">RM {order.total_with_vat.toFixed(2)}</p>
                           <p className="text-sm text-gray-500">{new Date(order.created_at).toLocaleTimeString()}</p>
+                        </div>
+                        <div className="flex flex-col gap-1 text-xs text-gray-600">
+                          {order.order_type && order.order_type !== 'DINE_IN' && (
+                            <span className="font-medium">{t("payment.orderType", "Type")}: {order.order_type}</span>
+                          )}
+                          {order.customer_name && (
+                            <span>{t("payment.customer", "Customer")}: {order.customer_name}</span>
+                          )}
+                          {order.customer_phone && (
+                            <span>{t("payment.phone", "Phone")}: {order.customer_phone}</span>
+                          )}
+                          {order.collection_time && (
+                            <span>{t("payment.collectionTime", "Collection")}: {order.collection_time}</span>
+                          )}
+                          {order.delivery_address && (
+                            <span className="truncate">{t("payment.deliveryAddress", "Delivery")}: {order.delivery_address}</span>
+                          )}
+                          {order.order_remarks && (
+                            <span className="italic text-gray-500 truncate">{t("payment.remarks", "Remarks")}: {order.order_remarks}</span>
+                          )}
+                          {order.items && order.items.length > 0 && (
+                            <span className="truncate">{t("payment.items", "Items")}: {order.items.map(i => `${i.quantity}x ${i.item_name}`).join(", ")}</span>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

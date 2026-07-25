@@ -162,14 +162,20 @@ function VariationsEditor({ itemId }: { itemId: number }) {
 
   // ── Global delete (from chip long-press) ─────────────────────────────────
   const handleGlobalDelete = async (groupId: number) => {
-    if (!confirm("Delete this modifier globally? It will be removed from ALL menu items.")) return;
-    try {
-      await deleteGlobalModifierGroup(groupId);
-      setAllGroups(p => p.filter(g => g.id !== groupId));
-      setAssignedGroupIds(p => { const s = new Set(p); s.delete(groupId); return s; });
-      setLongPressedId(null);
-      toast.success("Modifier deleted globally");
-    } catch { toast.error("Failed to delete modifier"); }
+    toast("Delete this modifier globally? It will be removed from ALL menu items.", {
+      action: {
+        text: "Delete",
+        onClick: async () => {
+          try {
+            await deleteGlobalModifierGroup(groupId);
+            setAllGroups(p => p.filter(g => g.id !== groupId));
+            setAssignedGroupIds(p => { const s = new Set(p); s.delete(groupId); return s; });
+            setLongPressedId(null);
+            toast.success("Modifier deleted globally");
+          } catch { toast.error("Failed to delete modifier"); }
+        },
+      },
+    });
   };
 
   // ── Options CRUD ──────────────────────────────────────────────────────────
@@ -625,14 +631,20 @@ export function MenuTab() {
   };
 
   const handleApplyPromoToAll = async (promo: Omit<PromotionTemplate, "id">) => {
-    if (!confirm("Are you sure you want to apply this promotion to ALL products? This will override active promotions for all items.")) return;
-    try {
-      await applyPromotionToAll(promo);
-      toast.success("Promotion applied to all products successfully");
-      loadData();
-    } catch {
-      toast.error("Failed to apply promotion to all products");
-    }
+    toast("Are you sure you want to apply this promotion to ALL products? This will override active promotions for all items.", {
+      action: {
+        text: "Apply",
+        onClick: async () => {
+          try {
+            await applyPromotionToAll(promo);
+            toast.success("Promotion applied to all products successfully");
+            loadData();
+          } catch {
+            toast.error("Failed to apply promotion to all products");
+          }
+        },
+      },
+    });
   };
 
   const selectedPattern = patterns.find(p => p.id === editingItem?.pattern_id);
@@ -740,36 +752,48 @@ export function MenuTab() {
   };
 
   const handleDeleteRepoSection = async (sectionId: number) => {
-    if (!confirm("Delete this repository section and all its images?")) return;
-    setRepoSectionDeleteLoading(sectionId);
-    try {
-      await deleteRepoSection(sectionId);
-      toast.success("Repository section deleted");
-      loadRepoSections();
-    } catch {
-      toast.error("Failed to delete repository section");
-    } finally {
-      setRepoSectionDeleteLoading(null);
-    }
+    toast("Delete this repository section and all its images?", {
+      action: {
+        text: "Delete",
+        onClick: async () => {
+          setRepoSectionDeleteLoading(sectionId);
+          try {
+            await deleteRepoSection(sectionId);
+            toast.success("Repository section deleted");
+            loadRepoSections();
+          } catch {
+            toast.error("Failed to delete repository section");
+          } finally {
+            setRepoSectionDeleteLoading(null);
+          }
+        },
+      },
+    });
   };
 
   const handleDeleteRepoImage = async (imageId: number) => {
-    if (!confirm("Delete this repository image?")) return;
-    setRepoImageDeletingId(imageId);
-    try {
-      await deleteRepoImage(imageId);
-      setSelectedRepoImageIds(prev => {
-        const next = new Set(prev);
-        next.delete(imageId);
-        return next;
-      });
-      toast.success("Repository image deleted");
-      loadRepoSections();
-    } catch {
-      toast.error("Failed to delete repository image");
-    } finally {
-      setRepoImageDeletingId(null);
-    }
+    toast("Delete this repository image?", {
+      action: {
+        text: "Delete",
+        onClick: async () => {
+          setRepoImageDeletingId(imageId);
+          try {
+            await deleteRepoImage(imageId);
+            setSelectedRepoImageIds(prev => {
+              const next = new Set(prev);
+              next.delete(imageId);
+              return next;
+            });
+            toast.success("Repository image deleted");
+            loadRepoSections();
+          } catch {
+            toast.error("Failed to delete repository image");
+          } finally {
+            setRepoImageDeletingId(null);
+          }
+        },
+      },
+    });
   };
 
   const toggleSelectRepoImage = (imageId: number) => {
@@ -798,22 +822,28 @@ export function MenuTab() {
   const handleDeleteSelectedRepoImages = async (section: RepoSection) => {
     const selected = section.images.filter(image => selectedRepoImageIds.has(image.id));
     if (selected.length === 0) return;
-    if (!confirm(`Delete ${selected.length} selected repository image${selected.length === 1 ? "" : "s"} from '${section.name}'? This cannot be undone.`)) return;
-    setRepoImageBulkDeleting(true);
-    try {
-      await Promise.all(selected.map(image => deleteRepoImage(image.id)));
-      setSelectedRepoImageIds(prev => {
-        const next = new Set(prev);
-        selected.forEach(image => next.delete(image.id));
-        return next;
-      });
-      toast.success(`Deleted ${selected.length} selected repository image${selected.length === 1 ? "" : "s"}`);
-      loadRepoSections();
-    } catch {
-      toast.error("Failed to delete selected repository images");
-    } finally {
-      setRepoImageBulkDeleting(false);
-    }
+    toast(`Delete ${selected.length} selected repository image${selected.length === 1 ? "" : "s"} from '${section.name}'? This cannot be undone.`, {
+      action: {
+        text: "Delete",
+        onClick: async () => {
+          setRepoImageBulkDeleting(true);
+          try {
+            await Promise.all(selected.map(image => deleteRepoImage(image.id)));
+            setSelectedRepoImageIds(prev => {
+              const next = new Set(prev);
+              selected.forEach(image => next.delete(image.id));
+              return next;
+            });
+            toast.success(`Deleted ${selected.length} selected repository image${selected.length === 1 ? "" : "s"}`);
+            loadRepoSections();
+          } catch {
+            toast.error("Failed to delete selected repository images");
+          } finally {
+            setRepoImageBulkDeleting(false);
+          }
+        },
+      },
+    });
   };
 
   const loadData = async () => {
@@ -945,16 +975,22 @@ export function MenuTab() {
   };
 
   const handleSave = async () => {
-    if (!editingItem?.name || !editingItem?.price || !editingItem?.category_id) {
+    if (!editingItem?.name || !editingItem?.category_id) {
       toast.error(t("m.fillRequired")); return;
     }
+    if (!editingItem?.is_dynamic_price && !editingItem?.price) {
+      toast.error(t("m.fillRequired")); return;
+    }
+    const payload = editingItem?.is_dynamic_price
+      ? { ...editingItem, price: undefined }
+      : editingItem;
     try {
-      let finalItemId = editingItem.id;
-      if (editingItem.id) {
-        await updateMenuItem(editingItem.id, editingItem as any);
+      let finalItemId = payload.id;
+      if (payload.id) {
+        await updateMenuItem(payload.id, payload as any);
         toast.success(t("m.itemUpdated"));
       } else {
-        const res = await createMenuItem(editingItem as any) as any;
+        const res = await createMenuItem(payload as any) as any;
         finalItemId = res.id;
         toast.success(t("m.itemCreated"));
       }
@@ -979,9 +1015,15 @@ export function MenuTab() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("m.confirmDelete"))) return;
-    try { await deleteMenuItem(id); toast.success(t("m.itemDeleted")); loadData(); }
-    catch { toast.error(t("m.deleteFailed")); }
+    toast(t("m.confirmDelete"), {
+      action: {
+        text: t("m.delete"),
+        onClick: async () => {
+          try { await deleteMenuItem(id); toast.success(t("m.itemDeleted")); loadData(); }
+          catch { toast.error(t("m.deleteFailed")); }
+        },
+      },
+    });
   };
 
   // Fallback section for the delete dialog
@@ -990,6 +1032,8 @@ export function MenuTab() {
     : null;
 
   const filteredItems = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const fixedPriceItems = filteredItems.filter(i => !i.is_dynamic_price);
+  const dynamicPriceItems = filteredItems.filter(i => i.is_dynamic_price);
 
   return (
     <div className="space-y-8 animate-fade-up" dir={i18n.dir()}>
@@ -1237,18 +1281,20 @@ export function MenuTab() {
         )}
       </div>
 
-      {/* ══ MENU ITEMS GRID ════════════════════════════════════════════════ */}
-      <div>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+      {/* ══ SEARCH ═══════════════════════════════════════════════════════════ */}
+      <Input placeholder={t("m.searchMenuItems")} value={search} onChange={e => setSearch(e.target.value)} className="max-w-md bg-white shadow-sm" />
+
+      {/* ══ MENU ITEMS - FIXED PRICE PRODUCTS ════════════════════════════════════════ */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.menuMgmt")}</h2>
-            <p className="text-sm text-gray-500">{t("m.menuMgmtDesc")}</p>
+            <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.fixedPriceProducts")}</h2>
+            <p className="text-sm text-gray-500">{t("m.fixedPriceProductsDesc")}</p>
           </div>
-          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal', type: 'food' }); setIsDialogOpen(true); }}>
-            <Plus className="me-2 h-4 w-4" /> {t("m.addMenuItem")}
+          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal', type: 'food', is_dynamic_price: false }); setIsDialogOpen(true); }}>
+            <Plus className="me-2 h-4 w-4" /> {t("m.addFixedPriceItem")}
           </Button>
         </div>
-        <Input placeholder={t("m.searchMenuItems")} value={search} onChange={e => setSearch(e.target.value)} className="max-w-md bg-white shadow-sm mb-4" />
 
         {loading ? (
           <div className="space-y-4 py-12">
@@ -1256,9 +1302,13 @@ export function MenuTab() {
               <MenuItemSkeleton key={i} />
             ))}
           </div>
+        ) : fixedPriceItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            {t("m.noFixedPriceItems", "No fixed price items yet. Click the button above to add one.")}
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredItems.map(item => {
+            {fixedPriceItems.map(item => {
               const pattern = patterns.find(p => p.id === item.pattern_id);
               const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
               return (
@@ -1342,6 +1392,114 @@ export function MenuTab() {
         )}
       </div>
 
+      {/* ══ MENU ITEMS - DYNAMIC PRICE PRODUCTS ════════════════════════════════════════ */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-gray-900">{t("m.dynamicPriceProducts")}</h2>
+            <p className="text-sm text-gray-500">{t("m.dynamicPriceProductsDesc")}</p>
+          </div>
+          <Button onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem({ is_available: true, price: 0, card_size: 'normal', type: 'food', is_dynamic_price: true }); setIsDialogOpen(true); }}>
+            <Plus className="me-2 h-4 w-4" /> {t("m.addDynamicPriceItem")}
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="space-y-4 py-12">
+            {[...Array(6)].map((_, i) => (
+              <MenuItemSkeleton key={i} />
+            ))}
+          </div>
+        ) : dynamicPriceItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            {t("m.noDynamicPriceItems", "No dynamic price items yet. Click the button above to add one.")}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {dynamicPriceItems.map(item => {
+              const pattern = patterns.find(p => p.id === item.pattern_id);
+              const patternImage = item.pattern_image_url || pattern?.image_url || item.default_pattern_image_url;
+              return (
+              <Card key={item.id} className={`overflow-hidden transition-all shadow-sm hover:shadow-md ${!item.is_available ? "opacity-60 grayscale" : ""} relative`}>
+                {patternImage && (
+                  <div className="absolute inset-0 z-0 pointer-events-none">
+                    <img src={patternImage}
+                      alt="Pattern overlay"
+                      className="h-full w-full object-cover"
+                      style={{
+                        opacity: pattern?.opacity ?? 0.4,
+                        transform: `scale(${pattern?.zoom ?? 1}) rotate(${pattern?.rotation ?? 0}deg) scaleX(${pattern?.flip_horizontal ? -1 : 1}) scaleY(${pattern?.flip_vertical ? -1 : 1})`,
+                        mixBlendMode: 'multiply'
+                      }}
+                    />
+                    {pattern?.fade_direction && pattern.fade_direction !== 'none' && (
+                      <div className="absolute inset-0"
+                        style={{
+                          background: `linear-gradient(${
+                            pattern.fade_direction === 'right-to-left' ? 'to left' :
+                            pattern.fade_direction === 'left-to-right' ? 'to right' :
+                            pattern.fade_direction === 'top-to-bottom' ? 'to bottom' :
+                            'to top'
+                          }, transparent, white)`,
+                          opacity: (pattern.fade_intensity ?? 0.5)
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+                <div className="relative z-10">
+                  <div className="h-32 bg-gray-100 relative overflow-hidden">
+                    { (item.image_url || item.repo_image_url)
+                      ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
+                    <div className="absolute top-2 end-2 flex gap-1">
+                      {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
+                      {item.is_promo && <span className="bg-pink-100 text-pink-700 p-1.5 rounded-full shadow-sm"><Tag className="h-3.5 w-3.5" /></span>}
+                      {item.option_groups && item.option_groups.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImageSrc(null);
+                            setEditingItem(item);
+                            setVariationsTab(true);
+                            setIsDialogOpen(true);
+                          }}
+                          className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                          title={`${item.option_groups.length} variation group(s)`}
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <CardContent className="p-4 bg-white">
+                    <div className="mb-2">
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
+                      <p className="text-xs text-gray-500 font-medium">{item.category_name}</p>
+                    </div>
+                    <div className="flex justify-between items-center mt-4">
+                      <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-md">{t("m.dynamicPriceLabel", "Dynamic Price")}</span>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                          onClick={() => { setImageSrc(null); setVariationsTab(false); setEditingItem(item); setIsDialogOpen(true); }}>
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDelete(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </div>
+              </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ══ DELETE SECTION DIALOG ══════════════════════════════════════════ */}
       <Dialog open={!!deletingCategory} onOpenChange={open => { if (!open) setDeletingCategory(null); }}>
         <DialogContent className="sm:max-w-[440px]">
@@ -1405,10 +1563,19 @@ export function MenuTab() {
                 <Input value={editingItem?.name || ""} onChange={e => setEditingItem(p => ({ ...p, name: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>{t("m.price")}</Label>
-                  <Input type="number" step="0.01" value={editingItem?.price || ""} onChange={e => setEditingItem(p => ({ ...p, price: parseFloat(e.target.value) }))} />
-                </div>
+                {editingItem?.is_dynamic_price ? (
+                  <div className="grid gap-2">
+                    <Label>{t("m.dynamicPriceLabel", "Dynamic Price")}</Label>
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                      <p>{t("m.dynamicPriceNote")}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label>{t("m.price")}</Label>
+                    <Input type="number" step="0.01" value={editingItem?.price || ""} onChange={e => setEditingItem(p => ({ ...p, price: parseFloat(e.target.value) }))} />
+                  </div>
+                )}
                 <div className="grid gap-2">
                   <Label>{t("m.category")}</Label>
                   <Select value={editingItem?.category_id?.toString()} onValueChange={v => setEditingItem(p => ({ ...p, category_id: parseInt(v) }))}>
@@ -1615,15 +1782,20 @@ export function MenuTab() {
                                   type="button"
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    if (confirm(`Delete '${tpl.promo_label}' template tag?`)) {
-                                      try {
-                                        await deletePromotionTemplate(tpl.id);
-                                        toast.success("Template tag deleted");
-                                        loadPromoTemplates();
-                                      } catch {
-                                        toast.error("Failed to delete template tag");
-                                      }
-                                    }
+                                    toast(`Delete '${tpl.promo_label}' template tag?`, {
+                                      action: {
+                                        text: "Delete",
+                                        onClick: async () => {
+                                          try {
+                                            await deletePromotionTemplate(tpl.id);
+                                            toast.success("Template tag deleted");
+                                            loadPromoTemplates();
+                                          } catch {
+                                            toast.error("Failed to delete template tag");
+                                          }
+                                        },
+                                      },
+                                    });
                                   }}
                                   className="text-pink-400 hover:text-pink-600 rounded-full hover:bg-pink-100 p-0.5 ml-0.5 transition-colors"
                                   title="Delete Tag"

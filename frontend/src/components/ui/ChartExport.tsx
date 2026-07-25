@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type ChartExportProps = {
   targetId: string;
@@ -64,38 +65,38 @@ async function svgToJpeg(svg: SVGElement, scale = 2) {
 export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileName = "chart", className }) => {
   const exportPng = async () => {
     const container = document.getElementById(targetId);
-    if (!container) return alert("Chart container not found");
+    if (!container) return toast.error("Chart container not found");
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return alert("SVG element not found inside chart container");
+    if (!svg) return toast.error("SVG element not found inside chart container");
     try {
       const blob = await svgToPng(svg);
       if (blob) downloadBlob(blob, `${fileName}.png`);
     } catch (err) {
       console.error(err);
-      alert("Failed to export PNG");
+      toast.error("Failed to export PNG");
     }
   };
 
   const exportJpeg = async () => {
     const container = document.getElementById(targetId);
-    if (!container) return alert("Chart container not found");
+    if (!container) return toast.error("Chart container not found");
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return alert("SVG element not found inside chart container");
+    if (!svg) return toast.error("SVG element not found inside chart container");
     try {
       const blob = await svgToJpeg(svg);
       if (blob) downloadBlob(blob, `${fileName}.jpg`);
     } catch (err) {
       console.error(err);
-      alert("Failed to export JPG");
+      toast.error("Failed to export JPG");
     }
   };
 
   const exportPdf = async () => {
     // Fallback PDF: open PNG in new window and call print (user can Save as PDF)
     const container = document.getElementById(targetId);
-    if (!container) return alert("Chart container not found");
+    if (!container) return toast.error("Chart container not found");
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return alert("SVG element not found inside chart container");
+    if (!svg) return toast.error("SVG element not found inside chart container");
     try {
       const blob = await svgToPng(svg, 2);
       if (!blob) return;
@@ -106,12 +107,12 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to prepare PDF (use PNG export as fallback)");
+      toast.error("Failed to prepare PDF (use PNG export as fallback)");
     }
   };
 
   const exportCsv = () => {
-    if (!data || !data.length) return alert("No tabular data available for CSV export");
+    if (!data || !data.length) return toast.error("No tabular data available for CSV export");
     const keys = Object.keys(data[0]);
     const rows = [keys.join(',')].concat(data.map(r => keys.map(k => `"${String(r[k] ?? '')}"`).join(',')));
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });

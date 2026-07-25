@@ -278,7 +278,7 @@ export const InventoryTab = ({
       .filter(item => healthLowStockOnly !== "low" || item.isLow)
       .sort((a, b) => a.percent - b.percent);
 
-    const limit = parseInt(complexityLimit, 10) || 10;
+    const limit = complexityLimit === "all" ? menuItems.length : (parseInt(complexityLimit, 10) || 10);
     const complexity = menuItems.map(m => {
       const rec = recipes.find(r => r.id === m.id);
       return {
@@ -315,6 +315,7 @@ export const InventoryTab = ({
       { value: "10", label: t("m.top10", "Top 10") },
       { value: "15", label: t("m.top15", "Top 15") },
       { value: "20", label: t("m.top20", "Top 20") },
+      { value: "all", label: t("m.allItems", "All Items") },
     ],
     [t]
   );
@@ -417,23 +418,24 @@ export const InventoryTab = ({
               />
               <div className="flex-1 w-full h-[220px]">
                 <div id="inv-health-chart" className="relative w-full h-full">
-                  {healthData.length === 0 && (
+                  {healthData.length === 0 || healthData.every(d => d.percent === 0) ? (
                     <ChartEmptyState message={t("m.noChartData", "No inventory items match the selected filters.")} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%' }}>
+                      <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 10 }} width={800} height={220}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
+                        <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value: number) => [`${value}%`, t("m.chartStockLevel")]} cursor={{ fill: 'transparent' }} />
+                        <ReferenceLine x={20} stroke="red" strokeDasharray="3 3" label={{ position: 'top', value: t("m.chartAvgThreshold"), fill: 'red', fontSize: 10 }} />
+                        <Bar dataKey="percent" radius={[0, 4, 4, 0]} barSize={15}>
+                          {healthData.slice(0, 15).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.isLow ? '#ef4444' : '#10b981'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </div>
                   )}
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={healthData.slice(0, 15)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                      <XAxis type="number" domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
-                      <YAxis dataKey="name" type="category" width={180} tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(value: number) => [`${value}%`, t("m.chartStockLevel")]} cursor={{ fill: 'transparent' }} />
-                      <ReferenceLine x={20} stroke="red" strokeDasharray="3 3" label={{ position: 'top', value: t("m.chartAvgThreshold"), fill: 'red', fontSize: 10 }} />
-                      <Bar dataKey="percent" radius={[0, 4, 4, 0]} barSize={15}>
-                        {healthData.slice(0, 15).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.isLow ? '#ef4444' : '#10b981'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
                 </div>
               </div>
               <ChartCardFooter
@@ -462,20 +464,21 @@ export const InventoryTab = ({
                 onSecondaryChange={setComplexityLimit}
                 secondaryOptions={complexityLimitOptions}
               />
-              <div className="flex-1 w-full h-[220px]">
-                <div id="menu-complexity-chart" className="relative w-full h-full">
-                  {menuComplexityData.length === 0 && (
+              <div className="flex-1 w-full h-[220px] overflow-x-auto overflow-y-hidden">
+                <div id="menu-complexity-chart" className="relative w-full h-full" style={{ minWidth: 'fit-content' }}>
+                  {menuComplexityData.length === 0 || menuComplexityData.every(d => d.ingredientsCount === 0) ? (
                     <ChartEmptyState message={t("m.noChartData", "No menu items available to display.")} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', minWidth: Math.max(800, menuComplexityData.length * 80) }}>
+                      <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 80 }} width={Math.max(800, menuComplexityData.length * 80)} height={220}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" height={100} interval={0} tick={<ChartTickWrap wordsPerLine={4} fontSize={12} textAnchor="end" />} />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip formatter={(value: number) => [value, t("m.chartIngredients")]} cursor={{ fill: 'transparent' }} />
+                        <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} barSize={24} />
+                      </BarChart>
+                    </div>
                   )}
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={menuComplexityData} margin={{ top: 20, right: 30, left: 0, bottom: 80 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" height={100} interval={0} tick={<ChartTickWrap wordsPerLine={4} fontSize={12} textAnchor="end" />} />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip formatter={(value: number) => [value, t("m.chartIngredients")]} cursor={{ fill: 'transparent' }} />
-                      <Bar dataKey="ingredientsCount" fill="#f97316" radius={[4, 4, 0, 0]} barSize={24} />
-                    </BarChart>
-                  </ResponsiveContainer>
                 </div>
               </div>
               <ChartCardFooter

@@ -466,8 +466,9 @@ const initializeDatabase = async () => {
   await ensureColumn("patterns", "fade_direction", "TEXT NOT NULL DEFAULT 'none'");
   await ensureColumn("patterns", "fade_intensity", "REAL NOT NULL DEFAULT 0.5");
   await ensureColumn("menu_items", "repo_image_id", "INTEGER");
-  await ensureColumn("menu_items", "type", "TEXT NOT NULL DEFAULT 'food'");
-  await run(`
+   await ensureColumn("menu_items", "type", "TEXT NOT NULL DEFAULT 'food'");
+   await ensureColumn("menu_items", "is_dynamic_price", "INTEGER NOT NULL DEFAULT 0");
+   await run(`
     CREATE TABLE IF NOT EXISTS image_repository_sections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -519,8 +520,9 @@ const initializeDatabase = async () => {
   await ensureColumn("orders", "delivery_address", "TEXT");
   await ensureColumn("orders", "vat_rate", "REAL NOT NULL DEFAULT 0.06");
   await ensureColumn("orders", "service_charge_rate", "REAL NOT NULL DEFAULT 0.10");
-  await ensureColumn("orders", "customer_archived_at", "DATETIME");
-  await ensureColumn("orders", "kitchen_archived_at", "DATETIME");
+   await ensureColumn("orders", "customer_archived_at", "DATETIME");
+   await ensureColumn("orders", "kitchen_archived_at", "DATETIME");
+   await ensureColumn("orders", "order_remarks", "TEXT");
 
   await ensureColumn("order_items", "price_at_order_time", "REAL NOT NULL DEFAULT 0");
   await ensureColumn("order_items", "notes", "TEXT");

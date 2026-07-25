@@ -1853,33 +1853,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
                         <div className="border-t border-dashed mb-3 mt-3" style={{ borderColor:"hsl(40,20%,68%)" }}/>
                         
-                        {(() => {
-                          const subtotal = Number(o.total_price);
-                          // Use rates stamped on the order (from when it was created)
-                          const scRate = Number(o.service_charge_rate ?? taxSettings.scRate);
-                          const sstRate = Number(o.vat_rate ?? taxSettings.sstRate);
-                          const sc = subtotal * scRate;
-                          const sst = (subtotal + sc) * sstRate;
-                          const rawTotal = subtotal + sc + sst;
-                          const finalTotal = Math.round(rawTotal * 20) / 20;
-                          const rounding = finalTotal - rawTotal;
-                          
-                          return (
-                            <div className="flex flex-col gap-1 mb-2 text-sm" style={{ color:"hsl(140,20%,35%)" }}>
-                              <div className="flex justify-between"><span className="opacity-75">{t("customer.subtotal")}</span><span className="font-semibold">{formatRM(subtotal)}</span></div>
-                              {scRate > 0 && <div className="flex justify-between"><span className="opacity-75">{t("customer.serviceCharge")} ({Math.round(scRate * 100)}%)</span><span className="font-semibold">{formatRM(sc)}</span></div>}
-                              {sstRate > 0 && <div className="flex justify-between"><span className="opacity-75">{t("customer.sst")} ({Math.round(sstRate * 100)}%)</span><span className="font-semibold">{formatRM(sst)}</span></div>}
-                              {Math.abs(rounding) > 0.001 && (
-                                <div className="flex justify-between"><span className="opacity-75">{t("customer.rounding")}</span><span className="font-semibold">{formatRM(rounding)}</span></div>
-                              )}
-                              <div className="border-t border-dashed my-2" style={{ borderColor:"hsl(40,20%,68%)" }}/>
-                              <div className="flex items-center justify-between">
-                                <span className="text-[0.65rem] font-bold uppercase tracking-[0.22em] opacity-60">{t("customer.total")}</span>
-                                <span className="font-1 text-2xl font-bold" style={{ color:"hsl(140,30%,18%)" }}>{formatRM(finalTotal)}</span>
-                              </div>
-                            </div>
-                          );
-                        })()}
+                         {/* Pricing removed from customer receipt UI as per request */}
+                         <div className="border-t-2 mb-4 mt-3" style={{ borderColor:"hsl(40,20%,68%)" }}/>
+                         <p className="text-xs text-center opacity-60" style={{ color:"hsl(140,20%,35%)" }}>
+                           {t("customer.orderPlaced")}
+                         </p>
                       </div>
 
                     </div>

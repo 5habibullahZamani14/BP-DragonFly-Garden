@@ -26,6 +26,7 @@ export type Order = BaseOrder & {
   collection_time?: string;
   delivery_address?: string;
   daily_ticket_number?: number;
+  order_remarks?: string;
 };
 
 /*
@@ -180,6 +181,7 @@ type CounterOrderPayload = {
   collection_time?: string;
   delivery_address?: string;
   parent_order_id?: number;
+  order_remarks?: string;
   items: { 
     menu_item_id: number; 
     quantity: number; 
@@ -379,6 +381,7 @@ export interface MenuItem {
   option_groups?: any[];
   card_size?: "normal" | "large" | "extra_large";
   type?: 'food' | 'drink' | 'merchandise';
+  is_dynamic_price?: boolean;
 }
 
 export interface Pattern {

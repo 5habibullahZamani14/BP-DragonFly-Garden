@@ -12,6 +12,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -206,13 +207,19 @@ export const TablesTab = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("m.confirmDeleteTable"))) return;
-    try {
-      await deleteTable(id);
-      loadTables();
-    } catch (e) {
-      console.error(e);
-    }
+    toast(t("m.confirmDeleteTable"), {
+      action: {
+        text: t("m.delete"),
+        onClick: async () => {
+          try {
+            await deleteTable(id);
+            loadTables();
+          } catch (e) {
+            console.error(e);
+          }
+        },
+      },
+    });
   };
 
   const hotspotQrValue = buildWifiQrValue(hotspotSsid, hotspotPassword, hotspotSecurity);

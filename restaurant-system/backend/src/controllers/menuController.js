@@ -75,6 +75,7 @@ const getMenu = async (req, res) => {
       menu_items.promo_discount_percent,
       menu_items.card_size,
       menu_items.type,
+      menu_items.is_dynamic_price,
       (
         SELECT CASE WHEN MIN(ii.current_stock - (mii.quantity_required / COALESCE(ii.usage_conversion, 1.0))) < 0 THEN 1 ELSE 0 END
         FROM menu_item_ingredients mii
@@ -105,6 +106,7 @@ const getMenu = async (req, res) => {
       promo_affects_price: !!row.promo_affects_price,
       promo_discount_percent: row.promo_discount_percent !== null && row.promo_discount_percent !== undefined ? Number(row.promo_discount_percent) : null,
       is_sold_out: !!row.is_sold_out,
+      is_dynamic_price: !!row.is_dynamic_price,
       card_size: row.card_size || 'normal',
       default_pattern_image_url: defaultPatternImage,
     }));
@@ -316,12 +318,12 @@ const getRecommendations = async (req, res) => {
 };
 
 const createMenuItem = async (req, res) => {
-  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type, is_dynamic_price } = req.body;
   try {
     const result = await run(
-      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, description || '', price, category_id, image_url || '', pattern_id || null, repo_image_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal', promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null, type || 'food']
+      `INSERT INTO menu_items (name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type, is_dynamic_price) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, description || '', price || 0, category_id, image_url || '', pattern_id || null, repo_image_id || null, is_available ? 1 : 0, is_popular ? 1 : 0, is_promo ? 1 : 0, promo_label || '', card_size || 'normal', promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null, type || 'food', is_dynamic_price ? 1 : 0]
     );
     
     // Emit WebSocket event for menu update
@@ -338,11 +340,11 @@ const createMenuItem = async (req, res) => {
 
 const updateMenuItem = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type } = req.body;
+  const { name, description, price, category_id, image_url, pattern_id, repo_image_id, is_available, is_popular, is_promo, promo_label, card_size, promo_affects_price, promo_discount_percent, type, is_dynamic_price } = req.body;
   try {
     await run(
       `UPDATE menu_items 
-       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), repo_image_id = COALESCE(?, repo_image_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size), promo_affects_price = COALESCE(?, promo_affects_price), promo_discount_percent = ?, type = COALESCE(?, type)
+       SET name = COALESCE(?, name), description = COALESCE(?, description), price = COALESCE(?, price), category_id = COALESCE(?, category_id), image_url = COALESCE(?, image_url), pattern_id = COALESCE(?, pattern_id), repo_image_id = COALESCE(?, repo_image_id), is_available = COALESCE(?, is_available), is_popular = COALESCE(?, is_popular), is_promo = COALESCE(?, is_promo), promo_label = COALESCE(?, promo_label), card_size = COALESCE(?, card_size), promo_affects_price = COALESCE(?, promo_affects_price), promo_discount_percent = ?, type = COALESCE(?, type), is_dynamic_price = COALESCE(?, is_dynamic_price, is_dynamic_price)
        WHERE id = ?`,
       [
         name, description, price, category_id, image_url, 
@@ -355,6 +357,7 @@ const updateMenuItem = async (req, res) => {
         promo_affects_price !== undefined ? (promo_affects_price ? 1 : 0) : null,
         promo_discount_percent !== undefined ? promo_discount_percent : null,
         type,
+        is_dynamic_price !== undefined ? (is_dynamic_price ? 1 : 0) : null,
         id
       ]
     );

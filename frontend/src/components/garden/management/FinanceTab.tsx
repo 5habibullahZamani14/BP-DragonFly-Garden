@@ -574,26 +574,27 @@ export const FinanceTab = () => {
             onEndDateChange={setTimelineEndDate}
           />
 
-          <div className="flex-1 w-full">
+            <div className="flex-1 w-full">
             <div id="revenue-timeline-chart" className="relative flex-1 w-full h-[260px]">
-              {revenueByDay.length === 0 && (
+              {revenueByDay.length === 0 || revenueByDay.every(d => d.total === 0) ? (
                 <ChartEmptyState message={t("m.noChartData", "No paid order data available for the selected filters.")} />
+              ) : (
+                <div style={{ width: '100%', height: '100%' }}>
+                  <AreaChart data={revenueByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} width={800} height={260}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12, fontWeight: 600 }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} />
+                    <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                    <Area type="monotone" dataKey="total" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                  </AreaChart>
+                </div>
               )}
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} />
-                  <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                  <Area type="monotone" dataKey="total" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
-                </AreaChart>
-              </ResponsiveContainer>
             </div>
             <ChartCardFooter
               infoKey="m.revenueTimelineInfo"
@@ -660,27 +661,28 @@ export const FinanceTab = () => {
 
           <div className="flex flex-col">
             <div id="top-profit-drivers-chart" className="relative w-full" style={{ height: Math.max(250, topItemsCount * 32) }}>
-              {topItemsData.length === 0 && (
+              {topItemsData.length === 0 || topItemsData.every(d => d.profit === 0) ? (
                 <ChartEmptyState message={t("m.noChartData", "No paid order data available for the selected filters.")} />
+              ) : (
+                <div style={{ width: '100%', height: '100%' }}>
+                  <BarChart data={topItemsData} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }} width={800} height={Math.max(250, topItemsCount * 32)}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} width={140} />
+                    <RechartsTooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                    <Bar dataKey="profit" name="Gross Profit (RM)" radius={[0, 4, 4, 0]} barSize={18}>
+                      {topItemsData.map((entry, index) => {
+                        const total = topItemsData.length;
+                        const ratio = total <= 1 ? 1 : 1 - (index / (total - 1));
+                        const hue = Math.round(0 + (45 - 0) * ratio);
+                        const saturation = Math.round(75 + (95 - 75) * ratio);
+                        const lightness = Math.round(35 + (50 - 35) * ratio);
+                        return <Cell key={"cell-" + index} fill={"hsl(" + hue + ", " + saturation + "%, " + lightness + "%)"} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </div>
               )}
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topItemsData} layout="vertical" margin={{ top: 0, right: 20, left: 20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} width={140} />
-                  <RechartsTooltip cursor={{fill: 'rgba(0,0,0,0.03)'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                  <Bar dataKey="profit" name="Gross Profit (RM)" radius={[0, 4, 4, 0]} barSize={18}>
-                    {topItemsData.map((entry, index) => {
-                      const total = topItemsData.length;
-                      const ratio = total <= 1 ? 1 : 1 - (index / (total - 1));
-                      const hue = Math.round(0 + (45 - 0) * ratio);
-                      const saturation = Math.round(75 + (95 - 75) * ratio);
-                      const lightness = Math.round(35 + (50 - 35) * ratio);
-                      return <Cell key={"cell-" + index} fill={"hsl(" + hue + ", " + saturation + "%, " + lightness + "%)"} />;
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
             </div>
             <ChartCardFooter
               infoKey="m.topProfitDriversInfo"
@@ -732,24 +734,25 @@ export const FinanceTab = () => {
             
             <div className="flex-1 w-full h-[220px]">
               <div id="feedback-bi-chart" className="relative w-full h-full">
-                {feedbackChartData.every(d => d.rating === 0) && (
+                {feedbackChartData.length === 0 || feedbackChartData.every(d => d.rating === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No feedback ratings recorded for the selected filters.")} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <BarChart data={feedbackChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={800} height={220}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
+                      <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                      <Bar dataKey="rating" name="Rating" radius={[4, 4, 0, 0]} barSize={24}>
+                        {feedbackChartData.map((entry, index) => {
+                          const score = entry.rating;
+                          const fill = score === 0 ? "#cbd5e1" : score < 3.0 ? "#ef4444" : score < 4.2 ? "#f59e0b" : "#10b981";
+                          return <Cell key={`cell-${index}`} fill={fill} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </div>
                 )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={feedbackChartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
-                    <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
-                    <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                    <Bar dataKey="rating" name="Rating" radius={[4, 4, 0, 0]} barSize={24}>
-                      {feedbackChartData.map((entry, index) => {
-                        const score = entry.rating;
-                        const fill = score === 0 ? "#cbd5e1" : score < 3.0 ? "#ef4444" : score < 4.2 ? "#f59e0b" : "#10b981";
-                        return <Cell key={`cell-${index}`} fill={fill} />;
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
               </div>
             </div>
             
@@ -795,18 +798,19 @@ export const FinanceTab = () => {
             
             <div className="flex-1 w-full h-[220px]">
               <div id="assistance-bi-chart" className="relative w-full h-full">
-                {helpRequestsData.every(d => d.count === 0) && (
+                {helpRequestsData.length === 0 || helpRequestsData.every(d => d.count === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No staff assistance requests recorded for the selected filters.")} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <BarChart data={helpRequestsData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={800} height={220}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                      <Bar dataKey="count" name="Assistance Calls" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24} />
+                    </BarChart>
+                  </div>
                 )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={helpRequestsData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
-                    <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                    <Bar dataKey="count" name="Assistance Calls" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24} />
-                  </BarChart>
-                </ResponsiveContainer>
               </div>
             </div>
 
@@ -852,22 +856,23 @@ export const FinanceTab = () => {
             
             <div className="flex-1 w-full h-[260px]">
               <div id="popularity-bi-chart" className="relative w-full h-full">
-                {orderPopularityData.length === 0 && (
+                {orderPopularityData.length === 0 || orderPopularityData.every(d => d.dine_in === 0 && d.takeaway === 0 && d.delivery === 0 && d.counter === 0) ? (
                   <ChartEmptyState message={t("m.noChartData", "No paid orders found for the selected filters.")} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%' }}>
+                    <LineChart data={orderPopularityData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }} width={800} height={260}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
+                      <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: '10px' }} />
+                      <Line type="monotone" dataKey="dine_in" name="Dine-In" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="takeaway" name="Takeaway" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="delivery" name="Delivery / Pickup" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="counter" name="Counter Order" stroke="#ec4899" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </div>
                 )}
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={orderPopularityData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11, fontWeight: 600 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
-                    <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
-                    <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: '10px' }} />
-                    <Line type="monotone" dataKey="dine_in" name="Dine-In" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="takeaway" name="Takeaway" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="delivery" name="Delivery / Pickup" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="counter" name="Counter Order" stroke="#ec4899" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
               </div>
             </div>
             <ChartCardFooter
