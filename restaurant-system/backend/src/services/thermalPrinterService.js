@@ -213,11 +213,9 @@ const thermalPrinterService = {
    * @returns {string} Path to the temp file
    */
   _writeTempBinFile(escPosBuffer) {
-    // Use C:\temp with simple filename - no spaces, no special chars
-    const tempDir = 'C:\\temp';
-    if (!fs.existsSync(tempDir)) {
-      try { fs.mkdirSync(tempDir, { recursive: true }); } catch (e) { }
-    }
+    // Use system temp directory with short filename to avoid path issues
+    const os = require('os');
+    const tempDir = os.tmpdir();
     const tempFile = path.join(tempDir, 'escpos.bin');
     fs.writeFileSync(tempFile, escPosBuffer);
     return tempFile;
@@ -489,9 +487,9 @@ const thermalPrinterService = {
 
   /** Determine if raw ESC/POS mode should be used based on connection type */
   shouldUseRawMode(connectionType) { 
-    // Raw mode works best with USB and network printers
+    // Raw mode works best with USB, network, and wired printers
     // Bluetooth and some virtual printers may need standard GDI mode
-    return connectionType === "wire" || connectionType === "wifi" || connectionType === "unknown";
+    return connectionType === "usb" || connectionType === "wire" || connectionType === "wifi" || connectionType === "unknown";
   }
 };
 

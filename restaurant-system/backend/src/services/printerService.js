@@ -4,6 +4,13 @@
  * on Windows, and clean plain-text fallback on Linux (Raspberry Pi).
  * 
  * Updated with circuit breaker pattern for resilience.
+ * 
+ * Width handling:
+ * - 80mm paper = ~48 characters per line
+ * - 50mm paper = ~32 characters per line  
+ * - Width is set per-printer in the printer profile (stored in DB)
+ * - The ticket formatters dynamically use the configured width
+ * - Hardcoded fallback: 48 chars (80mm paper)
  */
 
 const fs = require("fs");
@@ -31,10 +38,18 @@ try {
   };
 }
 
-const centerText = (text, width = 80) => {
+// Default width for 50mm thermal paper (32 chars). Can be overridden per printer.
+const DEFAULT_PRINTER_WIDTH = 32;
+
+const centerText = (text, width = DEFAULT_PRINTER_WIDTH) => {
   const pad = Math.max(0, Math.floor((width - text.length) / 2));
   return ' '.repeat(pad) + text;
 };
+
+/**
+ * Draw a separator line using the configured width
+ */
+const separator = (width = DEFAULT_PRINTER_WIDTH) => '='.repeat(Math.max(10, width));
 
 /**
  * Get receipt copy counts from printer preferences
@@ -89,7 +104,7 @@ const getReceiptCopyCounts = () => {
 const getPrinterSettings = (printerName) => {
   return new Promise((resolve, reject) => {
     const defaultSettings = {
-      width: 80,
+      width: DEFAULT_PRINTER_WIDTH,
       marginLeft: 0,
       marginRight: 0,
       marginTop: 0,
@@ -118,7 +133,7 @@ const getPrinterSettings = (printerName) => {
         
         if (printerProfile) {
           resolve({
-            width: printerProfile.width || 80,
+            width: printerProfile.width || DEFAULT_PRINTER_WIDTH,
             marginLeft: printerProfile.margin_left || 0,
             marginRight: printerProfile.margin_right || 0,
             marginTop: printerProfile.margin_top || 0,
@@ -189,7 +204,7 @@ const formatTableNumber = (tableNumber) => {
 };
 
 /* Strips GDI tags and applies alignment manually for non-Windows (Linux/Raspberry Pi) raw print fallback. */
-const stripGdiTags = (ticket, width = 80) => {
+const stripGdiTags = (ticket, width = DEFAULT_PRINTER_WIDTH) => {
   return ticket
     .split('\n')
     .map(line => {
@@ -231,6 +246,33 @@ const stripGdiTags = (ticket, width = 80) => {
     .join('\n');
 };
 
+// ── Dynamic width helper ─────────────────────────────────────────────
+// All ticket formatters now accept an optional 'width' parameter.
+// The print functions resolve the printer's configured width and pass it
+// to the formatters, so separators, padding, and text wrapping all fit
+// the actual paper size (50mm = 32 chars, 80mm = 48 chars).
+
+/**
+ * Format a ticket line with proper padding for a given width.
+ * Wraps long text to fit within the available space.
+ */
+const wrapText = (text, maxWidth) => {
+  if (!text || text.length <= maxWidth) return [text || ''];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    if ((cur + ' ' + word).trim().length > maxWidth) {
+      if (cur) lines.push(cur.trim());
+      cur = word.length > maxWidth ? word.substring(0, maxWidth) : word;
+    } else {
+      cur = cur ? cur + ' ' + word : word;
+    }
+  }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines;
+};
+
 /**
  * Internal print execution logic (not wrapped with circuit breaker).
  * This is the actual implementation that gets wrapped.
@@ -253,12 +295,11 @@ const _executePrintWithPrinter = (ticket, filenamePrefix, printerName) =>
         .then(settings => {
           console.log(`Printer settings: width=${settings.width}, margins=${settings.marginLeft},${settings.marginRight},${settings.marginTop},${settings.marginBottom}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
           
-          // For test prints, skip margin application to avoid PowerShell OutOfMemoryException
+          // For test prints, skip margin application
           const isTestPrint = filenamePrefix === 'printer_test';
           let finalTicket;
           
           if (isTestPrint) {
-            // Use raw ticket without margins for test prints
             finalTicket = ticket;
             console.log(`Test print detected, skipping margin application`);
           } else {
@@ -284,34 +325,127 @@ const _executePrintWithPrinter = (ticket, filenamePrefix, printerName) =>
           console.log(`Ticket length: ${finalTicket.length} chars`);
 
           if (process.platform === "win32") {
-            console.log(`[thermal] Windows platform detected, using simple Out-Printer`);
+            console.log(`[thermal] Windows platform detected, printing to: ${printerName}`);
             
-            // Simple newline conversion without complex regex
+            // Write content to system temp directory (short path, no spaces)
+            const os = require('os');
+            const tempDir = os.tmpdir();
+            const tempFilename = `${filenamePrefix}_${Date.now()}.txt`;
+            const tempFilepath = path.join(tempDir, tempFilename);
             const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-            fs.writeFileSync(filepath, formattedTicketCRLF);
+            fs.writeFileSync(tempFilepath, formattedTicketCRLF);
 
-            // Use simple Out-Printer without -Name parameter (prints to default printer)
-            const proc = spawn("powershell.exe", ["-Command", `Get-Content -Path '${filepath}' -Raw | Out-Printer`], { shell: false });
-            let stdout = "";
-            let stderr = "";
-            proc.stdout.on("data", (data) => stdout += data);
-            proc.stderr.on("data", (data) => stderr += data);
-            
-            proc.on("close", (code) => {
-              if (code === 0) {
+            const tryPrintMethods = async () => {
+              const methods = [];
+              
+              // METHOD 1: cmd.exe /c copy /b to \\localhost\PrinterName (most reliable)
+              methods.push(async () => {
+                return new Promise((resolveMethod, rejectMethod) => {
+                  const escapedPath = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
+                  const escapedPrinter = printerName.replace(/'/g, "''");
+                  const cmd = `copy /b ${escapedPath} "\\\\localhost\\${escapedPrinter}"`;
+                  console.log(`[thermal] METHOD 1: copy /b: ${cmd}`);
+                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                  let stdout = '', stderr = '';
+                  proc.stdout.on('data', d => stdout += d);
+                  proc.stderr.on('data', d => stderr += d);
+                  proc.on('close', (code) => {
+                    const output = (stdout + stderr).toLowerCase();
+                    if (code === 0 && output.includes('1 file(s) copied')) {
+                      resolveMethod({ success: true, method: 'copy' });
+                    } else {
+                      rejectMethod(new Error(`copy /b failed (${code}): ${stdout || stderr}`));
+                    }
+                  });
+                  proc.on('error', (err) => rejectMethod(new Error(`copy spawn: ${err.message}`)));
+                });
+              });
+              
+              // METHOD 2: cmd.exe /c print command (Windows built-in)
+              methods.push(async () => {
+                return new Promise((resolveMethod, rejectMethod) => {
+                  const escapedPrinter = printerName.replace(/"/g, '\\"');
+                  const escapedPath = tempFilepath;
+                  const cmd = `print /D:"${escapedPrinter}" "${escapedPath}"`;
+                  console.log(`[thermal] METHOD 2: print /D: ${cmd}`);
+                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                  let stdout = '', stderr = '';
+                  proc.stdout.on('data', d => stdout += d);
+                  proc.stderr.on('data', d => stderr += d);
+                  proc.on('close', (code) => {
+                    if (code === 0) {
+                      resolveMethod({ success: true, method: 'print' });
+                    } else {
+                      rejectMethod(new Error(`print command failed (${code}): ${stdout || stderr}`));
+                    }
+                  });
+                  proc.on('error', (err) => rejectMethod(new Error(`print spawn: ${err.message}`)));
+                });
+              });
+              
+              // METHOD 3: Write directly to printer port
+              methods.push(async () => {
+                const escapedName = printerName.replace(/'/g, "''");
+                const portScript = `$p = Get-Printer -Name '${escapedName}' -ErrorAction SilentlyContinue; if ($p -and $p.PortName) { Write-Output $p.PortName } else { Write-Error 'NO_PORT' }`;
+                const portName = await new Promise((resolvePort) => {
+                  const proc = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', portScript], { shell: false });
+                  let stdout = '';
+                  proc.stdout.on('data', d => stdout += d);
+                  proc.on('close', () => resolvePort(stdout.trim()));
+                  proc.on('error', () => resolvePort(''));
+                });
+                if (!portName) throw new Error('No port name found');
+                console.log(`[thermal] METHOD 3: Direct port write to \\\\.\\${portName}`);
+                return new Promise((resolveMethod, rejectMethod) => {
+                  const escapedPath = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
+                  const cmd = `copy /b ${escapedPath} "\\\\.\\${portName}"`;
+                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                  let stdout = '', stderr = '';
+                  proc.stdout.on('data', d => stdout += d);
+                  proc.stderr.on('data', d => stderr += d);
+                  proc.on('close', (code) => {
+                    const output = (stdout + stderr).toLowerCase();
+                    if (code === 0 && output.includes('1 file(s) copied')) {
+                      resolveMethod({ success: true, method: 'port' });
+                    } else {
+                      rejectMethod(new Error(`port write failed (${code}): ${stdout || stderr}`));
+                    }
+                  });
+                  proc.on('error', (err) => rejectMethod(new Error(`port spawn: ${err.message}`)));
+                });
+              });
+
+              let lastError = null;
+              for (const method of methods) {
+                try {
+                  const result = await method();
+                  console.log(`[thermal] Print succeeded via method: ${result.method}`);
+                  return result;
+                } catch (err) {
+                  console.warn(`[thermal] Method failed: ${err.message}`);
+                  lastError = err;
+                }
+              }
+              throw lastError || new Error('All print methods failed');
+            };
+
+            tryPrintMethods()
+              .then(() => {
+                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
                 if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
                   setTimeout(() => {
-                    resolve({ success: true, message: `Ticket printed with ${settings.delaySeconds}s delay`, filename });
+                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
                   }, settings.delaySeconds * 1000);
                 } else {
-                  resolve({ success: true, message: `Ticket printed`, filename });
+                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
                 }
-              } else {
-                reject(new Error(`Windows native print failed: ${stderr || stdout}`));
-              }
-            });
-            proc.on("error", (err) => reject(new Error(`Windows native print execution failed: ${err.message}`)));
+              })
+              .catch((err) => {
+                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
+                reject(new Error(`Windows native print failed for ${printerName}: ${err.message}`));
+              });
           } else {
+            // ── Raspberry Pi / Linux: use lp command ────────────────────
             fs.writeFileSync(filepath, finalTicket);
 
             const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
@@ -389,34 +523,70 @@ const _executePrint = (ticket, filenamePrefix) =>
           console.log(`Ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
           if (process.platform === "win32") {
-            console.log(`[thermal] Windows platform detected, using simple Out-Printer`);
+            console.log(`[thermal] Windows platform detected, printing to: ${printerName}`);
             
-            // Simple newline conversion without complex regex
+            const os = require('os');
+            const tempDir = os.tmpdir();
+            const tempFilepath = path.join(tempDir, `${filenamePrefix}_${Date.now()}.txt`);
             const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-            fs.writeFileSync(filepath, formattedTicketCRLF);
+            fs.writeFileSync(tempFilepath, formattedTicketCRLF);
 
-            // Use simple Out-Printer without -Name parameter (prints to default printer)
-            const proc = spawn("powershell.exe", ["-Command", `Get-Content -Path '${filepath}' | Out-Printer`], { shell: false });
-            let stdout = "";
-            let stderr = "";
-            proc.stdout.on("data", (data) => stdout += data);
-            proc.stderr.on("data", (data) => stderr += data);
-            
-            proc.on("close", (code) => {
-              if (code === 0) {
-                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                  setTimeout(() => {
-                    resolve({ success: true, message: `Ticket printed with ${settings.delaySeconds}s delay`, filename });
-                  }, settings.delaySeconds * 1000);
-                } else {
-                  resolve({ success: true, message: `Ticket printed`, filename });
-                }
-              } else {
-                reject(new Error(`Windows native print failed: ${stderr || stdout}`));
+            const tryPrintMethods = async () => {
+              async function method1() {
+                return new Promise((res, rej) => {
+                  const sp = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
+                  const cmd = `copy /b ${sp} "\\\\localhost\\${printerName}"`;
+                  console.log(`[thermal] METHOD 1: ${cmd}`);
+                  const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                  let o = '', e = '';
+                  p.stdout.on('data', d => o += d);
+                  p.stderr.on('data', d => e += d);
+                  p.on('close', (c) => {
+                    if (c === 0 && (o+e).toLowerCase().includes('1 file(s) copied')) res({method:'copy'})
+                    else rej(new Error(`copy /b (${c}): ${o||e}`));
+                  });
+                  p.on('error', rej);
+                });
               }
-            });
-            proc.on("error", (err) => reject(new Error(`Windows native print execution failed: ${err.message}`)));
+              async function method2() {
+                return new Promise((res, rej) => {
+                  const cmd = `print /D:"${printerName}" "${tempFilepath}"`;
+                  console.log(`[thermal] METHOD 2: ${cmd}`);
+                  const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                  let o = '', e = '';
+                  p.stdout.on('data', d => o += d);
+                  p.stderr.on('data', d => e += d);
+                  p.on('close', (c) => {
+                    if (c === 0) res({method:'print'})
+                    else rej(new Error(`print (${c}): ${o||e}`));
+                  });
+                  p.on('error', rej);
+                });
+              }
+              let lastErr = null;
+              for (const fn of [method1, method2]) {
+                try { return await fn(); }
+                catch (err) { console.warn(`[thermal] Method failed: ${err.message}`); lastErr = err; }
+              }
+              throw lastErr || new Error('All methods failed');
+            };
+
+            tryPrintMethods()
+              .then((result) => {
+                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
+                console.log(`[thermal] Print succeeded via: ${result.method}`);
+                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                  setTimeout(() => resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
+                } else {
+                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
+                }
+              })
+              .catch((err) => {
+                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
+                reject(new Error(`Windows native print failed for ${printerName}: ${err.message}`));
+              });
           } else {
+            // ── Raspberry Pi / Linux: use lp command ────────────────────
             fs.writeFileSync(filepath, finalTicket);
 
             const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
@@ -470,59 +640,71 @@ const _executePrint = (ticket, filenamePrefix) =>
               console.log(`Fallback ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
               if (process.platform === "win32") {
-                console.log(`[thermal] Fallback using plain text printing (like Linux) for ${defaultPrinter}`);
-                
-                const doStandardPrint = () => new Promise((stdResolve, stdReject) => {
-                  console.log(`Fallback using standard Out-Printer (plain text) for ${defaultPrinter}`);
-                  // Simple newline conversion without complex regex
+                console.log(`[thermal] Fallback printing to ${defaultPrinter}`);
+                const fallbackPrint = () => new Promise((fbResolve, fbReject) => {
+                  const os = require('os');
+                  const tempFilepath = path.join(os.tmpdir(), `fb_${Date.now()}.txt`);
                   const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-                  fs.writeFileSync(filepath, formattedTicketCRLF);
-
-                  const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${defaultPrinter}'`;
-
-                  const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
-                  let stdout = "";
-                  let stderr = "";
-                  proc.stdout.on("data", (data) => stdout += data);
-                  proc.stderr.on("data", (data) => stderr += data);
-                  
-                  proc.on("close", (code) => {
-                    if (code === 0) {
-                      if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                        setTimeout(() => {
-                          stdResolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
-                        }, settings.delaySeconds * 1000);
-                      } else {
-                        stdResolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                      }
-                    } else {
-                      stdReject(new Error(`Windows native print failed: ${stderr || stdout}`));
-                    }
+                  fs.writeFileSync(tempFilepath, formattedTicketCRLF);
+                  const tryCopy = (cb) => {
+                    const sp = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
+                    const cmd = `copy /b ${sp} "\\\\localhost\\${defaultPrinter}"`;
+                    const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                    let o = '', e = '';
+                    p.stdout.on('data', d => o += d);
+                    p.stderr.on('data', d => e += d);
+                    p.on('close', (c) => {
+                      try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (x) { }
+                      if (c === 0 && (o+e).toLowerCase().includes('1 file(s) copied')) cb(null);
+                      else cb(new Error(`${o||e}`));
+                    });
+                    p.on('error', cb);
+                  };
+                  const tryPrint = (cb) => {
+                    const cmd = `print /D:"${defaultPrinter}" "${tempFilepath}"`;
+                    const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
+                    let o = '', e = '';
+                    p.stdout.on('data', d => o += d);
+                    p.stderr.on('data', d => e += d);
+                    p.on('close', (c) => {
+                      try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (x) { }
+                      if (c === 0) cb(null);
+                      else cb(new Error(`${o||e}`));
+                    });
+                    p.on('error', cb);
+                  };
+                  tryCopy((err) => {
+                    if (!err) return fbResolve();
+                    console.warn(`[thermal] Fallback copy failed, trying print: ${err.message}`);
+                    tryPrint((err2) => {
+                      if (!err2) return fbResolve();
+                      fbReject(err2 || new Error('All fallback methods failed'));
+                    });
                   });
-                  proc.on("error", (err) => stdReject(new Error(`Windows native print execution failed: ${err.message}`)));
                 });
-                
-                // Always use plain text printing - raw ESC/POS causes issues with some printers
-                doStandardPrint()
+                fallbackPrint()
+                  .then(() => {
+                    if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                      setTimeout(() => resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
+                    } else {
+                      resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
+                    }
+                  })
                   .catch(err => {
-                    console.error(`Fallback plain text print failed: ${err.message}`);
                     reject({ success: false, message: "Fallback printing failed", error: err.message });
                   });
               } else {
+                // ── Raspberry Pi / Linux fallback ────────────────────────
                 fs.writeFileSync(filepath, finalTicket);
-
                 const proc = spawn("lp", ["-d", defaultPrinter, filepath], { shell: false });
                 let stdout = "";
                 let stderr = "";
                 proc.stdout.on("data", (data) => stdout += data);
                 proc.stderr.on("data", (data) => stderr += data);
-                
                 proc.on("close", (code) => {
                   if (code === 0) {
                     if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                      setTimeout(() => {
-                        resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
-                      }, settings.delaySeconds * 1000);
+                      setTimeout(() => resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
                     } else {
                       resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
                     }
@@ -544,7 +726,6 @@ const _executePrint = (ticket, filenamePrefix) =>
 
 /**
  * executePrintWithPrinter - Wrapped with circuit breaker for resilience.
- * Prints to a specific printer without going through printer selection.
  */
 const executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
   const breaker = withCircuitBreaker('printer', _executePrintWithPrinter, {
@@ -570,8 +751,6 @@ const executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
 
 /**
  * executePrint - Wrapped with circuit breaker for resilience.
- * The circuit breaker prevents repeated failed print attempts and
- * allows the service to recover gracefully.
  */
 const executePrint = async (ticket, filenamePrefix) => {
   const breaker = withCircuitBreaker('printer', _executePrint, {
@@ -595,8 +774,13 @@ const executePrint = async (ticket, filenamePrefix) => {
   }
 };
 
+// ── Ticket Formatting Functions ──────────────────────────────────────────
+// ALL formatters accept a 'width' parameter (defaults to DEFAULT_PRINTER_WIDTH = 32 for 50mm).
+// The separator lines, text wrapping, padding, and alignment all use this width.
+
 const printerService = {
-  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle) => {
+  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle, width = DEFAULT_PRINTER_WIDTH) => {
+    const sep = separator(width);
     const timestamp = formatDateTime(new Date());
     let ticket = "\n";
     
@@ -613,9 +797,11 @@ const printerService = {
       ticket += `[CENTER][H1] ${orderTypeStr}\n`;
     }
     
+    // Header row: timestamp left, ticket number right, within width
     const leftHeader = `${timestamp}`;
     const rightHeader = `#${order.daily_ticket_number || order.id}`;
-    ticket += `${leftHeader}${rightHeader.padStart(80 - leftHeader.length, ' ')}\n`;
+    const headerPad = Math.max(0, width - leftHeader.length - rightHeader.length);
+    ticket += `${leftHeader}${' '.repeat(headerPad)}${rightHeader}\n`;
     ticket += `Send by: Cashier\n`;
     
     if (!order.order_type || order.order_type === 'DINE_IN') {
@@ -629,29 +815,12 @@ const printerService = {
       if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup At: ${order.collection_time}\n`;
       if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Address: ${order.delivery_address}\n`;
     }
-    ticket += "================================================================================\n";
+    ticket += `${sep}\n`;
     
     itemsToPrint.forEach(item => {
-      const nameLines = [];
-      const words = item.item_name.split(/\s+/);
-      let curLine = "";
-      
-      for (const word of words) {
-        if ((curLine + word).length > 70) {
-          if (curLine) nameLines.push(curLine.trim());
-          if (word.length > 70) {
-            const chunks = word.match(/.{1,70}/g) || [];
-            nameLines.push(...chunks.slice(0, -1));
-            curLine = chunks[chunks.length - 1] + " ";
-          } else {
-            curLine = word + " ";
-          }
-        } else {
-          curLine += word + " ";
-        }
-      }
-      if (curLine.trim()) nameLines.push(curLine.trim());
-
+      // Wrap item name to fit width (leave room for "2x " prefix = 4 chars)
+      const nameMax = width - 4;
+      const nameLines = wrapText(item.item_name, nameMax);
       const qtyStr = `${item.quantity}x`.padEnd(4, ' ');
       
       nameLines.forEach((line, idx) => {
@@ -663,17 +832,8 @@ const printerService = {
       });
 
       if (item.notes) {
-        const noteWords = item.notes.split(' ');
-        let curNote = "     Note: ";
-        for (let nw of noteWords) {
-          if ((curNote + nw).length > 80) {
-            ticket += `${curNote.trimEnd()}\n`;
-            curNote = "     " + nw + " ";
-          } else {
-            curNote += nw + " ";
-          }
-        }
-        if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
+        const noteLines = wrapText(`Note: ${item.notes}`, width - 5);
+        noteLines.forEach(line => ticket += `     ${line}\n`);
       }
 
       if (item.options_json) {
@@ -681,61 +841,65 @@ const printerService = {
           const opts = JSON.parse(item.options_json);
           opts.forEach(opt => {
             const suffix = opt.delta > 0 ? ` (+${parseFloat(opt.delta).toFixed(2)})` : '';
-            ticket += `     > ${opt.option}${suffix}\n`;
+            const optText = `> ${opt.option}${suffix}`;
+            const optLines = wrapText(optText, width - 5);
+            optLines.forEach(line => ticket += `     ${line}\n`);
           });
         } catch { /* ignore malformed JSON */ }
       }
 
       ticket += "[RIGHT][SQUARE]\n";
-      ticket += "================================================================================\n";
+      ticket += `${sep}\n`;
     });
     
     ticket += "\n\n";
     return ticket;
   },
 
-  formatFinalReceipt: (order, cashierName) => {
+  formatFinalReceipt: (order, cashierName, width = DEFAULT_PRINTER_WIDTH) => {
+    const sep = separator(width);
     const timestamp = formatDateTime(new Date());
     let ticket = "\n";
     
-    ticket += "[CENTER][H1] BP DRAGONFLY GARDEN\n";
-    ticket += "[CENTER]Solok Pondok Upih\n";
-    ticket += "[CENTER]Taman Kristal, 11020 Balik Pulau\n";
-    ticket += "[CENTER]Pulau Pinang\n";
-    ticket += "================================================================================\n";
+    ticket += `[CENTER][H1] BP DRAGONFLY\n`;
+    ticket += `[CENTER]GARDEN\n`;
+    ticket += `[CENTER]Solok Pondok Upih\n`;
+    ticket += `[CENTER]Taman Kristal\n`;
+    ticket += `[CENTER]11020 Balik Pulau\n`;
+    ticket += `[CENTER]Pulau Pinang\n`;
+    ticket += `${sep}\n`;
     
-    ticket += `Invoice no: ${order.id}\n`;
-    ticket += `Date & Time: ${timestamp}\n`;
+    ticket += `Invoice: ${order.id}\n`;
+    ticket += `Date: ${timestamp}\n`;
     ticket += `Cashier: ${cashierName}\n`;
     if (!order.order_type || order.order_type === 'DINE_IN') {
       ticket += `${formatTableNumber(order.table_number)}\n`;
     } else {
-      ticket += `Order Type: ${order.order_type}\n`;
+      ticket += `Type: ${order.order_type}\n`;
       if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
         ticket += `${formatTableNumber(order.table_number)}\n`;
       }
-      if (order.customer_name) ticket += `Customer: ${order.customer_name}\n`;
-      if (order.order_type === 'DELIVERY' && order.delivery_address) {
-        ticket += `Address: ${order.delivery_address}\n`;
-      }
-      if (order.order_type === 'PICKUP' && order.collection_time) {
-        ticket += `Pickup Time: ${order.collection_time}\n`;
-      }
+      if (order.customer_name) ticket += `Cust: ${order.customer_name}\n`;
+      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Addr: ${order.delivery_address}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup: ${order.collection_time}\n`;
     }
     ticket += "\n";
     ticket += `[H1] ORDER #${order.daily_ticket_number || order.id}\n`;
-    ticket += "================================================================================\n";
-    ticket += "Qty Item                            Price(MYR)\n";
-    ticket += "================================================================================\n";
+    ticket += `${sep}\n`;
+    ticket += `Qty Item${' '.repeat(Math.max(1, width - 15))}Total\n`;
+    ticket += `${sep}\n`;
     
     let totalQty = 0;
     
     order.items.forEach(item => {
       totalQty += item.quantity;
       const qtyStr = item.quantity.toString().padEnd(3, ' ');
-      const nameStr = item.item_name.substring(0, 40).padEnd(40, ' ');
       const lineTotal = (item.quantity * item.price_at_order_time).toFixed(2);
-      const priceStr = lineTotal.padStart(15, ' ');
+      
+      // Item name truncated to fit
+      const nameMax = width - 15; // room for "3 xxx...xxx  RM12.50"
+      const nameStr = item.item_name.substring(0, nameMax).padEnd(nameMax, ' ');
+      const priceStr = lineTotal.padStart(8, ' ');
       
       ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
       
@@ -745,50 +909,37 @@ const printerService = {
         try {
           const opts = JSON.parse(item.options_json);
           opts.forEach(opt => {
-            if (opt.delta) {
-              deltasSum += parseFloat(opt.delta);
-              hasPriceDelta = true;
-            }
+            if (opt.delta) { deltasSum += parseFloat(opt.delta); hasPriceDelta = true; }
           });
         } catch {}
       }
-      const basePrice = item.price_at_order_time - deltasSum;
       
       if (hasPriceDelta) {
-        ticket += `    Price Before Var: RM ${basePrice.toFixed(2)}\n`;
-        ticket += `    Price After Var:  RM ${item.price_at_order_time.toFixed(2)}\n`;
-      } else {
-        ticket += `    (Unit: RM ${item.price_at_order_time.toFixed(2)})\n`;
+        ticket += `    (RM ${item.price_at_order_time.toFixed(2)}/ea)\n`;
+      } else if (item.price_at_order_time > 0) {
+        ticket += `    (RM ${item.price_at_order_time.toFixed(2)}/ea)\n`;
       }
       
       if (item.options_json) {
         try {
           const opts = JSON.parse(item.options_json);
           opts.forEach(opt => {
-            const suffix = opt.delta > 0 ? ` +RM ${parseFloat(opt.delta).toFixed(2)}` : '';
-            const optLine = `    > ${opt.option}${suffix}`.substring(0, 80);
-            ticket += `${optLine}\n`;
+            const suffix = opt.delta > 0 ? `+RM ${parseFloat(opt.delta).toFixed(2)}` : '';
+            ticket += `    > ${opt.option}${suffix}\n`.substring(0, width);
+            ticket += '\n';
           });
         } catch { /* ignore */ }
       }
 
       if (item.notes) {
-        const noteWords = item.notes.split(' ');
-        let curNote = "    Note: ";
-        for (let nw of noteWords) {
-          if ((curNote + nw).length > 80) {
-            ticket += `${curNote.trimEnd()}\n`;
-            curNote = "    " + nw + " ";
-          } else {
-            curNote += nw + " ";
-          }
-        }
-        if (curNote.trim()) ticket += `${curNote.trimEnd()}\n`;
+        const noteText = `Note: ${item.notes}`;
+        const noteLines = wrapText(noteText, width - 4);
+        noteLines.forEach(line => ticket += `    ${line}\n`);
       }
     });
     
-    ticket += "================================================================================\n";
-    ticket += `Qty ${totalQty}\n`;
+    ticket += `${sep}\n`;
+    ticket += `Qty: ${totalQty}\n`;
     
     const subtotal = Number(order.total_price || 0);
     const serviceChargeRate = order.service_charge_rate || 0;
@@ -796,29 +947,28 @@ const printerService = {
     const serviceCharge = subtotal * serviceChargeRate;
     const sst = (subtotal + serviceCharge) * vatRate;
     const rawTotal = subtotal + sst + serviceCharge;
-    
     const roundedTotal = Math.round(rawTotal * 20) / 20;
     const rounding = roundedTotal - rawTotal;
     
-    ticket += `Subtotal                            ${subtotal.toFixed(2).padStart(15, ' ')}\n`;
+    const fmtMoney = (v) => v.toFixed(2).padStart(10, ' ');
+    
+    ticket += `Subtotal${' '.repeat(Math.max(0, width - 20))}${fmtMoney(subtotal)}\n`;
     if (serviceChargeRate > 0) {
-      const scLabel = `SERVICE CHARGE (${Math.round(serviceChargeRate * 100)}%)`;
-      ticket += `${scLabel.padEnd(40, ' ')}${serviceCharge.toFixed(2).padStart(15, ' ')}\n`;
+      ticket += `Svc Chg${' '.repeat(Math.max(0, width - 23))}${fmtMoney(serviceCharge)}\n`;
     }
     if (vatRate > 0) {
-      const sstLabel = `SST (${Math.round(vatRate * 100)}%)`;
-      ticket += `${sstLabel.padEnd(40, ' ')}${sst.toFixed(2).padStart(15, ' ')}\n`;
+      ticket += `SST${' '.repeat(Math.max(0, width - 20))}${fmtMoney(sst)}\n`;
     }
-    ticket += `Bill rounding                       ${rounding.toFixed(2).padStart(15, ' ')}\n`;
-    ticket += "================================================================================\n";
+    ticket += `Rounding${' '.repeat(Math.max(0, width - 20))}${fmtMoney(rounding)}\n`;
+    ticket += `${sep}\n`;
     
-    ticket += `[BOLD]Total (MYR)                       ${roundedTotal.toFixed(2).padStart(15, ' ')}\n`;
-    ticket += "================================================================================\n";
+    ticket += `[BOLD]TOTAL (MYR)${' '.repeat(Math.max(0, width - 21))}${fmtMoney(roundedTotal)}\n`;
+    ticket += `${sep}\n`;
     
     ticket += "\n";
-    ticket += "[CENTER]This is an official receipt\n";
-    ticket += "[CENTER]Thank you for visiting us\n";
-    ticket += "[CENTER]We hope to see you again!\n";
+    ticket += "[CENTER]~ Official Receipt ~\n";
+    ticket += "[CENTER]Thank you!\n";
+    ticket += "[CENTER]Visit us again\n";
     ticket += "\n\n";
     
     return ticket;
@@ -826,26 +976,39 @@ const printerService = {
 
   printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {
     const copyTitle = copyNum === 1 ? "CUSTOMER COPY" : "KITCHEN COPY";
-    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle);
+    const printerName = await getSelectedPrinter();
+    const settings = await getPrinterSettings(printerName);
+    const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+    const w = effectiveWidth > 0 ? effectiveWidth : settings.width;
+    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle, w);
     return await executePrint(ticket, `order_${order.id}_checklist`);
   },
 
   printFinalReceipt: async (order, cashierName) => {
-    const ticket = printerService.formatFinalReceipt(order, cashierName);
+    const printerName = await getSelectedPrinter();
+    const settings = await getPrinterSettings(printerName);
+    const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+    const w = effectiveWidth > 0 ? effectiveWidth : settings.width;
+    const ticket = printerService.formatFinalReceipt(order, cashierName, w);
     return await executePrint(ticket, `order_${order.id}_final`);
   },
 
   printDailySalesReport: async (todayOrders) => {
+    const printerName = await getSelectedPrinter();
+    const settings = await getPrinterSettings(printerName);
+    const width = settings.width - settings.marginLeft - settings.marginRight;
+    const w = width > 0 ? width : DEFAULT_PRINTER_WIDTH;
+    const sep = separator(w);
     const timestamp = formatDateTime(new Date());
     const todayDateStr = new Date().toLocaleDateString('en-GB');
     
     let ticket = "\n";
-    ticket += "[CENTER][H1] DAILY SALES REPORT\n";
-    ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
-    ticket += "================================================================================\n";
+    ticket += "[CENTER][H1] DAILY SALES\n";
+    ticket += "[CENTER]BP DRAGONFLY\n";
+    ticket += `${sep}\n`;
     ticket += `Date: ${todayDateStr}\n`;
-    ticket += `Printed At: ${timestamp}\n`;
-    ticket += "================================================================================\n";
+    ticket += `At: ${timestamp}\n`;
+    ticket += `${sep}\n`;
     
     let totalSales = 0;
     todayOrders.forEach((order, index) => {
@@ -853,30 +1016,26 @@ const printerService = {
       const price = Number(order.total_price || 0);
       totalSales += price;
       
-      const label = `${index + 1}. Order #${orderNum}`;
-      const priceStr = `RM ${price.toFixed(2)}`;
-      ticket += `${label.padEnd(40, ' ')}${priceStr.padStart(20, ' ')}\n`;
+      const label = `${index + 1}. #${orderNum}`;
+      const priceStr = price.toFixed(2).padStart(10, ' ');
+      ticket += `${label}${' '.repeat(Math.max(0, w - label.length - 10))}${priceStr}\n`;
     });
     
-    ticket += "================================================================================\n";
-    const totalLabel = "Total Sales:";
-    const totalValStr = `RM ${totalSales.toFixed(2)}`;
-    ticket += `[BOLD]${totalLabel.padEnd(40, ' ')}${totalValStr.padStart(20, ' ')}\n`;
-    ticket += "================================================================================\n";
+    ticket += `${sep}\n`;
+    const totalLabel = "Total:";
+    const totalValStr = totalSales.toFixed(2).padStart(10, ' ');
+    ticket += `[BOLD]${totalLabel}${' '.repeat(Math.max(0, w - totalLabel.length - 10))}${totalValStr}\n`;
+    ticket += `${sep}\n`;
     ticket += "\n\n";
     
     return await executePrint(ticket, `daily_sales_report`);
   },
 
   printTestTicket: async (printerName) => {
-    // Minimal test content to avoid PowerShell OutOfMemoryException
-    const ticket = "TEST PRINT\nBP Dragonfly Garden\n";
-    
-    // If printerName is provided, use it directly
+    const ticket = `TEST PRINT OK\nBP Dragonfly Garden\nWidth: ${DEFAULT_PRINTER_WIDTH}\n`;
     if (printerName) {
       return await executePrintWithPrinter(ticket, `printer_test`, printerName);
     }
-    
     return await executePrint(ticket, `printer_test`);
   }
 };

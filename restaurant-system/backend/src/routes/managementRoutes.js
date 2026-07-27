@@ -473,29 +473,6 @@ router.post("/printers/discover/clear-cache", requireManagerToken, async (req, r
   }
 });
 
-/*
- * POST /management/printers/test
- * Tests printing to a specific printer
- * Body: { printerName: string }
- * Returns: { success: true, message: string }
- */
-router.post("/printers/test", requireManagerToken, async (req, res) => {
-  console.log(`[thermal] Test print route called for printer: ${req.body.printerName}`);
-  try {
-    const { printerName } = req.body;
-    if (!printerName) {
-      console.log(`[thermal] Test print rejected: no printer name`);
-      return res.status(400).json({ success: false, message: "Printer name is required" });
-    }
-    console.log(`[thermal] Calling printerDiscoveryService.testPrint("${printerName}")`);
-    const result = await printerDiscoveryService.testPrint(printerName);
-    console.log(`[thermal] Test print result:`, result);
-    res.json(result);
-  } catch (error) {
-    console.error(`[thermal] Test print route error:`, error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 /*
  * GET /management/printers/settings
