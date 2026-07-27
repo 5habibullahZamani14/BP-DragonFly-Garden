@@ -235,6 +235,117 @@ const stripGdiTags = (ticket, width = 80) => {
  * Internal print execution logic (not wrapped with circuit breaker).
  * This is the actual implementation that gets wrapped.
  */
+const _executePrintWithPrinter = (ticket, filenamePrefix, printerName) =>
+  new Promise((resolve, reject) => {
+    try {
+      console.log(`\n========== PRINTING ${filenamePrefix} TO SPECIFIC PRINTER: ${printerName} ==========`);
+      console.log(ticket);
+      console.log("=====================================\n");
+
+      // Use system temp directory with shorter path to avoid issues
+      const os = require('os');
+      const tempDir = os.tmpdir();
+      const timestamp = Date.now();
+      const filename = `${filenamePrefix}_${timestamp}.txt`;
+      const filepath = path.join(tempDir, filename);
+
+      getPrinterSettings(printerName)
+        .then(settings => {
+          console.log(`Printer settings: width=${settings.width}, margins=${settings.marginLeft},${settings.marginRight},${settings.marginTop},${settings.marginBottom}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
+          
+          // For test prints, skip margin application to avoid PowerShell OutOfMemoryException
+          const isTestPrint = filenamePrefix === 'printer_test';
+          let finalTicket;
+          
+          if (isTestPrint) {
+            // Use raw ticket without margins for test prints
+            finalTicket = ticket;
+            console.log(`Test print detected, skipping margin application`);
+          } else {
+            // Apply margins by adding spaces/padding
+            const leftMargin = ' '.repeat(settings.marginLeft);
+            const rightMargin = ' '.repeat(settings.marginRight);
+            const topMargin = '\n'.repeat(settings.marginTop);
+            const bottomMargin = '\n'.repeat(settings.marginBottom);
+            
+            // Calculate effective width (total width minus margins)
+            const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+            
+            const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
+            
+            // Apply left margin to each line
+            const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
+            
+            const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
+            const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
+            finalTicket = beforeLines + ticketWithMargins + afterLines;
+          }
+          
+          console.log(`Ticket length: ${finalTicket.length} chars`);
+
+          if (process.platform === "win32") {
+            console.log(`[thermal] Windows platform detected, using simple Out-Printer`);
+            
+            // Simple newline conversion without complex regex
+            const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
+            fs.writeFileSync(filepath, formattedTicketCRLF);
+
+            // Use simple Out-Printer without -Name parameter (prints to default printer)
+            const proc = spawn("powershell.exe", ["-Command", `Get-Content -Path '${filepath}' -Raw | Out-Printer`], { shell: false });
+            let stdout = "";
+            let stderr = "";
+            proc.stdout.on("data", (data) => stdout += data);
+            proc.stderr.on("data", (data) => stderr += data);
+            
+            proc.on("close", (code) => {
+              if (code === 0) {
+                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                  setTimeout(() => {
+                    resolve({ success: true, message: `Ticket printed with ${settings.delaySeconds}s delay`, filename });
+                  }, settings.delaySeconds * 1000);
+                } else {
+                  resolve({ success: true, message: `Ticket printed`, filename });
+                }
+              } else {
+                reject(new Error(`Windows native print failed: ${stderr || stdout}`));
+              }
+            });
+            proc.on("error", (err) => reject(new Error(`Windows native print execution failed: ${err.message}`)));
+          } else {
+            fs.writeFileSync(filepath, finalTicket);
+
+            const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
+            let stdout = "";
+            let stderr = "";
+            proc.stdout.on("data", (data) => stdout += data);
+            proc.stderr.on("data", (data) => stderr += data);
+            
+            proc.on("close", (code) => {
+              if (code === 0) {
+                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                  setTimeout(() => {
+                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
+                  }, settings.delaySeconds * 1000);
+                } else {
+                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
+                }
+              } else {
+                reject(new Error(`lp command failed: ${stderr}`));
+              }
+            });
+            proc.on("error", (err) => reject(new Error(`lp execution failed: ${err.message}`)));
+          }
+        })
+        .catch(err => {
+          console.error(`Error getting printer settings for ${printerName}:`, err.message);
+          reject(err);
+        });
+    } catch (error) {
+      console.error(`Print execution error: ${error.message}`);
+      reject(error);
+    }
+  });
+
 const _executePrint = (ticket, filenamePrefix) =>
   new Promise((resolve, reject) => {
     try {
@@ -278,78 +389,33 @@ const _executePrint = (ticket, filenamePrefix) =>
           console.log(`Ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
           if (process.platform === "win32") {
-            console.log(`[thermal] Windows platform detected, attempting raw ESC/POS for ${printerName}`);
+            console.log(`[thermal] Windows platform detected, using simple Out-Printer`);
             
-            const doRawPrint = async () => {
-              console.log(`[thermal] doRawPrint() called for ${printerName}`);
-              
-              const escPosBuffer = thermalPrinterService.convertTicketToEscPos(
-                ticket,
-                settings.width,
-                settings.hasAutoCutter
-              );
-              
-              const finalBuffer = thermalPrinterService.addEmptyLines(
-                escPosBuffer,
-                settings.emptyLinesBefore,
-                settings.emptyLinesAfter
-              );
-              
-              try {
-                const binPath = filepath.replace('.txt', '.bin');
-                fs.writeFileSync(binPath, finalBuffer);
-                console.log(`ESC/POS binary saved to ${binPath} (${finalBuffer.length} bytes)`);
-              } catch (binErr) {
-                console.error('Failed to save ESC/POS binary:', binErr.message);
-              }
-              
-              const result = await thermalPrinterService.sendRawToPrinter(printerName, finalBuffer);
-              console.log(`Raw ESC/POS print successful: ${result.message}`);
-              if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                setTimeout(() => resolve({ ...result, filename }), settings.delaySeconds * 1000);
-              } else {
-                resolve({ ...result, filename });
-              }
-            };
+            // Simple newline conversion without complex regex
+            const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
+            fs.writeFileSync(filepath, formattedTicketCRLF);
+
+            // Use simple Out-Printer without -Name parameter (prints to default printer)
+            const proc = spawn("powershell.exe", ["-Command", `Get-Content -Path '${filepath}' | Out-Printer`], { shell: false });
+            let stdout = "";
+            let stderr = "";
+            proc.stdout.on("data", (data) => stdout += data);
+            proc.stderr.on("data", (data) => stderr += data);
             
-            const doStandardPrint = () => new Promise((stdResolve, stdReject) => {
-              console.log(`Using standard Out-Printer for ${printerName}`);
-              const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
-              fs.writeFileSync(filepath, formattedTicketCRLF);
-
-              const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${printerName}'`;
-
-              const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
-              let stdout = "";
-              let stderr = "";
-              proc.stdout.on("data", (data) => stdout += data);
-              proc.stderr.on("data", (data) => stderr += data);
-              
-              proc.on("close", (code) => {
-                if (code === 0) {
-                  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                    setTimeout(() => {
-                      stdResolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                    }, settings.delaySeconds * 1000);
-                  } else {
-                    stdResolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                  }
+            proc.on("close", (code) => {
+              if (code === 0) {
+                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                  setTimeout(() => {
+                    resolve({ success: true, message: `Ticket printed with ${settings.delaySeconds}s delay`, filename });
+                  }, settings.delaySeconds * 1000);
                 } else {
-                  stdReject(new Error(`Windows native print failed: ${stderr || stdout}`));
+                  resolve({ success: true, message: `Ticket printed`, filename });
                 }
-              });
-              proc.on("error", (err) => stdReject(new Error(`Windows native print execution failed: ${err.message}`)));
+              } else {
+                reject(new Error(`Windows native print failed: ${stderr || stdout}`));
+              }
             });
-            
-            doRawPrint()
-              .catch(err => {
-                console.warn(`Raw ESC/POS failed, falling back to standard Out-Printer: ${err.message}`);
-                return doStandardPrint();
-              })
-              .catch(err => {
-                console.error(`Standard Out-Printer also failed: ${err.message}`);
-                reject(err);
-              });
+            proc.on("error", (err) => reject(new Error(`Windows native print execution failed: ${err.message}`)));
           } else {
             fs.writeFileSync(filepath, finalTicket);
 
@@ -404,50 +470,43 @@ const _executePrint = (ticket, filenamePrefix) =>
               console.log(`Fallback ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
               if (process.platform === "win32") {
-                console.log(`[thermal] Fallback attempting raw ESC/POS for ${defaultPrinter}`);
-                const escPosBuffer = thermalPrinterService.convertTicketToEscPos(
-                  ticket,
-                  settings.width,
-                  settings.hasAutoCutter
-                );
-                const finalBuffer = thermalPrinterService.addEmptyLines(
-                  escPosBuffer,
-                  settings.emptyLinesBefore,
-                  settings.emptyLinesAfter
-                );
+                console.log(`[thermal] Fallback using plain text printing (like Linux) for ${defaultPrinter}`);
                 
-                thermalPrinterService.sendRawToPrinter(defaultPrinter, finalBuffer)
-                  .then(result => {
-                    console.log(`[thermal] Fallback raw ESC/POS success: ${result.message}`);
-                    resolve({ ...result, filename });
-                  })
-                  .catch(err => {
-                    console.warn(`[thermal] Fallback raw ESC/POS failed: ${err.message}, using standard Out-Printer`);
-                    const formattedTicketCRLF = finalTicket.replace(/(?<!\r)\n/g, "\r\n");
-                    fs.writeFileSync(filepath, formattedTicketCRLF);
+                const doStandardPrint = () => new Promise((stdResolve, stdReject) => {
+                  console.log(`Fallback using standard Out-Printer (plain text) for ${defaultPrinter}`);
+                  // Simple newline conversion without complex regex
+                  const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
+                  fs.writeFileSync(filepath, formattedTicketCRLF);
 
-                    const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${defaultPrinter}'`;
+                  const psCommand = `Get-Content -Path '${filepath}' -Raw | Out-Printer -Name '${defaultPrinter}'`;
 
-                    const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
-                    let stdout = "";
-                    let stderr = "";
-                    proc.stdout.on("data", (data) => stdout += data);
-                    proc.stderr.on("data", (data) => stderr += data);
-                    
-                    proc.on("close", (code) => {
-                      if (code === 0) {
-                        if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                          setTimeout(() => {
-                            resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
-                          }, settings.delaySeconds * 1000);
-                        } else {
-                          resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                        }
+                  const proc = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], { shell: false });
+                  let stdout = "";
+                  let stderr = "";
+                  proc.stdout.on("data", (data) => stdout += data);
+                  proc.stderr.on("data", (data) => stderr += data);
+                  
+                  proc.on("close", (code) => {
+                    if (code === 0) {
+                      if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+                        setTimeout(() => {
+                          stdResolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename });
+                        }, settings.delaySeconds * 1000);
                       } else {
-                        reject({ success: false, message: "Windows native print failed", error: stderr || stdout });
+                        stdResolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
                       }
-                    });
-                    proc.on("error", (err) => reject({ success: false, message: "Windows native print execution failed", error: err.message }));
+                    } else {
+                      stdReject(new Error(`Windows native print failed: ${stderr || stdout}`));
+                    }
+                  });
+                  proc.on("error", (err) => stdReject(new Error(`Windows native print execution failed: ${err.message}`)));
+                });
+                
+                // Always use plain text printing - raw ESC/POS causes issues with some printers
+                doStandardPrint()
+                  .catch(err => {
+                    console.error(`Fallback plain text print failed: ${err.message}`);
+                    reject({ success: false, message: "Fallback printing failed", error: err.message });
                   });
               } else {
                 fs.writeFileSync(filepath, finalTicket);
@@ -482,6 +541,32 @@ const _executePrint = (ticket, filenamePrefix) =>
       reject({ success: false, message: "Error printing ticket", error: error.message });
     }
   });
+
+/**
+ * executePrintWithPrinter - Wrapped with circuit breaker for resilience.
+ * Prints to a specific printer without going through printer selection.
+ */
+const executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
+  const breaker = withCircuitBreaker('printer', _executePrintWithPrinter, {
+    failureThreshold: 3,
+    timeoutMs: 60000,
+    successThreshold: 2
+  });
+  
+  try {
+    return await breaker(ticket, filenamePrefix, printerName);
+  } catch (error) {
+    if (error.message.includes('Circuit is OPEN')) {
+      return {
+        success: false,
+        message: 'Printer service temporarily unavailable. Please try again in a moment.',
+        error: error.message,
+        circuitState: 'OPEN'
+      };
+    }
+    throw error;
+  }
+};
 
 /**
  * executePrint - Wrapped with circuit breaker for resilience.
@@ -783,20 +868,17 @@ const printerService = {
     return await executePrint(ticket, `daily_sales_report`);
   },
 
-  printTestTicket: async () => {
-    let ticket = "\n";
-    ticket += "[CENTER][H1] PRINTER TEST\n";
-    ticket += "[CENTER]Width Test: 12345678901234567890123456789012345678901234567890123456789012345678901234567890\n";
-    ticket += "================================================================================\n";
-    ticket += "This is a test to verify printer width and spacing.\n";
-    ticket += "================================================================================\n";
-    ticket += "If you see large margins on left/right, check Windows printer settings.\n";
-    ticket += "Set paper size to 80mm and minimize margins in printer properties.\n";
-    ticket += "================================================================================\n";
-    ticket += "\n\n";
+  printTestTicket: async (printerName) => {
+    // Minimal test content to avoid PowerShell OutOfMemoryException
+    const ticket = "TEST PRINT\nBP Dragonfly Garden\n";
+    
+    // If printerName is provided, use it directly
+    if (printerName) {
+      return await executePrintWithPrinter(ticket, `printer_test`, printerName);
+    }
     
     return await executePrint(ticket, `printer_test`);
   }
 };
 
-module.exports = { ...printerService, getReceiptCopyCounts };
+module.exports = { ...printerService, getReceiptCopyCounts, getPrinterSettings };

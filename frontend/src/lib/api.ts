@@ -1304,15 +1304,21 @@ export const downloadBackup = async (filename: string): Promise<void> => {
 // ── System Updates ────────────────────────────────────────────────────────────
 
 export interface VersionCheckResult {
-  current_version: string;
-  latest_version: string;
-  is_up_to_date: boolean;
+  version: string;
+  version_details: {
+    major: number;
+    minor: number;
+    patch: number;
+    build: number;
+    beta: boolean;
+  };
   needs_update: boolean;
 }
 
 export interface UpdateResult {
   success: boolean;
   message: string;
+  version?: string;
   logs?: string;
 }
 
@@ -1322,10 +1328,11 @@ export const checkSystemVersion = async (): Promise<VersionCheckResult> =>
     headers: { "Content-Type": "application/json" },
   });
 
-export const performSystemUpdate = async (): Promise<UpdateResult> =>
+export const performSystemUpdate = async (impact: 'major' | 'minor' | 'patch' | 'build' = 'build'): Promise<UpdateResult> =>
   safeFetch<UpdateResult>("/management/system/update", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ impact }),
   });
 
 // ── Global Modifier Library ───────────────────────────────────────────────────

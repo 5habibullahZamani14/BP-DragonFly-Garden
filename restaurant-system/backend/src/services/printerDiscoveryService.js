@@ -305,16 +305,9 @@ const printerDiscoveryService = {
             if ($p.PrinterStatus -eq 2 -or $p.PrinterStatus -eq 3 -or $p.PrinterStatus -eq 13) {
               Write-Output "OFFLINE"
             } else {
-              # For USB printers, if status is not clearly offline, consider it connected
-              # Get-PrinterConfiguration can fail for various reasons even on connected printers
-              # so we don't rely on it as the sole determinant
-              try {
-                $config = Get-PrinterConfiguration -PrinterName '${escapedName}' -ErrorAction SilentlyContinue
-                Write-Output "CONNECTED"
-              } catch {
-                # Even if config fails, if printer status is good, consider it connected
-                Write-Output "CONNECTED"
-              }
+              # Trust Windows printer status - if it says idle/online, show it
+              # User can test print to verify actual connectivity
+              Write-Output "CONNECTED"
             }
           } else {
             Write-Output "NOT_USB"
@@ -337,8 +330,8 @@ const printerDiscoveryService = {
       // Add timeout to prevent hanging
       const timeout = setTimeout(() => {
         proc.kill();
-        console.warn(`[discovery] USB verification timeout for ${printerName}, assuming connected`);
-        resolve(true); // Assume connected if verification times out
+        console.warn(`[discovery] USB verification timeout for ${printerName}, assuming NOT connected`);
+        resolve(false); // Assume NOT connected if verification times out
       }, 5000); // 5 second timeout
       
       proc.on("close", () => {
@@ -489,8 +482,9 @@ const printerDiscoveryService = {
    */
   discoverWindowsPrinters: async () => {
     return new Promise((resolve) => {
+      // Use WMI for accurate offline detection (Get-Printer is unreliable)
       const psCommand = `
-        Get-Printer | Select-Object Name, DriverName, PortName, PrinterStatus, Type | ConvertTo-Json
+        Get-WmiObject Win32_Printer | Select-Object Name, DriverName, PortName, PrinterStatus, WorkOffline | ConvertTo-Json
       `;
       
       const proc = spawn("powershell", [
@@ -530,27 +524,33 @@ const printerDiscoveryService = {
               continue;
             }
             
-            // Check basic availability
-            if (!printerDiscoveryService.isPrinterAvailable(printer.Name, printer.PortName, printer.PrinterStatus)) {
-              console.log(`[discovery] Excluding unavailable printer: ${printer.Name} (status: ${printer.PrinterStatus})`);
+            // Filter out offline printers using WMI WorkOffline flag (more accurate than PrinterStatus)
+            if (printer.WorkOffline === true) {
+              console.log(`[discovery] Excluding offline printer: ${printer.Name} (WorkOffline=true)`);
               continue;
             }
             
-            // For USB printers, do a deeper connection check
-            const connectionType = printerDiscoveryService.detectWindowsConnectionType(printer.PortName, printer.Type);
-            if (connectionType === "wire") {
-              const isConnected = await printerDiscoveryService.verifyUsbPrinterConnection(printer.Name);
-              if (!isConnected) {
-                console.log(`[discovery] Excluding disconnected USB printer: ${printer.Name}`);
-                continue;
-              }
+            // Filter by PrinterStatus codes that indicate offline/error
+            // Note: Status code 3 is often reported for idle printers in WMI, so we only exclude if WorkOffline is also true
+            const status = printerDiscoveryService.getWindowsPrinterStatus(printer.PrinterStatus);
+            if (status === "offline") {
+              console.log(`[discovery] Excluding offline printer: ${printer.Name} (status: ${status})`);
+              continue;
             }
+            // Only exclude error status if WorkOffline is also true (more accurate)
+            if (status === "error" && printer.WorkOffline === true) {
+              console.log(`[discovery] Excluding error printer: ${printer.Name} (status: ${status}, WorkOffline=true)`);
+              continue;
+            }
+            
+            // Detect connection type
+            const connectionType = printerDiscoveryService.detectWindowsConnectionType(printer.PortName, null);
             
             availablePrinters.push({
               name: printer.Name,
               driver: printer.DriverName,
               port: printer.PortName,
-              status: printerDiscoveryService.getWindowsPrinterStatus(printer.PrinterStatus),
+              status: status,
               connectionType: connectionType,
               platform: "windows",
               discoveredBy: "Installed"
@@ -889,7 +889,10 @@ const printerDiscoveryService = {
       const printerMatch = line.match(/printer (\S+) is enabled/);
       if (printerMatch) {
         if (currentPrinter) {
-          printers.push(currentPrinter);
+          // Only add if printer is online
+          if (currentPrinter.status !== "offline") {
+            printers.push(currentPrinter);
+          }
         }
         currentPrinter = {
           name: printerMatch[1],
@@ -912,7 +915,10 @@ const printerDiscoveryService = {
     }
     
     if (currentPrinter) {
-      printers.push(currentPrinter);
+      // Only add if printer is online
+      if (currentPrinter.status !== "offline") {
+        printers.push(currentPrinter);
+      }
     }
     
     return printers;
@@ -992,7 +998,7 @@ const printerDiscoveryService = {
       0: "idle",
       1: "printing",
       2: "offline",
-      3: "error",
+      3: "idle", // WMI often reports 3 for idle printers, not actual errors
       4: "paper jam",
       5: "out of paper",
       6: "manual feed required",
@@ -1024,30 +1030,9 @@ const printerDiscoveryService = {
    * Test print to a specific printer
    */
   testPrint: async (printerName) => {
-    const platform = os.platform();
-    const testContent = `
-========================================
-DRAGONFLY GARDEN PRINTER TEST
-========================================
-Test Print Successful
-Printer: ${printerName}
-Platform: ${platform}
-Time: ${new Date().toLocaleString()}
-========================================
-If you can read this, the printer
-is working correctly!
-========================================
-`;
-    
-    try {
-      if (platform === "win32") {
-        return await printerDiscoveryService.testPrintWindows(printerName, testContent);
-      } else {
-        return await printerDiscoveryService.testPrintLinux(printerName, testContent);
-      }
-    } catch (error) {
-      throw new Error(`Test print failed: ${error.message}`);
-    }
+    // Use the actual printerService for test print since it works reliably
+    const printerService = require('./printerService');
+    return await printerService.printTestTicket(printerName);
   },
 
   /**
@@ -1055,63 +1040,55 @@ is working correctly!
    */
   testPrintWindows: async (printerName, content) => {
     return new Promise((resolve, reject) => {
-      // Try raw ESC/POS first via thermalPrinterService
-      const thermalPrinterService = require('./thermalPrinterService');
-      
-      // Convert test content to ESC/POS
-      const escPosBuffer = thermalPrinterService.convertTicketToEscPos(content, 80, true);
-      const finalBuffer = thermalPrinterService.addEmptyLines(escPosBuffer, 2, 3);
-      
-      // Save binary for debugging
+      // Use the same method as printerService.js which works
       const fs = require('fs');
       const path = require('path');
-      try {
-        const binPath = path.join(__dirname, '../../logs', `testprint_${Date.now()}.bin`);
-        fs.writeFileSync(binPath, finalBuffer);
-        console.log(`[thermal] Test print ESC/POS binary saved to ${binPath} (${finalBuffer.length} bytes)`);
-      } catch (binErr) {
-        console.error('[thermal] Failed to save test print binary:', binErr.message);
-      }
+      const os = require('os');
+      const tempFile = path.join(os.tmpdir(), `testprint_${Date.now()}.txt`);
       
-      // Try raw methods
-      thermalPrinterService.sendRawToPrinter(printerName, finalBuffer)
-        .then(result => {
-          console.log(`[thermal] Test print raw success: ${result.message}`);
-          resolve({ success: true, message: "Test print sent successfully (raw ESC/POS)" });
-        })
-        .catch(rawErr => {
-          console.warn(`[thermal] Test print raw failed: ${rawErr.message}, falling back to Out-Printer`);
-          
-          // Fallback to standard Out-Printer - write to temp file first
-          const fs = require('fs');
-          const path = require('path');
-          const tempFile = path.join(require('os').tmpdir(), `testprint_${Date.now()}.txt`);
-          fs.writeFileSync(tempFile, content);
-          
-          const psCommand = `Get-Content -Path '${tempFile}' -Raw | Out-Printer -Name '${printerName}'`;
-          
-          const proc = spawn("powershell", [
-            "-NoProfile",
-            "-NonInteractive", 
-            "-Command",
-            psCommand
-          ], { shell: false });
-          
-          let stderr = "";
-          proc.stderr.on("data", (data) => stderr += data);
-          
-          proc.on("close", (code) => {
-            try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
-            
-            if (code === 0) {
-              resolve({ success: true, message: "Test print sent successfully (standard)" });
-            } else {
-              reject(new Error(`PowerShell failed: ${stderr}`));
-            }
-          });
-          
-          proc.on("error", (err) => reject(err));
-        });
+      // Write content with CRLF line endings
+      const formattedContent = content.replace(/\n/g, "\r\n");
+      fs.writeFileSync(tempFile, formattedContent);
+      
+      console.log(`[testPrintWindows] Writing to temp file: ${tempFile}`);
+      console.log(`[testPrintWindows] Content length: ${formattedContent.length}`);
+      console.log(`[testPrintWindows] Printer name: ${printerName}`);
+      
+      // Use the exact same PowerShell command as printerService.js
+      const psCommand = `Get-Content -Path '${tempFile}' -Raw | Out-Printer -Name '${printerName}'`;
+      
+      console.log(`[testPrintWindows] PowerShell command: ${psCommand}`);
+      
+      const proc = spawn("powershell", [
+        "-NoProfile",
+        "-NonInteractive", 
+        "-Command",
+        psCommand
+      ], { shell: false });
+      
+      let stderr = "";
+      let stdout = "";
+      proc.stderr.on("data", (data) => stderr += data);
+      proc.stdout.on("data", (data) => stdout += data);
+      
+      proc.on("close", (code) => {
+        try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) {}
+        
+        console.log(`[testPrintWindows] Process closed with code: ${code}`);
+        console.log(`[testPrintWindows] Stderr: ${stderr}`);
+        console.log(`[testPrintWindows] Stdout: ${stdout}`);
+        
+        if (code === 0) {
+          resolve({ success: true, message: "Test print sent successfully" });
+        } else {
+          reject(new Error(`PowerShell failed: ${stderr || stdout}`));
+        }
+      });
+      
+      proc.on("error", (err) => {
+        console.error(`[testPrintWindows] Process error: ${err.message}`);
+        reject(err);
+      });
     });
   },
 
@@ -1286,75 +1263,52 @@ is working correctly!
       try {
         const printers = [];
         
-        // Try different USB package APIs
-        let devices = [];
-        if (typeof usb.getDeviceList === 'function') {
-          devices = usb.getDeviceList();
-        } else if (typeof usb.findByIds === 'function') {
-          // Alternative API - just log that we have USB support but can't enumerate
-          console.log('[discovery] USB package available but getDeviceList not found, using alternative method');
-          // Try to find common printer VID/PIDs
-          const commonPrinterVidPids = [
-            [0x04b8, 0x0202], // Epson TM-T88
-            [0x0416, 0x5011], // Star Micronics
-            [0x0dd4, 0x0144], // Custom USB printer
-            [0x0519, 0x0004], // Star Micronics TSP143
-          ];
-          
-          for (const [vid, pid] of commonPrinterVidPids) {
-            try {
-              const device = usb.findByIds(vid, pid);
-              if (device) {
-                console.log(`[discovery] USB printer found via VID/PID: VID=${vid.toString(16)} PID=${pid.toString(16)}`);
-                printers.push({
-                  name: `USB Printer (VID:${vid.toString(16)} PID:${pid.toString(16)})`,
-                  vendorId: vid,
-                  productId: pid,
-                  status: "online",
-                  connectionType: "wire",
-                  platform: os.platform(),
-                  discoveredBy: "USB-Enumeration"
-                });
-              }
-            } catch (e) {
-              // Device not found, continue
-            }
-          }
-          
-          console.log(`[discovery] USB enumeration completed via VID/PID lookup, found ${printers.length} printers`);
-          resolve(printers);
-          return;
-        } else {
-          console.log('[discovery] USB package available but no enumeration method found');
+        // Only use getDeviceList to find ACTUALLY connected devices
+        if (typeof usb.getDeviceList !== 'function') {
+          console.log('[discovery] USB package available but getDeviceList not found, skipping USB enumeration');
           resolve([]);
           return;
         }
         
+        const devices = usb.getDeviceList();
         console.log(`[discovery] USB enumeration found ${devices.length} total USB devices`);
         
         for (const device of devices) {
-          // Check if device has printer class interface
-          for (const config of device.configs) {
-            for (const iface of config.interfaces) {
-              for (const altSetting of iface.altSettings) {
-                if (altSetting.bInterfaceClass === 0x07) { // Printer class
-                  const vendorId = device.deviceDescriptor.idVendor;
-                  const productId = device.deviceDescriptor.idProduct;
-                  
-                  console.log(`[discovery] USB printer found: VID=${vendorId.toString(16)} PID=${productId.toString(16)}`);
-                  
-                  printers.push({
-                    name: `USB Printer (VID:${vendorId.toString(16)} PID:${productId.toString(16)})`,
-                    vendorId: vendorId,
-                    productId: productId,
-                    status: "online",
-                    connectionType: "wire",
-                    platform: os.platform(),
-                    discoveredBy: "USB-Enumeration"
-                  });
+          try {
+            // Check if device has printer class interface
+            let isPrinter = false;
+            for (const config of device.configs) {
+              for (const iface of config.interfaces) {
+                for (const altSetting of iface.altSettings) {
+                  if (altSetting.bInterfaceClass === 0x07) { // Printer class
+                    isPrinter = true;
+                    break;
+                  }
                 }
+                if (isPrinter) break;
               }
+              if (isPrinter) break;
             }
+            
+            if (isPrinter) {
+              const vendorId = device.deviceDescriptor.idVendor;
+              const productId = device.deviceDescriptor.idProduct;
+              
+              console.log(`[discovery] USB printer found: VID=${vendorId.toString(16)} PID=${productId.toString(16)}`);
+              
+              printers.push({
+                name: `USB Printer (VID:${vendorId.toString(16)} PID:${productId.toString(16)})`,
+                vendorId: vendorId,
+                productId: productId,
+                status: "online",
+                connectionType: "wire",
+                platform: os.platform(),
+                discoveredBy: "USB-Enumeration"
+              });
+            }
+          } catch (deviceError) {
+            // Skip devices that can't be read
+            console.warn(`[discovery] Error reading USB device: ${deviceError.message}`);
           }
         }
         

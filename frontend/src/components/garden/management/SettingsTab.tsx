@@ -100,6 +100,7 @@ export const SettingsTab = () => {
   // Printer management state
   const [printers, setPrinters] = useState<any[]>([]);
   const [printersLoading, setPrintersLoading] = useState(false);
+  const [discoveryCountdown, setDiscoveryCountdown] = useState(0);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [defaultPrinter, setDefaultPrinter] = useState("");
   const [printerPreferences, setPrinterPreferences] = useState<any>({});
@@ -143,6 +144,26 @@ export const SettingsTab = () => {
     onConfirm: () => Promise<void>;
     pending: boolean;
   }>({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
+
+  // Printer profile edit dialog state
+  const [editProfileDialog, setEditProfileDialog] = useState<{
+    open: boolean;
+    printerName: string;
+    profile: any;
+    pending: boolean;
+  }>({ open: false, printerName: "", profile: null, pending: false });
+
+  const [editProfileData, setEditProfileData] = useState({
+    width: 80,
+    margin_left: 0,
+    margin_right: 0,
+    margin_top: 0,
+    margin_bottom: 0,
+    print_delay_seconds: 0,
+    empty_lines_before: 2,
+    empty_lines_after: 3,
+    has_auto_cutter: false
+  });
 
   useEffect(() => {
     loadAll();
@@ -240,7 +261,7 @@ export const SettingsTab = () => {
       const result = await checkSystemVersion();
       setVersionInfo(result);
       setUpdateAvailable(result.needs_update);
-      if (result.is_up_to_date) {
+      if (!result.needs_update) {
         setUpdateMsg({ text: "✅ App is already up to date.", isError: false });
       }
     } catch (err: any) {
@@ -346,6 +367,7 @@ export const SettingsTab = () => {
   const discoverPrinters = async () => {
     setPrinterError(null);
     setPrintersLoading(true);
+    setDiscoveryCountdown(30); // Start countdown at 30 seconds
     console.log("[discoverPrinters] Starting discovery, loading state set to true");
     try {
       const token = getManagerToken();
@@ -354,6 +376,7 @@ export const SettingsTab = () => {
         setPrinterError("Manager authentication required. Please log in to access printer management.");
         safeConsoleError("Manager token not found");
         setPrintersLoading(false);
+        setDiscoveryCountdown(0);
         return;
       }
       
@@ -383,6 +406,7 @@ export const SettingsTab = () => {
         console.log("401 Error response:", errorText);
         setPrinterError("Authentication failed. Your session may have expired. Please log in again.");
         setPrintersLoading(false);
+        setDiscoveryCountdown(0);
         return;
       }
       
@@ -410,6 +434,7 @@ export const SettingsTab = () => {
     } finally {
       console.log("[discoverPrinters] Finally block, setting loading to false");
       setPrintersLoading(false);
+      setDiscoveryCountdown(0);
     }
   };
 
@@ -440,8 +465,8 @@ export const SettingsTab = () => {
           const profile = data.printerProfiles[data.selectedPrinter];
           setSelectedPrinterProfile(profile);
           setPrintDelaySeconds(profile.print_delay_seconds || 0);
-          setEmptyLinesBefore(profile.empty_lines_before || 2);
-          setEmptyLinesAfter(profile.empty_lines_after || 3);
+          setEmptyLinesBefore(profile.empty_lines_before !== undefined ? profile.empty_lines_before : 0);
+          setEmptyLinesAfter(profile.empty_lines_after !== undefined ? profile.empty_lines_after : 0);
           setPaperWidth(profile.width || 80);
           setMarginLeft(profile.margin_left || 0);
           setMarginRight(profile.margin_right || 0);
@@ -450,8 +475,8 @@ export const SettingsTab = () => {
         } else {
           // Fallback to defaults if no profile
           setPrintDelaySeconds(0);
-          setEmptyLinesBefore(2);
-          setEmptyLinesAfter(3);
+          setEmptyLinesBefore(0);
+          setEmptyLinesAfter(0);
           setPaperWidth(80);
           setMarginLeft(0);
           setMarginRight(0);
@@ -622,6 +647,102 @@ export const SettingsTab = () => {
     }
   };
 
+  const editPrinterProfile = (printerName: string, profile: any) => {
+    // Open the edit dialog with the profile data
+    setEditProfileData({
+      width: profile.width || 80,
+      margin_left: profile.margin_left || 0,
+      margin_right: profile.margin_right || 0,
+      margin_top: profile.margin_top || 0,
+      margin_bottom: profile.margin_bottom || 0,
+      print_delay_seconds: profile.print_delay_seconds || 0,
+      empty_lines_before: profile.empty_lines_before || 2,
+      empty_lines_after: profile.empty_lines_after || 3,
+      has_auto_cutter: profile.has_auto_cutter || false
+    });
+    setEditProfileDialog({
+      open: true,
+      printerName,
+      profile,
+      pending: false
+    });
+  };
+
+  const saveEditedProfile = async () => {
+    const token = getManagerToken();
+    if (!token) {
+      safeConsoleError("Manager token not found");
+      return;
+    }
+
+    setEditProfileDialog(prev => ({ ...prev, pending: true }));
+
+    try {
+      const updatedProfiles = { ...printerProfiles };
+      updatedProfiles[editProfileDialog.printerName] = editProfileData;
+
+      const response = await fetch("/management/printers/settings", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          printerProfiles: updatedProfiles
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setPrinterProfiles(updatedProfiles);
+        toast.success(`Updated profile for ${editProfileDialog.printerName}`);
+        setEditProfileDialog({ open: false, printerName: "", profile: null, pending: false });
+      } else {
+        toast.error(`Failed to update profile: ${data.message}`);
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to update printer profile", err);
+      toast.error("Failed to update printer profile");
+    } finally {
+      setEditProfileDialog(prev => ({ ...prev, pending: false }));
+    }
+  };
+
+  const deletePrinterProfile = async (printerName: string) => {
+    const token = getManagerToken();
+    if (!token) {
+      safeConsoleError("Manager token not found");
+      return;
+    }
+
+    try {
+      const updatedProfiles = { ...printerProfiles };
+      delete updatedProfiles[printerName];
+      
+      const response = await fetch("/management/printers/settings", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          printerProfiles: updatedProfiles
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setPrinterProfiles(updatedProfiles);
+        toast.success(`Deleted profile for ${printerName}`);
+      } else {
+        toast.error(`Failed to delete profile: ${data.message}`);
+      }
+    } catch (err: any) {
+      safeConsoleError("Failed to delete printer profile", err);
+      toast.error("Failed to delete printer profile");
+    }
+  };
+
   const testPrinter = async (printerName: string) => {
     setTestPrintLoading(printerName);
     try {
@@ -654,6 +775,9 @@ export const SettingsTab = () => {
   };
 
   const getConnectionIcon = (connectionType: string) => {
+    if (!connectionType) {
+      return <Printer className="h-4 w-4 text-gray-600" />;
+    }
     switch (connectionType.toLowerCase()) {
       case "wifi":
         return <Wifi className="h-4 w-4 text-blue-600" />;
@@ -819,6 +943,19 @@ export const SettingsTab = () => {
     loadPrinterSettings();
   }, []);
 
+  // Countdown timer for printer discovery
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (discoveryCountdown > 0) {
+      interval = setInterval(() => {
+        setDiscoveryCountdown((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [discoveryCountdown]);
+
   // Don't reload printer settings when switching printers - use local state
   // Only reload on initial mount
 
@@ -933,8 +1070,10 @@ export const SettingsTab = () => {
           {versionInfo && !updateInProgress && (
             <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
               <div className="space-y-2">
-                <div><span className="font-semibold">Current Version:</span> {versionInfo.current_version}</div>
-                <div><span className="font-semibold">Latest Version:</span> {versionInfo.latest_version}</div>
+                <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
+                {versionInfo.needs_update && (
+                  <div className="text-orange-600 font-medium">Update available</div>
+                )}
               </div>
             </div>
           )}
@@ -1246,451 +1385,555 @@ export const SettingsTab = () => {
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Left Column: Printer Settings & Receipt Copies */}
-            <div className="flex-1 space-y-6 lg:border-r lg:pr-6">
-              {/* Platform Info with Discovery Methods */}
-              {platformInfo && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-blue-800 mb-2">
-                    Platform: {platformInfo.platform} ({platformInfo.arch}) | Host: {platformInfo.hostname}
-                  </p>
-                  {platformInfo.discoveryMethods && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <span className="text-xs text-blue-600">Discovery Methods:</span>
-                      {platformInfo.discoveryMethods.mDNS && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">mDNS/Bonjour ✓</span>
-                      )}
-                      {platformInfo.discoveryMethods.SNMP && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">SNMP ✓</span>
-                      )}
-                      {platformInfo.discoveryMethods.USB && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">USB Enumeration ✓</span>
-                      )}
-                      {!platformInfo.discoveryMethods.mDNS && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">mDNS/Bonjour ✗</span>
-                      )}
-                      {!platformInfo.discoveryMethods.SNMP && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">SNMP ✗</span>
-                      )}
-                      {!platformInfo.discoveryMethods.USB && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">USB Enumeration ✗</span>
-                      )}
+          <Accordion type="multiple" className="w-full">
+            {/* ── Printer Profiles Management ───────────────────────────────────────────── */}
+            <AccordionItem value="printer-profiles" className="border rounded-lg bg-card mb-4">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="text-left flex items-center gap-2">
+                  <Printer className="h-4 w-4" />
+                  <h4 className="font-semibold text-sm">Printer Profiles Management</h4>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">View, edit, and delete printer profiles saved in the database.</p>
+                  
+                  {Object.keys(printerProfiles).length === 0 ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      No printer profiles found. Configure printer settings to create profiles.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {Object.entries(printerProfiles).map(([printerName, profile]: [string, any]) => (
+                        <div key={printerName} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <h5 className="font-medium text-sm mb-2">{printerName}</h5>
+                              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                <div><span className="font-medium">Width:</span> {profile.width || 80}mm</div>
+                                <div><span className="font-medium">Margins:</span> L:{profile.margin_left || 0} R:{profile.margin_right || 0} T:{profile.margin_top || 0} B:{profile.margin_bottom || 0}</div>
+                                <div><span className="font-medium">Empty Lines:</span> Before:{profile.empty_lines_before || 2} After:{profile.empty_lines_after || 3}</div>
+                                <div><span className="font-medium">Delay:</span> {profile.print_delay_seconds || 0}s</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => editPrinterProfile(printerName, profile)}
+                                className="shrink-0"
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deletePrinterProfile(printerName)}
+                                className="shrink-0"
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              )}
+              </AccordionContent>
+            </AccordionItem>
 
-              {/* Discover Printers Button */}
-              <div className="flex gap-3">
-                <Button 
-                onClick={() => {
-                  setHasAutoDiscovered(false);
-                  discoverPrinters();
-                }} 
-                disabled={printersLoading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
-              >
-                {printersLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Refreshing...</> : <><RefreshCw className="h-4 w-4" /> Refresh Printers</>}
-                </Button>
-                <Button 
-                onClick={async () => {
-                  try {
-                    const token = getManagerToken();
-                    const backendUrl = import.meta.env.VITE_API_BASE || "http://localhost:5000";
-                    await fetch(`${backendUrl}/management/printers/discover/clear-cache`, {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                      }
-                    });
-                    setHasAutoDiscovered(false);
-                    discoverPrinters();
-                  } catch (error) {
-                    console.error('Failed to clear cache:', error);
-                  }
-                }} 
-                disabled={printersLoading}
-                variant="outline"
-                className="flex gap-2"
-              >
-                <><RefreshCw className="h-4 w-4" /> Force Refresh</>
-                </Button>
-              </div>
-
-              {/* Error Message */}
-              {printerError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-red-800">{printerError}</p>
+            {/* ── Printer Settings ───────────────────────────────────────────── */}
+            <AccordionItem value="printer-settings" className="border rounded-lg bg-card mb-4">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="text-left flex items-center gap-2">
+                  <Printer className="h-4 w-4" />
+                  <h4 className="font-semibold text-sm">Printer Settings</h4>
                 </div>
-              )}
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                <div className="space-y-4">
+                  {/* Platform Info with Discovery Methods */}
+                  {platformInfo && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-blue-800 mb-2">
+                        Platform: {platformInfo.platform} ({platformInfo.arch}) | Host: {platformInfo.hostname}
+                      </p>
+                      {platformInfo.discoveryMethods && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span className="text-xs text-blue-600">Discovery Methods:</span>
+                          {platformInfo.discoveryMethods.mDNS && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">mDNS/Bonjour ✓</span>
+                          )}
+                          {platformInfo.discoveryMethods.SNMP && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">SNMP ✓</span>
+                          )}
+                          {platformInfo.discoveryMethods.USB && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">USB Enumeration ✓</span>
+                          )}
+                          {!platformInfo.discoveryMethods.mDNS && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">mDNS/Bonjour ✗</span>
+                          )}
+                          {!platformInfo.discoveryMethods.SNMP && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">SNMP ✗</span>
+                          )}
+                          {!platformInfo.discoveryMethods.USB && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">USB Enumeration ✗</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-              {/* Printer List */}
-              {printers.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-sm">Available Printers ({printers.length})</h4>
-                  <div className="space-y-2">
-                    {printers.map((printer, index) => (
-                      <div key={index} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              {getConnectionIcon(printer.connectionType)}
-                              <span className="font-medium text-sm">{printer.name}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                printer.status === 'online' || printer.status === 'idle' 
-                                  ? 'bg-green-100 text-green-700' 
-                                  : 'bg-red-100 text-red-700'
-                              }`}>
-                                {printer.status}
-                              </span>
-                            </div>
-                            <div className="space-y-1 text-xs text-gray-600">
-                              <p><span className="font-medium">Driver:</span> {printer.driver || 'N/A'}</p>
-                              <p><span className="font-medium">Connection:</span> {printer.connectionType.toUpperCase()}</p>
-                              {printer.port && <p><span className="font-medium">Port:</span> {printer.port}</p>}
-                              {printer.discoveredBy && (
-                                <p><span className="font-medium">Discovered via:</span> {printer.discoveredBy}</p>
-                              )}
+                  {/* Discover Printers Button */}
+                  <div className="flex gap-3">
+                    <Button 
+                    onClick={() => {
+                      setHasAutoDiscovered(false);
+                      discoverPrinters();
+                    }} 
+                    disabled={printersLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
+                  >
+                    {printersLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {discoveryCountdown > 0 ? `Discovering... ${discoveryCountdown}s` : "Discovering..."}
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4" /> Discover Printers
+                      </>
+                    )}
+                    </Button>
+                  </div>
+
+                  {/* Error Message */}
+                  {printerError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-red-800">{printerError}</p>
+                    </div>
+                  )}
+
+                  {/* Printer List */}
+                  {printers.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Available Printers ({printers.length})</h4>
+                      <div className="space-y-2">
+                        {printers.map((printer, index) => (
+                          <div key={index} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  {getConnectionIcon(printer.connectionType)}
+                                  <span className="font-medium text-sm">{printer.name}</span>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    printer.status === 'online' || printer.status === 'idle' 
+                                      ? 'bg-green-100 text-green-700' 
+                                      : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {printer.status}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-xs text-gray-600">
+                                  <p><span className="font-medium">Driver:</span> {printer.driver || 'N/A'}</p>
+                                  <p><span className="font-medium">Connection:</span> {printer.connectionType?.toUpperCase() || 'N/A'}</p>
+                                  {printer.port && <p><span className="font-medium">Port:</span> {printer.port}</p>}
+                                  {printer.discoveredBy && (
+                                    <p><span className="font-medium">Discovered via:</span> {printer.discoveredBy}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => testPrinter(printer.name)}
+                                disabled={testPrintLoading === printer.name}
+                                className="shrink-0"
+                              >
+                                {testPrintLoading === printer.name ? (
+                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Testing...</>
+                                ) : (
+                                  <><Printer className="h-3 w-3 mr-1" /> Test Print</>
+                                )}
+                              </Button>
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => testPrinter(printer.name)}
-                            disabled={testPrintLoading === printer.name}
-                            className="shrink-0"
-                          >
-                            {testPrintLoading === printer.name ? (
-                              <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Testing...</>
-                            ) : (
-                              <><Printer className="h-3 w-3 mr-1" /> Test Print</>
-                            )}
-                          </Button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                </div>
-              </div>
-            )}
+                    </div>
+                  )}
 
-              {/* Printer Settings */}
-              <div className="space-y-4 pt-4 border-t">
-                <h4 className="font-semibold text-sm">Printer Settings</h4>
-                
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <Label>Selected Printer (Active)</Label>
-                    <Select value={selectedPrinter} onValueChange={(value) => {
-                      setSelectedPrinter(value);
-                      // Load profile for newly selected printer
-                      if (printerProfiles[value]) {
-                        setSelectedPrinterProfile(printerProfiles[value]);
-                        setPrintDelaySeconds(printerProfiles[value].print_delay_seconds || 0);
-                        setEmptyLinesBefore(printerProfiles[value].empty_lines_before || 2);
-                        setEmptyLinesAfter(printerProfiles[value].empty_lines_after || 3);
-                        setPaperWidth(printerProfiles[value].width || 80);
-                        setMarginLeft(printerProfiles[value].margin_left || 0);
-                        setMarginRight(printerProfiles[value].margin_right || 0);
-                        setMarginTop(printerProfiles[value].margin_top || 0);
-                        setMarginBottom(printerProfiles[value].margin_bottom || 0);
-                      }
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a printer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {printers.map((printer, index) => (
-                          <SelectItem key={index} value={printer.name}>
-                            {printer.name} ({printer.connectionType})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">This printer will be used for all printing operations.</p>
-                </div>
-
-                  <div className="space-y-2">
-                    <Label>Default Printer (Fallback)</Label>
-                    <Select value={defaultPrinter} onValueChange={setDefaultPrinter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select default printer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {printers.map((printer, index) => (
-                          <SelectItem key={index} value={printer.name}>
-                            {printer.name} ({printer.connectionType})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">Used if selected printer is unavailable.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Print Delay (seconds)</Label>
-                    <Input 
-                      type="number" 
-                      min="0" 
-                      max="60"
-                      value={printDelaySeconds}
-                      onChange={(e) => setPrintDelaySeconds(parseInt(e.target.value) || 0)}
-                    />
-                    <p className="text-xs text-muted-foreground">Delay between receipts (0 = no delay). Useful for printers without auto-cutter.</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Printer Configuration */}
+                  <div className="pt-4 border-t space-y-4">
+                    <h4 className="font-semibold text-sm">Printer Configuration</h4>
+                  
                     <div className="space-y-2">
-                      <Label>Empty Lines Before Receipt</Label>
+                      <Label>Selected Printer (Active)</Label>
+                      <Select value={selectedPrinter} onValueChange={(value) => {
+                        setSelectedPrinter(value);
+                        // Load profile for newly selected printer
+                        if (printerProfiles[value]) {
+                          setSelectedPrinterProfile(printerProfiles[value]);
+                          setPrintDelaySeconds(printerProfiles[value].print_delay_seconds || 0);
+                          setEmptyLinesBefore(printerProfiles[value].empty_lines_before || 2);
+                          setEmptyLinesAfter(printerProfiles[value].empty_lines_after || 3);
+                          setPaperWidth(printerProfiles[value].width || 80);
+                          setMarginLeft(printerProfiles[value].margin_left || 0);
+                          setMarginRight(printerProfiles[value].margin_right || 0);
+                          setMarginTop(printerProfiles[value].margin_top || 0);
+                          setMarginBottom(printerProfiles[value].margin_bottom || 0);
+                        }
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a printer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {printers.map((printer, index) => (
+                            <SelectItem key={index} value={printer.name}>
+                              {printer.name} ({printer.connectionType})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">This printer will be used for all printing operations.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Default Printer (Fallback)</Label>
+                      <Select value={defaultPrinter} onValueChange={setDefaultPrinter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select default printer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {printers.map((printer, index) => (
+                            <SelectItem key={index} value={printer.name}>
+                              {printer.name} ({printer.connectionType})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Used if selected printer is unavailable.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Print Delay (seconds)</Label>
                       <Input 
                         type="number" 
                         min="0" 
-                        max="10"
-                        value={emptyLinesBefore}
-                        onChange={(e) => setEmptyLinesBefore(parseInt(e.target.value) || 0)}
+                        max="60"
+                        value={printDelaySeconds}
+                        onChange={(e) => setPrintDelaySeconds(parseInt(e.target.value) || 0)}
                       />
-                      <p className="text-xs text-muted-foreground">Spacing before printing.</p>
+                      <p className="text-xs text-muted-foreground">Delay between receipts (0 = no delay). Useful for printers without auto-cutter.</p>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Empty Lines After Receipt</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={emptyLinesAfter}
-                        onChange={(e) => setEmptyLinesAfter(parseInt(e.target.value) || 0)}
-                      />
-                      <p className="text-xs text-muted-foreground">Spacing after printing.</p>
-                    </div>
-                  </div>
-
-                  {/* Paper Width Configuration */}
-                  <div className="space-y-2 pt-4 border-t">
-                    <Label>Paper Width (mm)</Label>
-                    <div className="flex gap-2">
-                      <Select value={paperWidth.toString()} onValueChange={(value) => {
-                        if (value === "custom") {
-                          setPaperWidth(parseInt(customWidth) || 80);
-                        } else {
-                          setPaperWidth(parseInt(value));
-                          setCustomWidth("");
-                        }
-                      }}>
-                        <SelectTrigger className="w-40">
-                          <SelectValue placeholder="Select width" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="45">45mm</SelectItem>
-                          <SelectItem value="50">50mm</SelectItem>
-                          <SelectItem value="58">58mm</SelectItem>
-                          <SelectItem value="80">80mm</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {paperWidth.toString() === "custom" && (
-                        <Input
-                          type="number"
-                          placeholder="Custom mm"
-                          value={customWidth}
-                          onChange={(e) => {
-                            setCustomWidth(e.target.value);
-                            setPaperWidth(parseInt(e.target.value) || 80);
-                          }}
-                          className="flex-1"
-                        />
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Select standard thermal paper width or enter custom width in millimeters.</p>
-                  </div>
-
-                  {/* Margin Configuration */}
-                  <div className="space-y-2 pt-4 border-t">
-                    <Label>Paper Margins</Label>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Left Margin (characters)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={marginLeft}
-                          onChange={(e) => setMarginLeft(parseInt(e.target.value) || 0)}
+                        <Label>Empty Lines Before Receipt</Label>
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          max="10"
+                          value={emptyLinesBefore}
+                          onChange={(e) => setEmptyLinesBefore(parseInt(e.target.value) || 0)}
                         />
+                        <p className="text-xs text-muted-foreground">Spacing before printing.</p>
                       </div>
+
                       <div className="space-y-2">
-                        <Label>Right Margin (characters)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="20"
-                          value={marginRight}
-                          onChange={(e) => setMarginRight(parseInt(e.target.value) || 0)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Top Margin (lines)</Label>
+                        <Label>Empty Lines After Receipt</Label>
                         <Input
                           type="number"
                           min="0"
                           max="10"
-                          value={marginTop}
-                          onChange={(e) => setMarginTop(parseInt(e.target.value) || 0)}
+                          value={emptyLinesAfter}
+                          onChange={(e) => setEmptyLinesAfter(parseInt(e.target.value) || 0)}
                         />
+                        <p className="text-xs text-muted-foreground">Spacing after printing.</p>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Bottom Margin (lines)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={marginBottom}
-                          onChange={(e) => setMarginBottom(parseInt(e.target.value) || 0)}
-                        />
+                    </div>
+
+                    {/* Paper Width Configuration */}
+                    <div className="space-y-2 pt-4 border-t">
+                      <Label>Paper Width (mm)</Label>
+                      <div className="flex gap-2">
+                        <Select value={paperWidth.toString()} onValueChange={(value) => {
+                          if (value === "custom") {
+                            setPaperWidth(parseInt(customWidth) || 80);
+                          } else {
+                            setPaperWidth(parseInt(value));
+                            setCustomWidth("");
+                          }
+                        }}>
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Select width" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="45">45mm</SelectItem>
+                            <SelectItem value="50">50mm</SelectItem>
+                            <SelectItem value="58">58mm</SelectItem>
+                            <SelectItem value="80">80mm</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {paperWidth.toString() === "custom" && (
+                          <Input
+                            type="number"
+                            placeholder="Custom mm"
+                            value={customWidth}
+                            onChange={(e) => {
+                              setCustomWidth(e.target.value);
+                              setPaperWidth(parseInt(e.target.value) || 80);
+                            }}
+                            className="flex-1"
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Select standard thermal paper width or enter custom width in millimeters.</p>
+                    </div>
+
+                    {/* Margin Configuration */}
+                    <div className="space-y-2 pt-4 border-t">
+                      <Label>Paper Margins</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Left Margin (characters)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="20"
+                            value={marginLeft}
+                            onChange={(e) => setMarginLeft(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Right Margin (characters)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="20"
+                            value={marginRight}
+                            onChange={(e) => setMarginRight(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Top Margin (lines)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={marginTop}
+                            onChange={(e) => setMarginTop(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Bottom Margin (lines)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={marginBottom}
+                            onChange={(e) => setMarginBottom(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Adjust margins to fine-tune print positioning. Left/right margins are in characters, top/bottom in lines.</p>
+                  </div>
+                </div>
+                
+                <Button 
+                  onClick={savePrinterSettings} 
+                  disabled={printerSettingsLoading}
+                  className="w-full bg-green-700 hover:bg-green-800 text-white flex gap-2 mt-4"
+                >
+                  {printerSettingsLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                    : printerSettingsSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
+                    : "Save Printer Settings"}
+                </Button>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* ── Receipt Copy Counts ───────────────────────────────────────────── */}
+            <AccordionItem value="receipt-copies" className="border rounded-lg bg-card mb-4">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="text-left flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  <h4 className="font-semibold text-sm">Receipt Copy Counts</h4>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground">Set how many copies of each receipt type to print globally.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Order Receipt (Customer)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={orderCustomerCopies}
+                        onChange={(e) => setOrderCustomerCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Order Receipt (Kitchen)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={orderKitchenCopies}
+                        onChange={(e) => setOrderKitchenCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Add-on Receipt (Customer)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={addonCustomerCopies}
+                        onChange={(e) => setAddonCustomerCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Add-on Receipt (Kitchen)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={addonKitchenCopies}
+                        onChange={(e) => setAddonKitchenCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Final Receipt</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={finalReceiptCopies}
+                        onChange={(e) => setFinalReceiptCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Daily Sales Report</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={dailySalesReportCopies}
+                        onChange={(e) => setDailySalesReportCopies(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* ── Ticket Preview & Actions ───────────────────────────────────────────── */}
+            <AccordionItem value="ticket-preview" className="border rounded-lg bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="text-left flex items-center gap-2">
+                  <Printer className="h-4 w-4" />
+                  <h4 className="font-semibold text-sm">Ticket Preview & Actions</h4>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                <div className="space-y-4">
+                  <div className="bg-gray-50 border rounded-lg p-4">
+                    <h4 className="font-semibold text-sm mb-3">Ticket Preview</h4>
+                    
+                    <div className="flex items-start gap-4 justify-center">
+                      {/* Ticket content with margins */}
+                      <div className="relative">
+                        {/* Top ruler attached to paper */}
+                        <div className="absolute -top-5 left-0 right-0 h-5 border-b border-gray-300 flex justify-between text-[6px] text-gray-500 font-mono" style={{ width: `${paperWidth * 3.78}px` }}>
+                          {[...Array(Math.ceil(paperWidth / 5) + 1)].map((_, i) => (
+                            <div key={i} className="flex flex-col items-center whitespace-nowrap">
+                              <span className="leading-none">{i * 5}</span>
+                              <span className={`w-px bg-gray-400 ${i % 2 === 0 ? 'h-2' : 'h-1'}`}></span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="bg-white border rounded p-3 text-xs font-mono relative" style={{ maxWidth: `${paperWidth * 3.78}px`, margin: "0 auto", paddingLeft: `${marginLeft * 3.78}px`, paddingRight: `${marginRight * 3.78}px` }}>
+                          {/* Top margin */}
+                          {marginTop > 0 && [...Array(marginTop)].map((_, i) => (
+                            <div key={`top-${i}`} className="h-4 bg-blue-50 border-t border-blue-200 text-blue-400 text-center leading-4">&nbsp;</div>
+                          ))}
+                          
+                          {/* Empty lines before */}
+                          {emptyLinesBefore > 0 && [...Array(emptyLinesBefore)].map((_, i) => (
+                            <div key={`before-${i}`} className="h-4 bg-yellow-50 border-t border-yellow-200 text-yellow-600 text-center leading-4">&nbsp;</div>
+                          ))}
+                          
+                          <div className="text-center font-bold mb-2">BP DRAGONFLY GARDEN</div>
+                          <div className="text-center text-gray-600 mb-2">Test Receipt</div>
+                          <div className="border-t border-dashed my-2 mx-0" style={{ marginLeft: `-${marginLeft * 3.78}px`, marginRight: `-${marginRight * 3.78}px` }}></div>
+                          <div className="flex justify-between">
+                            <span>Item 1</span>
+                            <span>$10.00</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Item 2</span>
+                            <span>$15.00</span>
+                          </div>
+                          <div className="border-t border-dashed my-2 mx-0" style={{ marginLeft: `-${marginLeft * 3.78}px`, marginRight: `-${marginRight * 3.78}px` }}></div>
+                          <div className="flex justify-between font-bold">
+                            <span>Total</span>
+                            <span>$25.00</span>
+                          </div>
+                          <div className="text-center text-gray-600 mt-2">Thank you!</div>
+                          
+                          {/* Empty lines after */}
+                          {emptyLinesAfter > 0 && [...Array(emptyLinesAfter)].map((_, i) => (
+                            <div key={`after-${i}`} className="h-4 bg-yellow-50 border-t border-yellow-200 text-yellow-600 text-center leading-4">&nbsp;</div>
+                          ))}
+                          
+                          {/* Bottom margin */}
+                          {marginBottom > 0 && [...Array(marginBottom)].map((_, i) => (
+                            <div key={`bottom-${i}`} className="h-4 bg-blue-50 border-t border-blue-200 text-blue-400 text-center leading-4">&nbsp;</div>
+                          ))}
+                        </div>
+                        
+                        {/* Right ruler attached to paper */}
+                        <div className="absolute -right-5 top-0 bottom-0 w-5 border-l border-gray-300 text-[6px] text-gray-500 font-mono" style={{ height: `${(marginTop + emptyLinesBefore + 10 + emptyLinesAfter + marginBottom) * 3.78}px` }}>
+                          {[...Array(Math.ceil((marginTop + emptyLinesBefore + 10 + emptyLinesAfter + marginBottom) / 5) + 1)].map((_, i) => (
+                            <div key={i} className="flex items-center whitespace-nowrap" style={{ position: 'absolute', top: `${i * 5 * 3.78}px` }}>
+                              <span className={`h-px bg-gray-400 ${i % 2 === 0 ? 'w-2' : 'w-1'}`}></span>
+                              <span className="ml-1 leading-none">{i * 5}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground mt-2">Preview based on {paperWidth}mm width and current margins. Blue = margins, Yellow = empty lines.</p>
+                    
+                    {/* Daily Sales Report Button */}
+                    <div className="space-y-4 pt-4 border-t mt-4">
+                      <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
+                      <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
+                      
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={printDailySalesReport} 
+                          disabled={printingDailyReport}
+                          className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
+                        >
+                          {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
+                            : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>
+                          }
+                        </Button>
                       </div>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Adjust margins to fine-tune print positioning. Left/right margins are in characters, top/bottom in lines.</p>
                 </div>
-              </div>
-
-              {/* Receipt Copy Counts */}
-              <div className="space-y-4 pt-4 border-t">
-                <h4 className="font-semibold text-sm">Receipt Copy Counts</h4>
-                <p className="text-xs text-muted-foreground">Set how many copies of each receipt type to print globally.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Order Receipt (Customer)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={orderCustomerCopies}
-                      onChange={(e) => setOrderCustomerCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Order Receipt (Kitchen)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={orderKitchenCopies}
-                      onChange={(e) => setOrderKitchenCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Add-on Receipt (Customer)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={addonCustomerCopies}
-                      onChange={(e) => setAddonCustomerCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Add-on Receipt (Kitchen)</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={addonKitchenCopies}
-                      onChange={(e) => setAddonKitchenCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Final Receipt</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={finalReceiptCopies}
-                      onChange={(e) => setFinalReceiptCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Daily Sales Report</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={dailySalesReportCopies}
-                      onChange={(e) => setDailySalesReportCopies(parseInt(e.target.value) || 1)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Daily Sales Report Button */}
-              <div className="space-y-4 pt-4 border-t">
-                <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
-                <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
-                
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={printDailySalesReport} 
-                    disabled={printingDailyReport}
-                    className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
-                  >
-                    {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
-                      : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>
-                    }
-                  </Button>
-                  
-                  <Button 
-                    onClick={printTestTicket} 
-                    disabled={printingTestTicket}
-                    variant="outline"
-                    className="flex gap-2"
-                  >
-                    {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Testing...</>
-                      : <><Printer className="h-4 w-4" /> Print Test Ticket</>
-                    }
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Use Test Ticket to verify printer width and spacing before printing actual receipts.</p>
-              </div>
-
-              <Button 
-                onClick={savePrinterSettings} 
-                disabled={printerSettingsLoading}
-                className="bg-green-700 hover:bg-green-800 text-white flex gap-2"
-              >
-                {printerSettingsLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                  : printerSettingsSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
-                  : "Save Printer Settings"}
-              </Button>
-            </div>
-
-            {/* Right Column: Ticket Preview */}
-            <div className="lg:w-80 space-y-4">
-              <div className="bg-gray-50 border rounded-lg p-4 sticky top-4">
-                <h4 className="font-semibold text-sm mb-3">Ticket Preview</h4>
-                <div className="bg-white border rounded p-3 text-xs font-mono" style={{ maxWidth: `${paperWidth * 2}px`, margin: "0 auto" }}>
-                  <div className="text-center font-bold mb-2">BP DRAGONFLY GARDEN</div>
-                  <div className="text-center text-gray-600 mb-2">Test Receipt</div>
-                  <div className="border-t border-dashed my-2"></div>
-                  <div className="flex justify-between">
-                    <span>Item 1</span>
-                    <span>$10.00</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Item 2</span>
-                    <span>$15.00</span>
-                  </div>
-                  <div className="border-t border-dashed my-2"></div>
-                  <div className="flex justify-between font-bold">
-                    <span>Total</span>
-                    <span>$25.00</span>
-                  </div>
-                  <div className="text-center text-gray-600 mt-2">Thank you!</div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">Preview based on {paperWidth}mm width and current margins.</p>
-              </div>
-            </div>
-          </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </AccordionContent>
       </AccordionItem>
 
@@ -2002,9 +2245,139 @@ export const SettingsTab = () => {
           </div>
         </AccordionContent>
       </AccordionItem>
-
     </Accordion>
     </div>
+
+    {/* Printer Profile Edit Dialog */}
+    <Dialog open={editProfileDialog.open} onOpenChange={(open) => setEditProfileDialog(prev => ({ ...prev, open }))}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Printer Profile: {editProfileDialog.printerName}</DialogTitle>
+          <DialogDescription>
+            Modify the printer settings for this profile. Changes will be saved to the database.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Paper Width (mm)</Label>
+            <div className="flex gap-2">
+              <Select value={editProfileData.width.toString()} onValueChange={(value) => {
+                if (value === "custom") {
+                  setEditProfileData(prev => ({ ...prev, width: parseInt(customWidth) || 80 }));
+                } else {
+                  setEditProfileData(prev => ({ ...prev, width: parseInt(value) }));
+                }
+              }}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Select width" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="45">45mm</SelectItem>
+                  <SelectItem value="50">50mm</SelectItem>
+                  <SelectItem value="58">58mm</SelectItem>
+                  <SelectItem value="80">80mm</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Print Delay (seconds)</Label>
+            <Input 
+              type="number" 
+              min="0" 
+              max="60"
+              value={editProfileData.print_delay_seconds}
+              onChange={(e) => setEditProfileData(prev => ({ ...prev, print_delay_seconds: parseInt(e.target.value) || 0 }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Empty Lines Before Receipt</Label>
+              <Input 
+                type="number" 
+                min="0" 
+                max="10"
+                value={editProfileData.empty_lines_before}
+                onChange={(e) => setEditProfileData(prev => ({ ...prev, empty_lines_before: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Empty Lines After Receipt</Label>
+              <Input
+                type="number"
+                min="0"
+                max="10"
+                value={editProfileData.empty_lines_after}
+                onChange={(e) => setEditProfileData(prev => ({ ...prev, empty_lines_after: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-4 border-t">
+            <Label>Paper Margins</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Left Margin (characters)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={editProfileData.margin_left}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_left: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Right Margin (characters)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={editProfileData.margin_right}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_right: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Top Margin (lines)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={editProfileData.margin_top}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_top: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Bottom Margin (lines)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={editProfileData.margin_bottom}
+                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_bottom: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setEditProfileDialog({ open: false, printerName: "", profile: null, pending: false })}
+            disabled={editProfileDialog.pending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={saveEditedProfile}
+            disabled={editProfileDialog.pending}
+          >
+            {editProfileDialog.pending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</> : "Save Changes"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };

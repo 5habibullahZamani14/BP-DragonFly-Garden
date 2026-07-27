@@ -119,7 +119,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [versionInfo, setVersionInfo] = useState<{ current_version: string; latest_version: string } | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("");
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -129,7 +129,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   useEffect(() => {
     if (isLoggedIn) {
       checkSystemVersion().then(result => {
-        setVersionInfo({ current_version: result.current_version, latest_version: result.latest_version });
+        setAppVersion(result.version);
       }).catch(err => {
         safeConsoleError("Failed to fetch version info", err);
       });
@@ -500,7 +500,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </div>
               </PopoverContent>
             </Popover>
-            <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} />
+            <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} version={appVersion || "v1.0.0.0 Beta"} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> {t("manager.logout")}
             </Button>
@@ -594,12 +594,6 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "ai-chatbot" && <AIChatbotTab />}
 
       </div>
-
-      {versionInfo && (
-        <div className="fixed bottom-4 right-4 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-md border border-gray-200 text-xs text-gray-600 font-mono">
-          v{versionInfo.current_version}
-        </div>
-      )}
     </div>
   );
 };

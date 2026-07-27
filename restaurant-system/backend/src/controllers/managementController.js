@@ -42,6 +42,7 @@ const repoRoot = path.resolve(__dirname, "../../../..");
 const frontendDir = path.join(repoRoot, "frontend");
 const updateBranch = process.env.UPDATE_BRANCH || "main";
 const tmpDir = path.join(__dirname, "../../tmp");
+const versionFile = path.join(__dirname, "../../version.json");
 if (!fs.existsSync(backupsDir)) {
   fs.mkdirSync(backupsDir, { recursive: true });
 }
@@ -1081,45 +1082,111 @@ const downloadBackup = async (req, res, next) => {
 // ── System Updates ────────────────────────────────────────────────────────────
 
 /**
- * GET current and latest version from git commit hashes
- * Returns both current HEAD and latest from origin/main
+ * Read version from version.json file
+ */
+const readVersion = () => {
+  try {
+    if (fs.existsSync(versionFile)) {
+      const data = fs.readFileSync(versionFile, "utf8");
+      return JSON.parse(data);
+    }
+    // Return default version if file doesn't exist
+    return { major: 1, minor: 0, patch: 0, build: 0, beta: true };
+  } catch (error) {
+    console.error("Error reading version file:", error);
+    return { major: 1, minor: 0, patch: 0, build: 0, beta: true };
+  }
+};
+
+/**
+ * Write version to version.json file
+ */
+const writeVersion = (version) => {
+  try {
+    fs.writeFileSync(versionFile, JSON.stringify(version, null, 2));
+  } catch (error) {
+    console.error("Error writing version file:", error);
+    throw error;
+  }
+};
+
+/**
+ * Format version object to string (e.g., "v1.2.3.4 Beta")
+ */
+const formatVersion = (version) => {
+  const versionStr = `v${version.major}.${version.minor}.${version.patch}.${version.build}`;
+  return version.beta ? `${versionStr} Beta` : versionStr;
+};
+
+/**
+ * Increment version based on update impact
+ * impact: 'major' | 'minor' | 'patch' | 'build'
+ */
+const incrementVersion = (impact = 'build') => {
+  const version = readVersion();
+  switch (impact) {
+    case 'major':
+      version.major++;
+      version.minor = 0;
+      version.patch = 0;
+      version.build = 0;
+      break;
+    case 'minor':
+      version.minor++;
+      version.patch = 0;
+      version.build = 0;
+      break;
+    case 'patch':
+      version.patch++;
+      version.build = 0;
+      break;
+    case 'build':
+    default:
+      version.build++;
+      break;
+  }
+  writeVersion(version);
+  return version;
+};
+
+/**
+ * GET current version from version.json
+ * Returns formatted version string and update status
  */
 const checkSystemVersion = async (req, res, next) => {
   try {
-    // Fetch latest from remote
+    const version = readVersion();
+    const formattedVersion = formatVersion(version);
+
+    // Fetch latest from remote to check if update is available
+    let needs_update = false;
     try {
       await exec("git fetch origin", { cwd: repoRoot });
-    } catch (e) {
-      // Fetch failed, but we can still check local HEAD
-    }
 
-    // Get current HEAD
-    const { stdout: currentOutput } = await exec("git rev-parse HEAD", { cwd: repoRoot });
-    const current_version = currentOutput.toString().trim().substring(0, 8);
+      // Get current HEAD
+      const { stdout: currentOutput } = await exec("git rev-parse HEAD", { cwd: repoRoot });
+      const current_commit = currentOutput.toString().trim();
 
-    // Get latest from origin/main
-    let latest_version = current_version; // fallback
-    try {
+      // Get latest from origin/main
       const { stdout: latestOutput } = await exec("git rev-parse origin/main", { cwd: repoRoot });
-      latest_version = latestOutput.toString().trim().substring(0, 8);
-    } catch (e) {
-      // If remote is not available, use current
-    }
+      const latest_commit = latestOutput.toString().trim();
 
-    const is_up_to_date = current_version === latest_version;
+      needs_update = current_commit !== latest_commit;
+    } catch (e) {
+      // Git operations failed, but we can still return current version
+      console.error("Git check failed:", e);
+    }
 
     // Log the check
     await createLog("SYSTEM", "VERSION_CHECK", "admin", "manager", null, null, {
-      current_version,
-      latest_version,
-      is_up_to_date,
+      version: formattedVersion,
+      needs_update,
     });
 
     res.json({
-      current_version,
-      latest_version,
-      is_up_to_date,
-      needs_update: !is_up_to_date,
+      version: formattedVersion,
+      version_details: version,
+      needs_update,
     });
   } catch (error) {
     next(error);
@@ -1131,7 +1198,8 @@ const checkSystemVersion = async (req, res, next) => {
  * 1. Pull latest from GitHub
  * 2. Install/update backend dependencies
  * 3. Build frontend
- * 4. Optionally restart services
+ * 4. Increment version
+ * 5. Optionally restart services
  */
 const performSystemUpdate = async (req, res, next) => {
   try {
@@ -1142,6 +1210,9 @@ const performSystemUpdate = async (req, res, next) => {
     };
 
     try {
+      // Get update impact from request body (default to 'build')
+      const { impact = 'build' } = req.body;
+
       // Step 1: Fetch and pull
       logFn("Fetching latest from GitHub...");
       await exec("git fetch origin", { cwd: repoRoot });
@@ -1171,10 +1242,18 @@ const performSystemUpdate = async (req, res, next) => {
         }
       }
 
+      // Step 4: Increment version
+      logFn("Incrementing version...");
+      const newVersion = incrementVersion(impact);
+      const formattedVersion = formatVersion(newVersion);
+      logFn(`New version: ${formattedVersion}`);
+
       logFn("Update completed successfully!");
 
       // Log the successful update
       await createLog("SYSTEM", "UPDATE_SUCCESS", "admin", "manager", null, null, {
+        version: formattedVersion,
+        impact,
         logs: logs.join("\n"),
         timestamp: new Date().toISOString(),
       });
@@ -1182,6 +1261,7 @@ const performSystemUpdate = async (req, res, next) => {
       res.json({
         success: true,
         message: "System updated successfully! Please reload the page.",
+        version: formattedVersion,
         logs: logs.join("\n"),
       });
     } catch (error) {

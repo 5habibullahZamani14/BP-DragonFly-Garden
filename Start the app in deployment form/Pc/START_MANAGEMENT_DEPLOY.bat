@@ -1,8 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ========================================
-echo DragonFly Garden - Payment Counter View
-echo Development Mode
+echo DragonFly Garden - Management View
+echo Deployment Mode - PC
 echo ========================================
 echo.
 
@@ -12,10 +12,10 @@ echo Checking if backend is running...
 netstat -ano | findstr ":5000" | findstr "LISTENING" >nul
 if errorlevel 1 (
     echo Starting backend server...
-    start "DragonFly Backend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\restaurant-system\backend && npm run dev"
+    start "DragonFly Backend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\restaurant-system\backend && npm start"
     set BACKEND_STARTED=1
     echo Waiting for backend to start...
-    timeout /t 5 /nobreak >nul
+    timeout /t 10 /nobreak >nul
 ) else (
     echo Backend is already running.
     set BACKEND_STARTED=0
@@ -25,8 +25,18 @@ echo.
 echo Checking if frontend is running...
 netstat -ano | findstr ":3000" | findstr "LISTENING" >nul
 if errorlevel 1 (
-    echo Starting frontend development server...
-    start "DragonFly Frontend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\frontend && npm run dev"
+    echo Building frontend for production...
+    cd frontend
+    call npm run build
+    if errorlevel 1 (
+        echo ERROR: Frontend build failed!
+        pause
+        exit /b 1
+    )
+    echo Frontend built successfully!
+    cd /d "c:\Anything Important\BP-DragonFly-Garden"
+    echo Starting frontend production server...
+    start "DragonFly Frontend" cmd /k "cd /d c:\Anything Important\BP-DragonFly-Garden\frontend && npm run preview"
     set FRONTEND_STARTED=1
     echo Waiting for frontend to start...
     timeout /t 8 /nobreak >nul
@@ -49,8 +59,8 @@ if "%SERVER_IP%"=="" (
 )
 echo Using server IP: %SERVER_IP%
 echo.
-echo Opening browser to Payment Counter View...
-start http://%SERVER_IP%:3000/?qr=payment-counter-1
+echo Opening browser to Management View...
+start http://%SERVER_IP%:3000/?qr=manager-1
 
 echo.
 echo ========================================
@@ -71,7 +81,7 @@ echo DO NOT simply close this window or the server windows directly!
 echo Doing so may leave processes running in the background.
 echo.
 echo ========================================
-echo Payment Counter View launched successfully!
+echo Management View launched successfully!
 echo ========================================
 echo.
 

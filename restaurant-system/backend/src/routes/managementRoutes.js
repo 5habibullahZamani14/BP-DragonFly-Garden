@@ -422,6 +422,12 @@ const printerDiscoveryService = require("../services/printerDiscoveryService");
 router.get("/printers/discover", requireManagerToken, async (req, res) => {
   console.log("[discovery] Route handler called, request received");
   try {
+    // Clear cache to ensure fresh discovery results
+    if (printerDiscoveryService.clearCache) {
+      printerDiscoveryService.clearCache();
+      console.log("[discovery] Cache cleared before discovery");
+    }
+    
     console.log("[discovery] Starting printer discovery...");
     const printers = await printerDiscoveryService.discoverPrinters();
     console.log(`[discovery] discoverPrinters returned ${printers.length} printers`);
@@ -431,6 +437,11 @@ router.get("/printers/discover", requireManagerToken, async (req, res) => {
     console.log(`[discovery] Platform info:`, platformInfo);
     
     console.log(`[discovery] Discovery successful. Found ${printers.length} printers.`);
+    console.log("[discovery] Individual printer details:");
+    printers.forEach((p, i) => {
+      console.log(`  [${i+1}] ${p.name} (${p.connectionType}) via ${p.discoveredBy}`);
+    });
+    
     console.log("[discovery] Building response object...");
     const responseData = { success: true, printers, platform: platformInfo };
     console.log("[discovery] Response object built, serializing...");
@@ -505,9 +516,6 @@ router.get("/printers/settings", requireManagerToken, async (req, res) => {
     const selectedPrinter = await getSetting("selected_printer");
     const defaultPrinter = await getSetting("default_printer");
     const printerPreferences = await getSetting("printer_preferences");
-    const printDelaySeconds = await getSetting("print_delay_seconds");
-    const emptyLinesBefore = await getSetting("empty_lines_before_receipt");
-    const emptyLinesAfter = await getSetting("empty_lines_after_receipt");
 
     let parsedPrefs = {};
     try {
@@ -516,15 +524,23 @@ router.get("/printers/settings", requireManagerToken, async (req, res) => {
       console.error("Error parsing printer preferences:", e);
     }
 
+    // Get empty lines from the selected printer's profile, not from separate settings
+    let emptyLinesBefore = 0;
+    let emptyLinesAfter = 0;
+    if (selectedPrinter && parsedPrefs.printer_profiles && parsedPrefs.printer_profiles[selectedPrinter]) {
+      const profile = parsedPrefs.printer_profiles[selectedPrinter];
+      emptyLinesBefore = profile.empty_lines_before !== undefined ? profile.empty_lines_before : 0;
+      emptyLinesAfter = profile.empty_lines_after !== undefined ? profile.empty_lines_after : 0;
+    }
+
     res.json({
       success: true,
       selectedPrinter,
       defaultPrinter,
       printerPreferences: parsedPrefs,
       printerProfiles: parsedPrefs.printer_profiles || {},
-      printDelaySeconds: printDelaySeconds ? parseInt(printDelaySeconds) : 0,
-      emptyLinesBefore: emptyLinesBefore ? parseInt(emptyLinesBefore) : 2,
-      emptyLinesAfter: emptyLinesAfter ? parseInt(emptyLinesAfter) : 3
+      emptyLinesBefore,
+      emptyLinesAfter
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -576,7 +592,10 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
       }
       
       parsedPrefs.printer_profiles = printerProfiles;
-      parsedPrefs.receipt_copies = printerPreferences.receipt_copies || parsedPrefs.receipt_copies;
+      // Only update receipt_copies if printerPreferences is provided
+      if (printerPreferences && printerPreferences.receipt_copies) {
+        parsedPrefs.receipt_copies = printerPreferences.receipt_copies;
+      }
       
       console.log("Saving updated printer preferences:", JSON.stringify(parsedPrefs, null, 2));
       

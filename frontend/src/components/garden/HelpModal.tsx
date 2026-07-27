@@ -14,9 +14,10 @@ export interface HelpSection {
 interface HelpModalProps {
   title: string;
   sections: HelpSection[];
+  version?: string;
 }
 
-export const HelpModal = ({ title, sections }: HelpModalProps) => {
+export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredSections = useMemo(() => {
@@ -40,17 +41,24 @@ export const HelpModal = ({ title, sections }: HelpModalProps) => {
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b bg-gray-50/50">
-          <DialogTitle className="text-2xl flex items-center gap-2">
-            <Info className="h-6 w-6 text-blue-600" />
-            {title} Instruction Guide
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <Info className="h-6 w-6 text-blue-600" />
+              {title} Instruction Guide
+            </DialogTitle>
+            {version && (
+              <span className="text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-md">
+                {version}
+              </span>
+            )}
+          </div>
           <DialogDescription className="text-sm text-gray-500 mt-2">
             Search help topics or browse the instructions below to learn how to use every manager and payment feature.
           </DialogDescription>
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input 
-              placeholder="Search instructions..." 
+            <Input
+              placeholder="Search instructions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 bg-white"
