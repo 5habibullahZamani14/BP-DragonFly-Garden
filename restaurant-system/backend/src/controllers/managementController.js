@@ -1153,18 +1153,18 @@ const performSystemUpdate = async (req, res, next) => {
       logFn("Installing backend dependencies...");
       const backendPackageJson = path.join(repoRoot, "restaurant-system/backend/package.json");
       if (fs.existsSync(backendPackageJson)) {
-        await exec("npm ci", { cwd: path.join(repoRoot, "restaurant-system/backend"), timeout: 300000 });
+        await exec("npm install", { cwd: path.join(repoRoot, "restaurant-system/backend"), timeout: 300000 });
       }
 
       // Step 3: Build frontend
       logFn("Installing frontend dependencies...");
       const frontendPackageJson = path.join(repoRoot, "frontend/package.json");
       if (fs.existsSync(frontendPackageJson)) {
-        await exec("npm ci", { cwd: frontendDir, timeout: 300000 });
+        await exec("npm install", { cwd: frontendDir, timeout: 300000 });
 
         logFn("Building frontend...");
-        const buildResult = await exec("npm run build", { cwd: frontendDir, timeout: 600000 });
-        
+        const buildResult = await exec("npx vite build", { cwd: frontendDir, timeout: 600000 });
+
         // Check if build succeeded
         if (buildResult.stderr && buildResult.stderr.includes("error")) {
           throw new Error(`Frontend build had errors: ${buildResult.stderr}`);
