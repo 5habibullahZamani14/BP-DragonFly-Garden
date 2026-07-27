@@ -133,6 +133,12 @@ export const useWebSocket = (
         const ws = new WebSocket(url);
         currentWs = ws;
         wsRef.current = ws;
+        
+        // Log connection attempt with masked token for security
+        const maskedUrl = authValueRef.current 
+          ? url.replace(/token=([^&]+)/, 'token=***MASKED***')
+          : url;
+        console.log("WebSocket connecting to:", maskedUrl);
 
         ws.onopen = () => {
           if (cleanupRequested) {

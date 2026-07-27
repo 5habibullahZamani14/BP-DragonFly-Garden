@@ -48,7 +48,7 @@ import { TablesTab } from "./management/TablesTab";
 import { FinanceTab } from "./management/FinanceTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { managerAuth, sendPasswordResetEmail, fetchInventory } from "@/lib/api";
+import { managerAuth, sendPasswordResetEmail, fetchInventory, checkSystemVersion } from "@/lib/api";
 import type { InventoryItem } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -119,11 +119,22 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [versionInfo, setVersionInfo] = useState<{ current_version: string; latest_version: string } | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      checkSystemVersion().then(result => {
+        setVersionInfo({ current_version: result.current_version, latest_version: result.latest_version });
+      }).catch(err => {
+        safeConsoleError("Failed to fetch version info", err);
+      });
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const savedLogin = localStorage.getItem("managerLogin");
@@ -581,8 +592,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "menu" && <MenuTab />}
         {activeTab === "feedback" && <FeedbackTab notify={notify} />}
         {activeTab === "ai-chatbot" && <AIChatbotTab />}
-        
+
       </div>
+
+      {versionInfo && (
+        <div className="fixed bottom-4 right-4 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-md border border-gray-200 text-xs text-gray-600 font-mono">
+          v{versionInfo.current_version}
+        </div>
+      )}
     </div>
   );
 };

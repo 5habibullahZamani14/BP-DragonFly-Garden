@@ -120,6 +120,8 @@ export default {
     "payment.hide": "مخفی کردن",
     "payment.show": "نمایش",
     "payment.noPaid": "هیچ سفارش پرداخت شده‌ای امروز یافت نشد.",
+    "payment.addOnBtn": "+ افزودن",
+    "payment.counterOrder": "سفارش پیشخوان",
     
     "common.loading": "در حال بارگذاری...",
     

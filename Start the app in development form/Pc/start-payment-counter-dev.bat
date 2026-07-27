@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ========================================
-echo DragonFly Garden - Table 1 Customer View
+echo DragonFly Garden - Payment Counter View
 echo Development Mode
 echo ========================================
 echo.
@@ -49,13 +49,25 @@ if "%SERVER_IP%"=="" (
 )
 echo Using server IP: %SERVER_IP%
 echo.
-echo Opening browser to Table 1 Customer View...
-start http://%SERVER_IP%:3000/?qr=table-1
+echo Opening browser to Payment Counter View...
+start http://%SERVER_IP%:3000/?qr=payment-counter-1
 
 echo.
 echo ========================================
-echo Table 1 Customer View launched successfully!
+echo IMPORTANT: HOW TO STOP THE SERVERS
 echo ========================================
 echo.
-echo This window will close automatically in 5 seconds...
-timeout /t 5 /nobreak >nul
+echo To gracefully stop the servers:
+echo 1. Go to the "DragonFly Backend" window and press Ctrl+C
+echo 2. Go to the "DragonFly Frontend" window and press Ctrl+C
+echo 3. Both windows will close automatically
+echo.
+echo DO NOT simply close this window or the server windows directly!
+echo Doing so may leave processes running in the background.
+echo.
+echo ========================================
+echo Payment Counter View launched successfully!
+echo ========================================
+echo.
+echo Press any key to close this window (after stopping servers if needed)...
+pause >nul

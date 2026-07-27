@@ -90,6 +90,10 @@ const getPrinterSettings = (printerName) => {
   return new Promise((resolve, reject) => {
     const defaultSettings = {
       width: 80,
+      marginLeft: 0,
+      marginRight: 0,
+      marginTop: 0,
+      marginBottom: 0,
       delaySeconds: 0,
       emptyLinesBefore: 2,
       emptyLinesAfter: 3,
@@ -115,6 +119,10 @@ const getPrinterSettings = (printerName) => {
         if (printerProfile) {
           resolve({
             width: printerProfile.width || 80,
+            marginLeft: printerProfile.margin_left || 0,
+            marginRight: printerProfile.margin_right || 0,
+            marginTop: printerProfile.margin_top || 0,
+            marginBottom: printerProfile.margin_bottom || 0,
             delaySeconds: printerProfile.print_delay_seconds || 0,
             emptyLinesBefore: printerProfile.empty_lines_before || 2,
             emptyLinesAfter: printerProfile.empty_lines_after || 3,
@@ -247,14 +255,27 @@ const _executePrint = (ticket, filenamePrefix) =>
           return getPrinterSettings(printerName).then(settings => ({ printerName, settings }));
         })
         .then(({ printerName, settings }) => {
-          console.log(`Printer settings: width=${settings.width}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
+          console.log(`Printer settings: width=${settings.width}, margins=${settings.marginLeft},${settings.marginRight},${settings.marginTop},${settings.marginBottom}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
           
-          const cleanTicket = stripGdiTags(ticket, settings.width);
-          const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
-          const afterLines = '\n'.repeat(settings.emptyLinesAfter);
-          const finalTicket = beforeLines + cleanTicket + afterLines;
+          // Apply margins by adding spaces/padding
+          const leftMargin = ' '.repeat(settings.marginLeft);
+          const rightMargin = ' '.repeat(settings.marginRight);
+          const topMargin = '\n'.repeat(settings.marginTop);
+          const bottomMargin = '\n'.repeat(settings.marginBottom);
           
-          console.log(`Ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
+          // Calculate effective width (total width minus margins)
+          const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+          
+          const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
+          
+          // Apply left margin to each line
+          const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
+          
+          const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
+          const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
+          const finalTicket = beforeLines + ticketWithMargins + afterLines;
+          
+          console.log(`Ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
           if (process.platform === "win32") {
             console.log(`[thermal] Windows platform detected, attempting raw ESC/POS for ${printerName}`);
@@ -362,12 +383,25 @@ const _executePrint = (ticket, filenamePrefix) =>
             .then(settings => {
               console.log(`Using default printer: ${defaultPrinter} with settings:`, settings);
               
-              const cleanTicket = stripGdiTags(ticket, settings.width);
-              const beforeLines = '\n'.repeat(settings.emptyLinesBefore);
-              const afterLines = '\n'.repeat(settings.emptyLinesAfter);
-              const finalTicket = beforeLines + cleanTicket + afterLines;
+              // Apply margins by adding spaces/padding
+              const leftMargin = ' '.repeat(settings.marginLeft);
+              const rightMargin = ' '.repeat(settings.marginRight);
+              const topMargin = '\n'.repeat(settings.marginTop);
+              const bottomMargin = '\n'.repeat(settings.marginBottom);
               
-              console.log(`Fallback ticket length: ${finalTicket.length} chars, before lines: ${settings.emptyLinesBefore}, after lines: ${settings.emptyLinesAfter}`);
+              // Calculate effective width (total width minus margins)
+              const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+              
+              const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
+              
+              // Apply left margin to each line
+              const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
+              
+              const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
+              const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
+              const finalTicket = beforeLines + ticketWithMargins + afterLines;
+              
+              console.log(`Fallback ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
 
               if (process.platform === "win32") {
                 console.log(`[thermal] Fallback attempting raw ESC/POS for ${defaultPrinter}`);

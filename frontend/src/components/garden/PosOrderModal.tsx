@@ -179,6 +179,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
         return;
       }
     }
+    // COUNTER orders do not require name, phone, or other customer details
 
     setIsSubmitting(true);
     try {
@@ -282,14 +283,18 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                           </select>
                         </div>
                       )}
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {t("pos.name")}</Label>
-                        <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t("pos.name")} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("pos.phone")}</Label>
-                        <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder={t("pos.phone")} />
-                      </div>
+                      {orderType !== "COUNTER" && (
+                        <>
+                          <div className="space-y-2">
+                            <Label className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {t("pos.name")}</Label>
+                            <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder={t("pos.name")} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("pos.phone")}</Label>
+                            <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder={t("pos.phone")} />
+                          </div>
+                        </>
+                      )}
                       {orderType === "PICKUP" && (
                         <div className="space-y-2 col-span-2">
                           <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {t("pos.collectionTime")}</Label>

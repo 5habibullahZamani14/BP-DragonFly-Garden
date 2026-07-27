@@ -120,7 +120,8 @@ export default {
     "payment.hide": "Hide",
     "payment.show": "Show",
     "payment.noPaid": "No paid orders today.",
-    "payment.addOnBtn": "+ Add-on",
+    "payment.addOnBtn": "+ Add",
+    "payment.counterOrder": "Counter Order",
     
     "common.loading": "Loading...",
     "common.confirm": "Confirm",

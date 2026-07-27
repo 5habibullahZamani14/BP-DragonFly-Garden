@@ -99,17 +99,16 @@ export const AIChatbotTab = () => {
       const result = await aiChat(msg);
       if (result.success && result.response) {
         setMessages((prev) => [...prev, { role: "assistant", content: result.response! }]);
-        if (result.usage) {
-          setUsage(result.usage as unknown as UsageData);
-        }
       } else {
         throw new Error(result.error || "Backend returned unsuccessful status");
       }
     } catch (backendErr) {
       console.warn("Backend AI chat failed, attempting client-side fallback:", backendErr);
+      
+      // Try client-side fallback first
       try {
-        // Fetch context and api key from the backend
-        const contextRes = await fetch(`${API_BASE}/management/feedback/ai-chat/client-context`, {
+        // Fetch context and api key from the backend (with message for intent-based filtering)
+        const contextRes = await fetch(`${API_BASE}/management/feedback/ai-chat/client-context?message=${encodeURIComponent(msg)}`, {
           headers: {
             Authorization: (() => {
               const saved = localStorage.getItem("managerLogin");
@@ -130,8 +129,19 @@ export const AIChatbotTab = () => {
         if (!apiKey) {
           setMessages((prev) => [...prev, {
             role: "assistant",
-            content: "DragonBot is currently unavailable. No Groq API Key was found in the server's environment configuration. Please set `GROQ_API_KEY` in the server's `.env` file."
+            content: "DragonBot is currently unavailable. No Groq API Key was found in the server's environment configuration.\n\n**To fix this:**\n1. Get a free API key at https://console.groq.com/keys\n2. Add it to the backend .env file as: `GROQ_API_KEY=gsk_your_actual_key_here`\n3. Restart the backend server\n\n**Note:** This uses Groq (groq.com), NOT Grok (x.ai). These are different services."
           }]);
+          setLoading(false);
+          return;
+        }
+        
+        // Validate API key format on client side
+        if (!apiKey.startsWith('gsk_')) {
+          setMessages((prev) => [...prev, {
+            role: "assistant",
+            content: "DragonBot is currently unavailable. The GROQ_API_KEY in the server configuration is invalid.\n\n**Expected format:** Keys should start with 'gsk_'\n**You may have confused:** Groq (groq.com) with Grok (x.ai)\n\nPlease get a valid key at https://console.groq.com/keys"
+          }]);
+          setLoading(false);
           return;
         }
 
@@ -168,7 +178,17 @@ Guidelines:
 
         if (!groqRes.ok) {
           const errText = await groqRes.text();
-          throw new Error(`Groq API error: ${groqRes.status} - ${errText}`);
+          let errorMsg = `Groq API error: ${groqRes.status}`;
+          
+          if (groqRes.status === 401 || groqRes.status === 403) {
+            errorMsg = "Authentication failed - Invalid GROQ_API_KEY. Please check your API key at https://console.groq.com/keys";
+          } else if (groqRes.status === 429) {
+            errorMsg = "Rate limit exceeded - Too many requests. Please try again later.";
+          } else if (groqRes.status === 500 || groqRes.status === 502 || groqRes.status === 503) {
+            errorMsg = "Groq API server error - Please try again later.";
+          }
+          
+          throw new Error(errorMsg);
         }
 
         const groqData = await groqRes.json();
@@ -204,10 +224,55 @@ Guidelines:
         }
       } catch (fallbackErr) {
         console.error("Direct Groq API fallback failed:", fallbackErr);
-        setMessages((prev) => [...prev, {
-          role: "assistant",
-          content: "DragonBot is currently unavailable.\n\n**Troubleshooting steps:**\n1. Check if your browser device is connected to the internet.\n2. Verify the server's `GROQ_API_KEY` is set correctly.\n3. Make sure the local server is running."
-        }]);
+        
+        // Show comprehensive error message for fallback failure
+        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : "Unknown error";
+        let detailedError = "DragonBot is currently unavailable. Both backend and direct API connections failed.\n\n";
+        
+        if (errorMessage.includes('413') || errorMessage.includes('payload')) {
+          detailedError += "**Error: Request Too Large**\n\n";
+          detailedError += "The amount of data being sent to the AI is too large.\n\n";
+          detailedError += "**To fix this:**\n";
+          detailedError += "1. Try asking a simpler question\n";
+          detailedError += "2. Clear the conversation history and start fresh\n";
+          detailedError += "3. The system will automatically optimize this in future updates\n\n";
+          detailedError += "Technical details: " + errorMessage;
+        } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
+          detailedError += "**Error: Authentication Failed**\n\n";
+          detailedError += "The API key is invalid or has been revoked.\n\n";
+          detailedError += "**To fix this:**\n";
+          detailedError += "1. Check the GROQ_API_KEY in backend .env file\n";
+          detailedError += "2. Verify the key is valid at https://console.groq.com/keys\n";
+          detailedError += "3. Restart the backend server after updating the key\n\n";
+          detailedError += "Technical details: " + errorMessage;
+        } else if (errorMessage.includes('429')) {
+          detailedError += "**Error: Rate Limit Exceeded**\n\n";
+          detailedError += "Too many requests have been made to the Groq API.\n\n";
+          detailedError += "**To fix this:**\n";
+          detailedError += "1. Wait a few minutes before trying again\n";
+          detailedError += "2. Consider upgrading to a paid Groq plan for higher limits\n";
+          detailedError += "3. The system now optimizes context to reduce token usage\n\n";
+          detailedError += "Technical details: " + errorMessage;
+        } else if (errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('ENOTFOUND')) {
+          detailedError += "**Error: Network Connection Failed**\n\n";
+          detailedError += "Cannot connect to the Groq API service.\n\n";
+          detailedError += "**To fix this:**\n";
+          detailedError += "1. Check your internet connection\n";
+          detailedError += "2. Verify you can access https://api.groq.com\n";
+          detailedError += "3. Check if there's a firewall blocking the connection\n";
+          detailedError += "4. Try refreshing the page\n\n";
+          detailedError += "Technical details: " + errorMessage;
+        } else {
+          detailedError += "**Error: Unknown Error**\n\n";
+          detailedError += "An unexpected error occurred.\n\n";
+          detailedError += "**To fix this:**\n";
+          detailedError += "1. Try refreshing the page\n";
+          detailedError += "2. Check the browser console for more details\n";
+          detailedError += "3. Contact support if the problem persists\n\n";
+          detailedError += "Technical details: " + errorMessage;
+        }
+        
+        setMessages((prev) => [...prev, { role: "assistant", content: detailedError }]);
       }
     } finally {
       setLoading(false);

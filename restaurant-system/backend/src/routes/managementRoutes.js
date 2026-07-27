@@ -420,11 +420,44 @@ const printerDiscoveryService = require("../services/printerDiscoveryService");
  * Returns: { printers: [{ name, driver, port, status, connectionType, platform }] }
  */
 router.get("/printers/discover", requireManagerToken, async (req, res) => {
+  console.log("[discovery] Route handler called, request received");
   try {
+    console.log("[discovery] Starting printer discovery...");
     const printers = await printerDiscoveryService.discoverPrinters();
+    console.log(`[discovery] discoverPrinters returned ${printers.length} printers`);
+    
+    console.log("[discovery] Getting platform info...");
     const platformInfo = printerDiscoveryService.getPlatformInfo();
-    res.json({ success: true, printers, platform: platformInfo });
+    console.log(`[discovery] Platform info:`, platformInfo);
+    
+    console.log(`[discovery] Discovery successful. Found ${printers.length} printers.`);
+    console.log("[discovery] Building response object...");
+    const responseData = { success: true, printers, platform: platformInfo };
+    console.log("[discovery] Response object built, serializing...");
+    const jsonStr = JSON.stringify(responseData);
+    console.log("[discovery] Response serialized, length:", jsonStr.length);
+    console.log("[discovery] Response data preview:", jsonStr.substring(0, 200));
+    
+    console.log("[discovery] Calling res.json()...");
+    res.json(responseData);
+    console.log("[discovery] Response sent successfully");
   } catch (error) {
+    console.error("[discovery] Printer discovery failed:", error);
+    res.status(500).json({ success: false, message: error.message || "Unknown error" });
+  }
+});
+
+/*
+ * POST /management/printers/discover/clear-cache
+ * Clears the printer discovery cache to force a refresh
+ * Returns: { success: true, message: string }
+ */
+router.post("/printers/discover/clear-cache", requireManagerToken, async (req, res) => {
+  try {
+    printerDiscoveryService.clearCache();
+    res.json({ success: true, message: "Printer discovery cache cleared" });
+  } catch (error) {
+    console.error("[discovery] Failed to clear cache:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

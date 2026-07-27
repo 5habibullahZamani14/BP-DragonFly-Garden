@@ -106,6 +106,8 @@ const thermalPrinterService = {
 
     // 1. Initialize printer — resets to known state
     parts.push(Buffer.from(CMD.INIT));
+    // 2. Set code page to PC437 for proper character encoding
+    parts.push(Buffer.from([0x1B, 0x74, 0x00]));
 
     const lines = ticket.split('\n');
 
@@ -169,7 +171,7 @@ const thermalPrinterService = {
         ? cleanText.substring(0, width)
         : cleanText;
 
-      parts.push(Buffer.from(truncated, 'ascii'));
+      parts.push(Buffer.from(truncated, 'latin1'));
       parts.push(Buffer.from(CMD.LF));
     }
 
@@ -494,3 +496,4 @@ const thermalPrinterService = {
 };
 
 module.exports = thermalPrinterService;
+

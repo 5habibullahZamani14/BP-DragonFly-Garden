@@ -3,12 +3,27 @@ const Groq = require("groq-sdk");
 let groqClient = null;
 
 const initializeAI = () => {
-  if (!process.env.GROQ_API_KEY) {
+  const apiKey = process.env.GROQ_API_KEY;
+  
+  if (!apiKey) {
     console.warn("GROQ_API_KEY not set. AI analysis will fall back to rule-based.");
     return false;
   }
+  
+  // Validate API key format (Groq keys start with 'gsk_')
+  if (!apiKey.startsWith('gsk_')) {
+    console.error("Invalid GROQ_API_KEY format. Groq API keys should start with 'gsk_'. You may have confused Groq (groq.com) with Grok (x.ai). Please get a free key at https://console.groq.com/keys");
+    return false;
+  }
+  
+  // Check for placeholder values
+  if (apiKey === 'gsk_your_key_here' || apiKey === 'your_groq_api_key_here' || apiKey.length < 20) {
+    console.error("GROQ_API_KEY appears to be a placeholder. Please set a valid API key from https://console.groq.com/keys");
+    return false;
+  }
+  
   try {
-    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    groqClient = new Groq({ apiKey: apiKey });
     return true;
   } catch (error) {
     console.error("Failed to initialize Groq AI:", error.message);
@@ -38,7 +53,10 @@ const anonymizeFeedback = (feedbacks) => {
 const generateAIAnalysis = async (currentFeedbacks, previousFeedbacks, periodFrom, periodTo) => {
   const aiEnabled = initializeAI();
   if (!aiEnabled || !groqClient) {
-    return { success: false, reason: "AI not available" };
+    return { 
+      success: false, 
+      reason: "AI not available - Please check that GROQ_API_KEY is set correctly in the backend .env file. Get a free key at https://console.groq.com/keys" 
+    };
   }
 
   try {
@@ -82,6 +100,33 @@ FORMATTING RULES:
     return { success: true, analysis: text };
   } catch (error) {
     console.error("AI analysis failed:", error.message);
+    
+    // Provide more specific error messages
+    if (error.message.includes('401') || error.message.includes('403')) {
+      return { 
+        success: false, 
+        reason: "Authentication failed - Invalid GROQ_API_KEY. Please check your API key at https://console.groq.com/keys" 
+      };
+    }
+    if (error.message.includes('429')) {
+      return { 
+        success: false, 
+        reason: "Rate limit exceeded - Too many requests to Groq API. Please try again later." 
+      };
+    }
+    if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+      return { 
+        success: false, 
+        reason: "Network error - Cannot connect to Groq API. Please check your internet connection." 
+      };
+    }
+    if (error.message.includes('model')) {
+      return { 
+        success: false, 
+        reason: "Model error - The requested AI model is not available. Please contact support." 
+      };
+    }
+    
     return { success: false, reason: error.message };
   }
 };
@@ -89,7 +134,10 @@ FORMATTING RULES:
 const generateAIFindings = async (currentFeedbacks, previousFeedbacks) => {
   const aiEnabled = initializeAI();
   if (!aiEnabled || !groqClient) {
-    return { success: false, reason: "AI not available" };
+    return { 
+      success: false, 
+      reason: "AI not available - Please check that GROQ_API_KEY is set correctly in the backend .env file. Get a free key at https://console.groq.com/keys" 
+    };
   }
 
   try {
@@ -129,6 +177,33 @@ Format as JSON array with structure: [{title, description, priority}]. Return on
     return { success: true, findings };
   } catch (error) {
     console.error("AI findings generation failed:", error.message);
+    
+    // Provide more specific error messages
+    if (error.message.includes('401') || error.message.includes('403')) {
+      return { 
+        success: false, 
+        reason: "Authentication failed - Invalid GROQ_API_KEY. Please check your API key at https://console.groq.com/keys" 
+      };
+    }
+    if (error.message.includes('429')) {
+      return { 
+        success: false, 
+        reason: "Rate limit exceeded - Too many requests to Groq API. Please try again later." 
+      };
+    }
+    if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+      return { 
+        success: false, 
+        reason: "Network error - Cannot connect to Groq API. Please check your internet connection." 
+      };
+    }
+    if (error.message.includes('model')) {
+      return { 
+        success: false, 
+        reason: "Model error - The requested AI model is not available. Please contact support." 
+      };
+    }
+    
     return { success: false, reason: error.message };
   }
 };
@@ -136,10 +211,28 @@ Format as JSON array with structure: [{title, description, priority}]. Return on
 const generateChatResponse = async (messages, contextData) => {
   const aiEnabled = initializeAI();
   if (!aiEnabled || !groqClient) {
-    return { success: false, reason: "AI not available" };
+    return { 
+      success: false, 
+      reason: "AI not available - Please check that GROQ_API_KEY is set correctly in the backend .env file. Get a free key at https://console.groq.com/keys" 
+    };
   }
 
   try {
+    // Summarize conversation if it's getting long to save tokens
+    let processedMessages = messages;
+    if (messages.length > 6) {
+      // Keep last 3 messages, summarize the rest
+      const recentMessages = messages.slice(-3);
+      const olderMessages = messages.slice(0, -3);
+      
+      const summary = olderMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+      processedMessages = [
+        { role: "system", content: `Previous conversation summary:\n${summary}\n\nContinue the conversation naturally.` },
+        ...recentMessages
+      ];
+      console.log(`[DragonBot] Summarized ${messages.length} messages to ${processedMessages.length} (saved ${messages.length - processedMessages.length} messages)`);
+    }
+
     const systemPrompt = `You are DragonBot, an AI assistant for the BP Dragonfly Garden Cafe Ordering and Management System. You have access to the restaurant's live data below. Answer questions helpfully based on this data.
 
 RESTAURANT CONTEXT (current state):
@@ -157,7 +250,7 @@ Guidelines:
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages,
+        ...processedMessages,
       ],
     });
 
@@ -165,6 +258,33 @@ Guidelines:
     return { success: true, response: text };
   } catch (error) {
     console.error("AI chat failed:", error.message);
+    
+    // Provide more specific error messages
+    if (error.message.includes('401') || error.message.includes('403')) {
+      return { 
+        success: false, 
+        reason: "Authentication failed - Invalid GROQ_API_KEY. Please check your API key at https://console.groq.com/keys" 
+      };
+    }
+    if (error.message.includes('429')) {
+      return { 
+        success: false, 
+        reason: "Rate limit exceeded - Too many requests to Groq API. Please try again later." 
+      };
+    }
+    if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+      return { 
+        success: false, 
+        reason: "Network error - Cannot connect to Groq API. Please check your internet connection." 
+      };
+    }
+    if (error.message.includes('model')) {
+      return { 
+        success: false, 
+        reason: "Model error - The requested AI model is not available. Please contact support." 
+      };
+    }
+    
     return { success: false, reason: error.message };
   }
 };

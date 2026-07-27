@@ -120,6 +120,8 @@ export default {
     "payment.hide": "छुपाएं",
     "payment.show": "दिखाएं",
     "payment.noPaid": "आज कोई भुगतान किया गया आदेश नहीं है।",
+    "payment.addOnBtn": "+ जोड़ें",
+    "payment.counterOrder": "काउंटर ऑर्डर",
     
     "common.loading": "लोड हो रहा है...",
     

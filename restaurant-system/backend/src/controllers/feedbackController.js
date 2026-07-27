@@ -517,83 +517,81 @@ exports.deleteFinding = async (req, res) => {
   res.json({ success: true });
 };
 
-const getChatContext = async () => {
-  return {
-    // ── Menu ──────────────────────────────────────────────────
-    menu: await all(
-      "SELECT mi.id, mi.name, mi.description, mi.price, c.name as category_name, mi.is_available, mi.is_popular, mi.is_promo, mi.promo_label, mi.promo_affects_price, mi.promo_discount_percent FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"
-    ),
-    categories: await all("SELECT id, name, display_order FROM categories ORDER BY display_order"),
-
-    // ── Orders ─────────────────────────────────────────────────
-    orders_today: await all(
-      "SELECT id, status, payment_status, total_price, order_type, customer_name, created_at FROM orders WHERE date(created_at) = date('now','localtime') ORDER BY created_at DESC"
-    ),
-    orders_this_week: await all(
-      "SELECT id, status, payment_status, total_price, order_type, created_at FROM orders WHERE created_at >= datetime('now', '-7 days') ORDER BY created_at DESC"
-    ),
-    top_sold_items: await all(
-      "SELECT mi.name, SUM(oi.quantity) as total_sold FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id JOIN orders o ON oi.order_id = o.id WHERE o.created_at >= datetime('now', '-30 days') GROUP BY mi.id, mi.name ORDER BY total_sold DESC LIMIT 15"
-    ),
-
-    // ── Revenue ────────────────────────────────────────────────
-    revenue_today: await get(
-      "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE date(created_at) = date('now','localtime') AND (payment_status = 'paid' OR status = 'archived')"
-    ),
-    revenue_this_week: await get(
-      "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= datetime('now', '-7 days') AND (payment_status = 'paid' OR status = 'archived')"
-    ),
-    revenue_this_month: await get(
-      "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= datetime('now', '-30 days') AND (payment_status = 'paid' OR status = 'archived')"
-    ),
-
-    // ── Feedback (no view_tokens) ─────────────────────────────
-    feedback_recent: await all(
-      "SELECT id, comment, rating_staff, rating_app, rating_cleanliness, rating_food, rating_atmosphere, rating_value, status, created_at FROM customer_feedback ORDER BY created_at DESC LIMIT 50"
-    ),
-    feedback_stats: await get(
-      "SELECT COUNT(*) as total, AVG(rating_staff) as avg_staff, AVG(rating_food) as avg_food, AVG(rating_atmosphere) as avg_atmosphere, AVG(rating_cleanliness) as avg_cleanliness, AVG(rating_app) as avg_app, AVG(rating_value) as avg_value FROM customer_feedback WHERE status = 'active'"
-    ),
-
-    // ── Employees (no contact_info) ───────────────────────────
-    employees: await all(
-      "SELECT id, employee_id, name, department, employment_type, salary, hire_date FROM employees WHERE is_archived = 0 ORDER BY department, name"
-    ),
-    employee_counts: await get(
-      "SELECT department, COUNT(*) as count FROM employees WHERE is_archived = 0 GROUP BY department"
-    ),
-
-    // ── Inventory ─────────────────────────────────────────────
-    inventory: await all(
-      "SELECT id, name, category, unit, current_stock, max_stock, low_stock_threshold_percent FROM inventory_items WHERE is_archived = 0 ORDER BY category, name"
-    ),
-    low_stock: await all(
-      "SELECT id, name, category, current_stock, max_stock FROM inventory_items WHERE is_archived = 0 AND (CAST(current_stock AS REAL) / CAST(max_stock AS REAL) * 100) <= low_stock_threshold_percent ORDER BY (CAST(current_stock AS REAL) / CAST(max_stock AS REAL)) ASC"
-    ),
-    recipes: await all(
-      "SELECT m.name as menu_item, i.name as ingredient, mi.quantity_required, i.unit FROM menu_item_ingredients mi JOIN menu_items m ON mi.menu_item_id = m.id JOIN inventory_items i ON mi.inventory_item_id = i.id ORDER BY m.name, i.name"
-    ),
-
-    // ── Tables (no qr_codes) ──────────────────────────────────
-    tables: await all("SELECT id, table_number FROM tables ORDER BY table_number"),
-
-    // ── Settings ──────────────────────────────────────────────
-    work_hours: await get("SELECT value FROM restaurant_settings WHERE key = 'work_hours'"),
-
-    // ── Activity ──────────────────────────────────────────────
-    recent_logs: await all(
-      "SELECT category, action, actor_name, target_name, timestamp FROM grand_archive_logs ORDER BY timestamp DESC LIMIT 20"
-    ),
-    assistance_today: await all(
-      "SELECT id, table_number, requested_at, acknowledged_at FROM staff_assistance_requests WHERE date(requested_at) = date('now','localtime') ORDER BY requested_at DESC"
-    ),
-
-    // ── Finance ───────────────────────────────────────────────
-    payment_methods: await all("SELECT id, name FROM payment_methods"),
-    archived_orders_count: await get(
-      "SELECT COUNT(*) as count FROM archived_orders WHERE date(archived_at) >= date('now', '-30 days')"
-    ),
+// Intent classification to determine what context data is needed
+const classifyIntent = (message) => {
+  const lowerMessage = message.toLowerCase();
+  
+  const intents = {
+    menu: ['menu', 'item', 'food', 'drink', 'price', 'category', 'available', 'popular', 'promo'],
+    orders: ['order', 'orders', 'customer', 'table', 'served', 'pending', 'completed', 'archived'],
+    revenue: ['revenue', 'sales', 'income', 'money', 'earn', 'profit', 'today', 'week', 'month'],
+    feedback: ['feedback', 'review', 'rating', 'comment', 'customer opinion', 'satisfaction'],
+    employees: ['employee', 'staff', 'worker', 'team', 'department', 'salary', 'hire'],
+    inventory: ['inventory', 'stock', 'ingredient', 'recipe', 'low stock', 'supplies'],
+    general: ['help', 'what can you', 'how are you', 'who are you', 'status', 'system']
   };
+  
+  const detectedIntents = [];
+  for (const [intent, keywords] of Object.entries(intents)) {
+    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
+      detectedIntents.push(intent);
+    }
+  }
+  
+  // If no specific intent detected, return all (general query)
+  return detectedIntents.length > 0 ? detectedIntents : ['menu', 'orders', 'revenue', 'feedback'];
+};
+
+const getChatContext = async (intents = ['menu', 'orders', 'revenue', 'feedback']) => {
+  const context = {};
+  
+  // Only load data based on detected intents
+  if (intents.includes('menu')) {
+    context.menu = await all(
+      "SELECT mi.id, mi.name, mi.price, c.name as category_name, mi.is_available FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"
+    );
+  }
+  
+  if (intents.includes('orders')) {
+    context.orders_today = await all(
+      "SELECT id, status, total_price, order_type, created_at FROM orders WHERE date(created_at) = date('now','localtime') ORDER BY created_at DESC LIMIT 10"
+    );
+    context.top_sold_items = await all(
+      "SELECT mi.name, SUM(oi.quantity) as total_sold FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id JOIN orders o ON oi.order_id = o.id WHERE o.created_at >= datetime('now', '-7 days') GROUP BY mi.id, mi.name ORDER BY total_sold DESC LIMIT 10"
+    );
+  }
+  
+  if (intents.includes('revenue')) {
+    context.revenue_today = await get(
+      "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE date(created_at) = date('now','localtime') AND (payment_status = 'paid' OR status = 'archived')"
+    );
+  }
+  
+  if (intents.includes('feedback')) {
+    context.feedback_recent = await all(
+      "SELECT comment, rating_food, rating_staff, rating_atmosphere FROM customer_feedback ORDER BY created_at DESC LIMIT 10"
+    );
+    context.feedback_stats = await get(
+      "SELECT AVG(rating_food) as avg_food, AVG(rating_staff) as avg_staff, AVG(rating_atmosphere) as avg_atmosphere FROM customer_feedback WHERE status = 'active'"
+    );
+  }
+  
+  if (intents.includes('employees')) {
+    context.employees = await all(
+      "SELECT name, department FROM employees WHERE is_archived = 0 ORDER BY department, name"
+    );
+  }
+  
+  if (intents.includes('inventory')) {
+    context.low_stock = await all(
+      "SELECT name, category, current_stock, max_stock FROM inventory_items WHERE is_archived = 0 AND (CAST(current_stock AS REAL) / CAST(max_stock AS REAL) * 100) <= low_stock_threshold_percent ORDER BY (CAST(current_stock AS REAL) / CAST(max_stock AS REAL)) ASC LIMIT 10"
+    );
+  }
+  
+  // Always include tables for context
+  context.tables = await all("SELECT table_number FROM tables ORDER BY table_number");
+  
+  return context;
 };
 
 exports.aiChat = async (req, res) => {
@@ -603,7 +601,11 @@ exports.aiChat = async (req, res) => {
   }
 
   try {
-    const contextData = await getChatContext();
+    // Classify intent to determine what context data is needed
+    const intents = classifyIntent(message);
+    console.log(`[DragonBot] Detected intents: ${intents.join(', ')}`);
+    
+    const contextData = await getChatContext(intents);
 
     trackRequest();
 
@@ -623,7 +625,13 @@ exports.aiChat = async (req, res) => {
 
 exports.getClientContext = async (req, res) => {
   try {
-    const contextData = await getChatContext();
+    const { message } = req.query;
+    
+    // Classify intent if message is provided to filter context
+    const intents = message ? classifyIntent(message) : ['menu', 'orders', 'revenue', 'feedback'];
+    console.log(`[DragonBot Client-Context] Detected intents: ${intents.join(', ')}`);
+    
+    const contextData = await getChatContext(intents);
     res.json({
       success: true,
       apiKey: process.env.GROQ_API_KEY || null,

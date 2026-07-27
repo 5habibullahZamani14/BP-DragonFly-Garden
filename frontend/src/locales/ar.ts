@@ -120,6 +120,8 @@ export default {
     "payment.hide": "إخفاء",
     "payment.show": "عرض",
     "payment.noPaid": "لا توجد طلبات مدفوعة اليوم.",
+    "payment.addOnBtn": "+ إضافة",
+    "payment.counterOrder": "طلب الكاونتر",
     
     "common.loading": "جاري التحميل...",
     
