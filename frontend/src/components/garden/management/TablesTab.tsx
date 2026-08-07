@@ -11,7 +11,7 @@
  * and the Grid3X3, Plus, Edit2, Trash2 icons from Lucide.
  */
 import { useTranslation } from "react-i18next";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,12 @@ export const TablesTab = () => {
   const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
   const [showHotspotQR, setShowHotspotQR] = useState(false);
   const [sortBy, setSortBy] = useState<"number" | "creation_date">("number"); // Sorting mode
+  const qrPrintAreaRef = useRef<HTMLDivElement | null>(null);
+  const qrFrameRef = useRef<HTMLDivElement | null>(null);
+  const [qrSize, setQrSize] = useState(180);
 
   const handleDownloadQR = async () => {
-    const element = document.getElementById("qr-code-print-area");
+    const element = qrPrintAreaRef.current;
     if (!element || !viewQRCodeTable) return;
     
     try {
@@ -113,6 +116,27 @@ export const TablesTab = () => {
       safeConsoleError("Failed to create auto table", e);
     }
   };
+
+  useEffect(() => {
+    const node = qrFrameRef.current;
+    if (!node) return;
+
+    const updateQrSize = (entry: ResizeObserverEntry) => {
+      const width = entry.contentRect.width - 24;
+      const height = entry.contentRect.height - 24;
+      const size = Math.max(120, Math.min(280, width, height));
+      setQrSize(Math.floor(size));
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        updateQrSize(entry);
+      }
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [viewQRCodeTable, showHotspotQR]);
 
   const getSortedTables = (tablesToSort: TableRecord[]) => {
     const filtered = tablesToSort.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number));
@@ -428,9 +452,9 @@ export const TablesTab = () => {
           setShowHotspotQR(false); // Reset to the customer ordering QR when closing
         }
       }}>
-        <DialogContent className="sm:max-w-[420px] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
+        <DialogContent className="sm:max-w-[420px] w-full max-h-[calc(100vh-4rem)] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
           {viewQRCodeTable && (
-            <div className="bg-gradient-to-b from-blue-50 to-blue-100 p-4 flex flex-col items-center justify-start">
+            <div className="max-h-[calc(100vh-4rem)] overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 p-4 flex flex-col items-center justify-start">
               <DialogHeader className="w-full text-center mb-3">
                 <DialogTitle className="text-lg font-bold text-gray-900">
                   {showHotspotQR ? "🌐 WiFi Network QR Code" : "🛒 Table Ordering QR Code"}
@@ -444,7 +468,7 @@ export const TablesTab = () => {
               </DialogHeader>
 
               {/* Printable Area */}
-              <div id="qr-code-print-area" className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-lg border-2 border-gray-200 w-full max-w-xs mb-4">
+              <div ref={qrPrintAreaRef} className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-lg border-2 border-gray-200 w-full max-w-xs mb-4">
                 {/* The QR Code Container */}
                 {showHotspotQR && hotspotSsid && !hotspotLoading ? (
                   <>
@@ -452,10 +476,10 @@ export const TablesTab = () => {
                       <h3 className="text-base font-bold text-gray-900">🌐 WiFi Network</h3>
                       <p className="text-xs text-gray-600 mt-0.5">{hotspotSsid}</p>
                     </div>
-                    <div className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex flex-col items-center justify-center z-10 shadow-md">
+                    <div ref={qrFrameRef} className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex flex-col items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
                       <QRCode
                         value={hotspotQrValue}
-                        size={180}
+                        size={qrSize}
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"
@@ -476,10 +500,10 @@ export const TablesTab = () => {
                       <h3 className="text-base font-bold text-gray-900">🛒 Ordering Portal</h3>
                       <p className="text-xs text-gray-600 mt-0.5">Direct access to menu</p>
                     </div>
-                    <div className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md">
+                    <div ref={qrFrameRef} className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
                       <QRCode 
                         value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
-                        size={180} 
+                        size={qrSize} 
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"

@@ -4,9 +4,6 @@ import path from "path";
 const KEYS = {
   "m.hoursDesc": { en: "These hours determine when employees are automatically logged out. The manager account is exempt from this restriction.", ar: "تحدد هذه الساعات متى يتم تسجيل خروج الموظفين تلقائياً. حساب المدير معفى.", zh: "这些时间决定员工自动登出时间。管理员账户除外。", ms: "Waktu ini menentukan log keluar automatik pekerja. Akaun pengurus dikecualikan.", fa: "این ساعات زمان خروج خودکار کارکنان را تعیین می‌کند. حساب مدیر معاف است.", hi: "ये समय तय करते हैं कि कर्मचारी कब स्वचालित लॉग आउट हों।" },
   "m.saved": { en: "Saved!", ar: "تم الحفظ!", zh: "已保存！", ms: "Disimpan!", fa: "ذخیره شد!", hi: "सहेजा गया!" },
-  "m.kitchenPassDesc": { en: "This is the passcode your kitchen crew enters to access the Kitchen Board. Share it with your staff.", ar: "رمز مرور طاقم المطبخ للوصول إلى لوحة المطبخ.", zh: "厨房人员用于访问厨房看板的密码。", ms: "Kod laluan krew dapur untuk Papan Dapur.", fa: "رمز عبور آشپزخانه برای تابلوی آشپزخانه.", hi: "रसोई कर्मचारियों के लिए पासकोड।" },
-  "m.passcodeLabel": { en: "Passcode", ar: "رمز المرور", zh: "密码", ms: "Kod Laluan", fa: "رمز عبور", hi: "पासकोड" },
-  "m.updatePasscode": { en: "Update Passcode", ar: "تحديث الرمز", zh: "更新密码", ms: "Kemas Kini Kod", fa: "به‌روزرسانی رمز", hi: "पासकोड अपडेट" },
   "m.profileDesc": { en: "Your personal details and login credentials. Your email is used for password recovery.", ar: "بياناتك الشخصية وبيانات الدخول. يُستخدم بريدك لاستعادة كلمة المرور.", zh: "您的个人信息和登录凭据。邮箱用于密码恢复。", ms: "Butiran peribadi dan log masuk. E-mel untuk pemulihan kata laluan.", fa: "اطلاعات شخصی و ورود. ایمیل برای بازیابی رمز.", hi: "व्यक्तिगत विवरण और लॉगिन। ईमेल पुनर्प्राप्ति के लिए।" },
   "m.managerIdHint": { en: "(used to log in)", ar: "(لتسجيل الدخول)", zh: "（用于登录）", ms: "(untuk log masuk)", fa: "(برای ورود)", hi: "(लॉगिन के लिए)" },
   "m.emailLabel": { en: "Email Address", ar: "البريد الإلكتروني", zh: "电子邮箱", ms: "Alamat E-mel", fa: "ایمیل", hi: "ईमेल पता" },

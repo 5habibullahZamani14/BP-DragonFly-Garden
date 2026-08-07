@@ -2,7 +2,7 @@
  * Index.tsx — Top-level page component and role dispatcher.
  *
  * This is the single page in the application. Instead of having separate
- * routes for each role (customer, kitchen, payment, manager), I put all
+ * routes for each role (customer, payment, manager), I put all
  * role-based rendering here because the URL never changes after the initial
  * QR scan — the role is embedded in the query string, not the path.
  *
@@ -11,7 +11,6 @@
  *   against four regex patterns. Each pattern corresponds to one role:
  *
  *     table-N          → customer (N is the table number, e.g. table-3)
- *     kitchen-crew-*   → kitchen
  *     payment-counter-*→ payment
  *     manager-*        → manager
  *
@@ -38,7 +37,7 @@ import { ManagementView } from "@/components/garden/ManagementView";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 /* QR code patterns — must match the patterns used in the backend middleware. */
-const TABLE_QR_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const TABLE_QR_PATTERN = /^table-[a-z0-9_-]+$/i;
 const PAYMENT_QR_PATTERN = /^payment-counter-[a-z0-9_-]+$/i;
 const MANAGER_QR_PATTERN = /^manager-[a-z0-9_-]+$/i;
 

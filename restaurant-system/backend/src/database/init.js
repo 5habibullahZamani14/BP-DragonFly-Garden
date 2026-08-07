@@ -31,9 +31,21 @@
  *   grand_archive_logs  System-wide audit log for all significant actions
  */
 
+/*
+ * Import whatever is exported from the "db.js" file located in the same folder.
+ * The "." in "./db" means the current directory. The require() function loads
+ * the exported value from that file, and the returned value is stored in a
+ * constant named "db" so it can be used throughout this file.
+ */
 const db = require("./db");
 
 /*
+ * Define a function named "run" that accepts an SQL statement as its parameter.
+ * The function returns a Promise so that the database operation can be handled
+ * asynchronously. Inside the Promise, db.run() executes the SQL statement. If
+ * the database reports an error, the Promise is rejected with that error. If
+ * the SQL statement executes successfully, the Promise is resolved without
+ * returning any value.
  * run wraps db.run in a Promise so I can use async/await instead of nested
  * callbacks. It resolves with the SQLite statement context (which has
  * lastID and changes) on success, or rejects with the error on failure.

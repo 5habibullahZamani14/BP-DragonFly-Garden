@@ -4,7 +4,7 @@
  * I wrote this module to keep all the status-history SQL in one place. Every
  * time an order's status changes, the controller calls recordStatusChange to
  * insert a timestamped row into the order_status_history table. This gives
- * both the kitchen crew and the manager a complete audit trail of how each
+ * both fulfilment staff and the manager a complete audit trail of how each
  * order moved through the system.
  *
  * The query helpers (run, all) are defined locally here because this module
@@ -41,7 +41,7 @@ const all = (sql, params = []) =>
 /*
  * recordStatusChange inserts a new row into order_status_history whenever
  * an order's status changes. The changedBy parameter identifies who or what
- * triggered the change — for example "kitchen" when a crew member updates
+ * triggered the change — for example "staff" when a staff member updates
  * status, or "system" for automated archiving.
  */
 const recordStatusChange = async (orderId, newStatus, changedBy = "system") => {

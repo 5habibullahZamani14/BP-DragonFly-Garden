@@ -278,11 +278,12 @@ const splitPayment = async (orderId, paymentData) => {
     throw createHttpError(400, "No valid items selected for split payment");
   }
 
-  // Calculate split total with service and VAT
+  // Calculate split total with service and VAT using exact integer cents math.
   const toCents = (val) => Math.round(Number(val) * 100);
-  const splitService = (splitSubtotalCents * toCents(order.service_charge_rate || 0.1)) / 10000;
-  const splitTax = ((splitSubtotalCents + splitService) * toCents(order.vat_rate || 0.06)) / 10000;
-  const splitTotalWithVat = (splitSubtotalCents + splitService + splitTax) / 100;
+  const splitServiceCents = Math.round(splitSubtotalCents * (order.service_charge_rate || 0.1));
+  const splitTaxCents = Math.round((splitSubtotalCents + splitServiceCents) * (order.vat_rate || 0.06));
+  const splitTotalWithVatCents = splitSubtotalCents + splitServiceCents + splitTaxCents;
+  const splitTotalWithVat = splitTotalWithVatCents / 100;
 
   await run("BEGIN TRANSACTION");
 
@@ -315,6 +316,15 @@ const splitPayment = async (orderId, paymentData) => {
         [splitOrderId, item.menu_item_id, qtyToSplit, item.price_at_order_time, item.notes, item.options_json]
       );
     }
+
+    // Record payment against the split receipt order
+    await run(
+      `
+        INSERT INTO payments (order_id, payment_method_id, amount_paid, employee_id, employee_name)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      [splitOrderId, payment_method_id, splitTotalWithVat, employee_id, employee_name]
+    );
 
     // Record payment against original order
     await run(
@@ -534,6 +544,38 @@ const addOrderItem = async (req, res) => {
       `,
       [orderId, menu_item_id, quantity, basePrice, notes]
     );
+
+    const recipeIngredients = await all(
+      `SELECT m.inventory_item_id, m.quantity_required, i.usage_conversion, i.name
+       FROM menu_item_ingredients m
+       JOIN inventory_items i ON m.inventory_item_id = i.id
+       WHERE m.menu_item_id = ?`,
+      [menu_item_id]
+    );
+
+    for (const ing of recipeIngredients) {
+      const amountToDeduct = (ing.quantity_required * quantity) / (ing.usage_conversion || 1.0);
+      await run(
+        `UPDATE inventory_items SET current_stock = current_stock - ? WHERE id = ?`,
+        [amountToDeduct, ing.inventory_item_id]
+      );
+
+      if (ing.name) {
+        await run(
+          `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name, details)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            "INVENTORY",
+            "DEDUCT",
+            "System (Payment Counter)",
+            ing.inventory_item_id.toString(),
+            ing.name,
+            JSON.stringify({ Deducted: amountToDeduct, Ingredient: ing.name, Menu_Item_Id: menu_item_id, Order: `#${orderId}` })
+          ]
+        );
+      }
+    }
+
     /*
      * Reset payment_status to "partially_paid" if it was already "paid",
      * because the order total has now increased.
@@ -557,7 +599,7 @@ const addOrderItem = async (req, res) => {
 
   const updatedOrder = await fetchOrderWithPayments(orderId);
 
-  // Broadcast the order update so payment counters and kitchen UIs refresh
+  // Broadcast the order update so payment counters refresh
   const broadcast = getBroadcast();
   if (broadcast && updatedOrder) {
     try {

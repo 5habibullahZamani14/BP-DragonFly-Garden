@@ -31,7 +31,7 @@
  *      all devices in the cafe.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -451,7 +451,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     return savedLogin?.token || null;
   }, [loggedInEmployee]);
 
-  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
+  const isWebSocketConnected = useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
     if (event.type === "CALL_WAITER") {
       const request = event.payload as StaffAssistanceRequest;
       setAssistanceRequests((current) => {
@@ -474,6 +474,39 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   }, getPaymentCounterToken);
 
+  const serverDisconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!loggedInEmployee) {
+      if (serverDisconnectTimer.current) {
+        clearTimeout(serverDisconnectTimer.current);
+        serverDisconnectTimer.current = null;
+      }
+      return;
+    }
+
+    if (isWebSocketConnected) {
+      if (serverDisconnectTimer.current) {
+        clearTimeout(serverDisconnectTimer.current);
+        serverDisconnectTimer.current = null;
+      }
+      return;
+    }
+
+    if (!serverDisconnectTimer.current) {
+      serverDisconnectTimer.current = window.setTimeout(() => {
+        notify("error", t("payment.serverDisconnected", "Server connection lost. You have been logged out."));
+        handleLogout();
+      }, 8000);
+    }
+
+    return () => {
+      if (serverDisconnectTimer.current) {
+        clearTimeout(serverDisconnectTimer.current);
+        serverDisconnectTimer.current = null;
+      }
+    };
+  }, [isWebSocketConnected, loggedInEmployee, notify, t]);
+
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {
       notify("error", t("payment.fillDetails"));
@@ -481,12 +514,27 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
 
     const parsedAmount = parseFloat(paymentAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      notify("error", t("payment.invalidAmount"));
+      return;
+    }
+
+    const paymentMethodId = parseInt(selectedPaymentMethod, 10);
+    if (!Number.isInteger(paymentMethodId) || paymentMethodId <= 0) {
+      notify("error", t("payment.invalidMethod"));
+      return;
+    }
+
     const finalAmount = Math.min(parsedAmount, selectedOrder.remaining);
+    if (finalAmount <= 0) {
+      notify("error", t("payment.invalidAmount"));
+      return;
+    }
 
     setIsProcessing(true);
     try {
       const paymentOrder = await processPayment(qrCode, selectedOrder.id, {
-        payment_method_id: parseInt(selectedPaymentMethod),
+        payment_method_id: paymentMethodId,
         amount_paid: finalAmount,
         employee_id: loggedInEmployee.id,
         employee_name: loggedInEmployee.name
@@ -516,8 +564,34 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   };
 
   const handleProcessSplitPayment = async () => {
+    if (!selectedOrder || !selectedPaymentMethod || !loggedInEmployee) {
+      notify("error", t("payment.selectItemsToPay"));
+      return;
+    }
+
     const selectedItems = Object.keys(splitItemsQuantities).length;
-    if (!selectedOrder || selectedItems === 0 || !selectedPaymentMethod || !loggedInEmployee) {
+    if (selectedItems === 0) {
+      notify("error", t("payment.selectItemsToPay"));
+      return;
+    }
+
+    const paymentMethodId = parseInt(selectedPaymentMethod, 10);
+    if (!Number.isInteger(paymentMethodId) || paymentMethodId <= 0) {
+      notify("error", t("payment.invalidMethod"));
+      return;
+    }
+
+    const normalizedSplitItems: Record<number, number> = {};
+    for (const [itemIdString, qty] of Object.entries(splitItemsQuantities)) {
+      const itemId = Number(itemIdString);
+      if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isFinite(qty) || qty <= 0) {
+        notify("error", t("payment.invalidSplitItems"));
+        return;
+      }
+      normalizedSplitItems[itemId] = qty;
+    }
+
+    if (Object.keys(normalizedSplitItems).length === 0) {
       notify("error", t("payment.selectItemsToPay"));
       return;
     }
@@ -525,8 +599,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     setIsProcessing(true);
     try {
       const result = await processSplitPayment(qrCode, selectedOrder.id, {
-        payment_method_id: parseInt(selectedPaymentMethod),
-        split_items: splitItemsQuantities,
+        payment_method_id: paymentMethodId,
+        split_items: normalizedSplitItems,
         employee_id: loggedInEmployee.id,
         employee_name: loggedInEmployee.name
       });
@@ -560,10 +634,17 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         return;
     }
 
+    const menuItemId = parseInt(newItemId, 10);
+    const quantity = parseInt(newItemQuantity, 10);
+    if (!Number.isInteger(menuItemId) || menuItemId <= 0 || !Number.isInteger(quantity) || quantity <= 0) {
+      notify("error", t("payment.invalidItemQuantity"));
+      return;
+    }
+
     try {
         await addOrderItem(qrCode, selectedOrder.id, {
-            menu_item_id: parseInt(newItemId),
-            quantity: parseInt(newItemQuantity),
+            menu_item_id: menuItemId,
+            quantity,
             employee_id: loggedInEmployee.id,
             employee_name: loggedInEmployee.name,
         });

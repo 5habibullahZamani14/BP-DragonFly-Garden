@@ -94,6 +94,7 @@ export const InventoryTab = ({
   const [complexityLimit, setComplexityLimit] = useState("10");
   const [stockCategoryFilter, setStockCategoryFilter] = useState("all");
   const [stockSearchQuery, setStockSearchQuery] = useState("");
+  const [restockInputs, setRestockInputs] = useState<Record<number, string>>({});
 
   useEffect(() => {
     loadData();
@@ -119,7 +120,9 @@ export const InventoryTab = ({
     try {
       setLoading(true);
       const invData = await fetchInventory();
-      setInventory(invData || []);
+      const inventoryItems = invData || [];
+      setInventory(inventoryItems);
+      setRestockInputs(inventoryItems.reduce((acc, item) => ({ ...acc, [item.id]: String(item.current_stock) }), {}));
 
       const menuData = await fetchMenuItems("");
       setMenuItems(menuData || []);

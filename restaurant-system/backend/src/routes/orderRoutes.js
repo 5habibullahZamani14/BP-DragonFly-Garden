@@ -2,13 +2,13 @@
  * orderRoutes.js — HTTP routes for order management.
  *
  * This is the most complex route file in the application because orders
- * are central to everything: customers create them, the kitchen processes
+ * are central to everything: customers create them, fulfilment staff process
  * them, and the payment counter closes them. The route factory receives
  * the broadcast function from server.js so it can push real-time WebSocket
  * events to all connected clients whenever order state changes.
  *
  * Routes that modify order state (status updates, archiving) are protected
- * by requireKitchenCrew so that only kitchen crew QR holders can call them.
+ * by role-based guards so that only authorised order staff can call them.
  * Order creation is open to any connected device because customers and
  * waiters both need to place orders.
  */
@@ -27,13 +27,14 @@ const {
   customerArchiveOrder,
   getCustomerArchivedOrdersForTable,
 } = require("../controllers/orderController");
-const { fetchOrderWithPayments } = require("../controllers/paymentController");
+const { fetchOrderWithPayments, processPayment } = require("../controllers/paymentController");
 const {
   asyncHandler,
   validateOrderCreation,
   validateStatusUpdate,
   validateOrderIdParam,
   validateOrderQuery,
+  validatePaymentCreation,
 } = require("../middleware/validation");
 const { requirePaymentCounter, ROLES } = require("../middleware/role-based-access");
 const { verifyJwtToken, requirePaymentToken } = require("../middleware/jwt-auth");
@@ -104,12 +105,12 @@ const orderRoutes = (broadcast) => {
    * POST /orders
    * Creates a new order. The request body must contain table_id and an items
    * array (validated by validateOrderCreation). After the order is saved, a
-   * NEW_ORDER event is broadcast over WebSocket so the kitchen view updates
-   * in real time without polling.
+   * NEW_ORDER event is broadcast over WebSocket so the relevant front-end
+   * views update in real time without polling.
    */
   router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
     if (req.userRole !== ROLES.CUSTOMER_WAITER) {
-      verifyJwtToken(req, [ROLES.PAYMENT_COUNTER]);
+      await verifyJwtToken(req, [ROLES.PAYMENT_COUNTER]);
     }
 
     const { order, isAddOn, newItems } = await createOrder(req.body);
@@ -246,12 +247,10 @@ const orderRoutes = (broadcast) => {
     res.json(order);
   }));
 
-  router.patch("/:id/pay", requirePaymentToken, asyncHandler(async (req, res) => {
-    const { markOrderPaid, getOrder } = require("../controllers/orderController");
-    await markOrderPaid(req.params.id);
-    const order = await getOrder(req.params.id);
-    broadcast({ type: "ORDER_STATUS_CHANGED", payload: order });
-    res.json(order);
+  router.patch("/:id/pay", requirePaymentToken, validateOrderIdParam, validatePaymentCreation, asyncHandler(async (req, res) => {
+    const payment = await processPayment(req.params.id, req.body);
+    broadcast({ type: "NEW_PAYMENT", payload: payment });
+    res.json(payment);
   }));
 
   /*

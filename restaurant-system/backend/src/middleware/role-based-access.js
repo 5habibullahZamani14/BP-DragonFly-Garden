@@ -2,20 +2,19 @@
  * role-based-access.js — QR-code-based role detection and access control.
  *
  * This is the core security layer of the application. Because the system
- * has no traditional login screen for customers or kitchen crew, I needed
+ * has no traditional login screen for customers or staff, I needed
  * a different way to know who is making each request. The solution is to
  * embed the user's role in the QR code they scan to enter the application.
  *
  * When a customer scans their table QR code, the URL they land on contains
- * a parameter like ?qr=table-3. When kitchen crew scan their dedicated QR
- * code, the URL contains ?qr=kitchen-crew-main. This middleware reads that
+ * a parameter like ?qr=table-3. When the payment counter staff scan their QR
+ * code, the URL contains ?qr=payment-counter-main. This middleware reads that
  * parameter on every incoming request and attaches the resolved role to the
  * request object. Route handlers and controllers then check req.userRole
  * instead of a session token.
  *
  * The four roles in this system are:
  *   customer_waiter   — Scanning a table QR. Can browse the menu and place orders.
- *   kitchen_crew      — Scanning the kitchen QR. Can view and update order status.
  *   payment_counter   — Scanning the payment QR. Can process payments.
  *   manager           — Scanning the manager QR. Can access the full dashboard.
  */
@@ -49,7 +48,7 @@ const QR_PATTERNS = {
 
 /*
  * getRoleFromQRCode reads the QR code string and returns the matching role.
- * The order of checks matters: more specific patterns (manager, kitchen) are
+ * The order of checks matters: more specific patterns (manager, payment) are
  * tested before the general table pattern to avoid any ambiguity.
  * Returns null if the QR code does not match any known pattern.
  */

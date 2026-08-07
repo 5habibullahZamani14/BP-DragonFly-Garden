@@ -13,7 +13,7 @@ This plan is tailored for the BP-DragonFly-Garden repository and focuses on hard
 - Backend architecture has process-local scheduling and SQLite usage that may not scale or recover cleanly.
 
 ## Why this matters
-- Unauthorized access can expose kitchen and payment workflows, order controls, and sensitive management operations.
+- Unauthorized access can expose fulfillment and payment workflows, order controls, and sensitive management operations.
 - Weak secrets and plaintext credentials make the service vulnerable to simple attacks and credential leaks.
 - Poor asset delivery and uncompressed uploads slow page load times and waste network bandwidth on low-power terminals.
 - Unstable hotspot connections or noisy Wi-Fi can cause client disconnects, page reloads, and poor user experience.
@@ -36,7 +36,7 @@ This plan is tailored for the BP-DragonFly-Garden repository and focuses on hard
 - Replace `qr_code` query-based role derivation with strong session or token authentication.
   - Keep QR codes for initial device pairing if needed, but exchange them for a signed session token immediately.
   - Do not trust `req.query.qr` for each request.
-- Implement proper auth flow for kitchen, payment counter, and manager roles.
+- Implement proper auth flow for fulfillment, payment counter, and manager roles.
   - Use email/password or strong OTP for manager login.
   - For staff roles, issue signed JWTs after verifying device registration or a one-time QR-based handshake.
 - Remove any fallback JWT secret such as `JWT_SECRET || "fallback_secret"`.
@@ -47,7 +47,7 @@ This plan is tailored for the BP-DragonFly-Garden repository and focuses on hard
   - Avoid sending the manager `username` and `password` in reset emails.
   - Use a one-time reset token with expiry instead of returning credentials in plaintext.
 - Add `requireRole` middleware that checks decoded JWT role claims and permissions.
-  - Protect routes like `/orders/:orderId/kitchen`, `/orders/:orderId/payment`, management CRUD, backups, and restore actions.
+  - Protect routes like `/orders/:orderId/payment`, management CRUD, backups, and restore actions.
 
 ### 2. Secure request handling and network hardening
 - Replace `app.use(cors())` with a stricter CORS policy.

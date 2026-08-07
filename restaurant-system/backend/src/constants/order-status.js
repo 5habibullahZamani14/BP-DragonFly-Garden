@@ -8,13 +8,13 @@
  * silent failures in status comparisons.
  *
  * The lifecycle is linear: queue → preparing → ready.
- * An order cannot go backwards, and once it is ready, the kitchen crew
- * archives it rather than moving it to another status.
+ * An order cannot go backwards, and once it is ready, fulfilment staff
+ * archive it rather than moving it to another status.
  */
 
 const ORDER_STATUS = {
-  QUEUE: "queue",         // Order placed, waiting in the kitchen queue
-  PREPARING: "preparing", // Kitchen has started working on the order
+  QUEUE: "queue",         // Order placed, waiting in the order queue
+  PREPARING: "preparing", // Staff has started working on the order
   READY: "ready"          // Order is finished and ready to be served
 };
 
@@ -30,8 +30,8 @@ const STATUS_TRANSITIONS = {
   [ORDER_STATUS.READY]: []
 };
 
-/* All statuses the kitchen crew can see on their monitoring board. */
-const KITCHEN_VISIBLE_STATUSES = [
+/* All statuses fulfilment staff can see on their monitoring view. */
+const ORDER_FULFILLMENT_VISIBLE_STATUSES = [
   ORDER_STATUS.QUEUE,
   ORDER_STATUS.PREPARING,
   ORDER_STATUS.READY
@@ -73,7 +73,7 @@ const getStatusDescription = (status) => {
 module.exports = {
   ORDER_STATUS,
   STATUS_TRANSITIONS,
-  KITCHEN_VISIBLE_STATUSES,
+  ORDER_FULFILLMENT_VISIBLE_STATUSES,
   CUSTOMER_VISIBLE_STATUSES,
   ALL_STATUSES,
   isValidTransition,

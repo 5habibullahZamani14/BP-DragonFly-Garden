@@ -2,15 +2,15 @@
  * useWebSocket.ts — Custom React hook for the WebSocket connection.
  *
  * This hook manages the lifecycle of a single WebSocket connection to the
- * backend server. Any component that needs real-time updates (KitchenView,
- * CustomerView, PaymentCounterView) calls this hook with the event types it
- * cares about and a callback to handle those events.
+ * backend server. Any component that needs real-time updates (CustomerView,
+ * PaymentCounterView) calls this hook with the event types it cares about and a
+ * callback to handle those events.
  *
  * Design decisions worth noting:
  *
  *   Automatic reconnection: If the connection drops (server restart, network
  *   blip), the hook waits 3 seconds and reconnects automatically. This is
- *   important for the kitchen view — the crew cannot miss an incoming order
+ *   important for real-time updates — staff should not miss an incoming order
  *   because of a temporary connection loss.
  *
  *   Stable refs for callback and eventTypes: I use useRef to store the latest

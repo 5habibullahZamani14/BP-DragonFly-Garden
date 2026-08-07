@@ -12,7 +12,6 @@ const KEYS = {
   "m.profileNameRequired": L("Name and Manager ID are required.", "الاسم ومعرف المدير مطلوبان.", "姓名和管理员 ID 为必填项。", "Nama dan ID Pengurus diperlukan.", "نام و شناسه مدیر الزامی است.", "नाम और मैनेजर ID आवश्यक हैं।"),
   "m.passwordMismatch": L("Passwords do not match.", "كلمات المرور غير متطابقة.", "密码不一致。", "Kata laluan tidak sepadan.", "رمزهای عبور مطابقت ندارند.", "पासवर्ड मेल नहीं खाते।"),
   "m.profileSaveFailed": L("Failed to save. Please try again.", "فشل الحفظ. حاول مرة أخرى.", "保存失败，请重试。", "Gagal menyimpan. Sila cuba lagi.", "ذخیره ناموفق. دوباره تلاش کنید.", "सहेजने में विफल। पुनः प्रयास करें।"),
-  "m.kitchenPassPlaceholder": L("Enter new kitchen passcode...", "أدخل رمز المطبخ الجديد...", "输入新厨房密码...", "Masukkan kod dapur baharu...", "رمز آشپزخانه جدید را وارد کنید...", "नया रसोई पासकोड दर्ज करें..."),
   "m.newPasswordPlaceholder": L("New password...", "كلمة مرور جديدة...", "新密码...", "Kata laluan baharu...", "رمز عبور جدید...", "नया पासवर्ड..."),
   "m.confirmPasswordPlaceholder": L("Repeat new password...", "أعد كلمة المرور...", "重复新密码...", "Ulang kata laluan...", "تکرار رمز عبور...", "पासवर्ड दोहराएँ..."),
   "m.forgotDesc": L("Forgot your password? Enter your registered email and we will send your credentials to you.", "نسيت كلمة المرور؟ أدخل بريدك المسجل وسنرسل بيانات الدخول.", "忘记密码？输入注册邮箱，我们将发送凭据。", "Lupa kata laluan? Masukkan e-mel berdaftar dan kami akan hantar butiran log masuk.", "رمز را فراموش کردید؟ ایمیل ثبت‌شده را وارد کنید.", "पासवर्ड भूल गए? पंजीकृत ईमेल दर्ज करें, हम विवरण भेजेंगे।"),

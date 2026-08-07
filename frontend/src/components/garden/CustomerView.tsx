@@ -585,11 +585,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     pendingCartRef.current = snapshot;
     setConfirmCountdown(5);
     setCartOpen(false);
+    if (confirmIntervalRef.current) {
+      clearInterval(confirmIntervalRef.current);
+    }
     confirmIntervalRef.current = setInterval(() => {
       setConfirmCountdown(prev => {
         if (prev <= 1) {
-          clearInterval(confirmIntervalRef.current!);
-          confirmIntervalRef.current = null;
+          if (confirmIntervalRef.current) {
+            clearInterval(confirmIntervalRef.current);
+            confirmIntervalRef.current = null;
+          }
           confirmOrder();
           return 0;
         }
@@ -648,12 +653,24 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   // Cancel during countdown — return to cart
   const cancelConfirmation = () => {
-    if (confirmIntervalRef.current) { clearInterval(confirmIntervalRef.current); confirmIntervalRef.current = null; }
+    if (confirmIntervalRef.current) {
+      clearInterval(confirmIntervalRef.current);
+      confirmIntervalRef.current = null;
+    }
     pendingCartRef.current = null;
     setPendingCart(null);
     setConfirmCountdown(5);
     setCartOpen(true);
   };
+
+  useEffect(() => {
+    return () => {
+      if (confirmIntervalRef.current) {
+        clearInterval(confirmIntervalRef.current);
+        confirmIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Archive a ready order after the user confirms (or countdown runs out)
   const archiveOrder = useCallback(async (orderId: number) => {

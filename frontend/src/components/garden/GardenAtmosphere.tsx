@@ -11,7 +11,7 @@
  *     with randomised positions, speeds, and sizes. I store them in state
  *     rather than computing them at render time so they stay stable across
  *     re-renders without causing layout thrash.
- *     The disableEffects prop lets staff views (kitchen, payment, manager)
+ *     The disableEffects prop lets staff views (payment, manager)
  *     opt out of the particle animations — the glow blobs still show but
  *     the moving elements are suppressed for a cleaner working interface.
  *

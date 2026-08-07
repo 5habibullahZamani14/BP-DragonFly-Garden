@@ -44,7 +44,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
  * Enable Write-Ahead Logging (WAL) mode. By default, SQLite uses a rollback
  * journal, which means only one connection can access the file at a time.
  * WAL mode allows readers and one writer to operate concurrently, which
- * improves performance noticeably when the kitchen, payment counter, and
+ * improves performance noticeably when the payment counter and
  * customer views are all querying the database at the same time.
  */
 db.run("PRAGMA journal_mode = WAL;");

@@ -211,7 +211,7 @@ const validateOrderCreation = (req, res, next) => {
 /*
  * validateStatusUpdate checks that the request body contains a valid status
  * string for a PATCH /orders/:id/status request. It normalises to lowercase
- * so the kitchen crew does not have to worry about capitalisation.
+ * so staff do not have to worry about capitalisation.
  */
 const validateStatusUpdate = (req, res, next) => {
   const rawStatus = req.body?.status;

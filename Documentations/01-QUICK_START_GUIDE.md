@@ -141,7 +141,7 @@ The OS is like Windows for your Pi. It makes the Pi work.
 ### What to do next:
 - The system is now running
 - Customers can connect to the WiFi and order
-- Kitchen staff can see orders
+- Fulfillment staff can see orders
 - Payment counter can process payments
 
 ---

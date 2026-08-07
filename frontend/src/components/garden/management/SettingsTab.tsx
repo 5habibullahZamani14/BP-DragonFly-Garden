@@ -3,7 +3,6 @@
  *
  * I created this component to centralize all restaurant-wide settings, including:
  *   • Working hours that trigger automatic employee logout.
- *   • Kitchen passcode management for secure board access.
  *   • Manager profile editing with password change support.
  *   • Password recovery via email using the RESEND service.
  *
@@ -35,9 +34,6 @@ export const SettingsTab = () => {
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaved, setHoursSaved] = useState(false);
 
-  const [kitchenPasscode, setKitchenPasscode] = useState("");
-  const [passcodeSaved, setPasscodeSaved] = useState(false);
-  const [showPasscode, setShowPasscode] = useState(false);
   const [captivePortalTarget, setCaptivePortalTarget] = useState("http://10.42.0.1:5000/");
   const [captivePortalSaving, setCaptivePortalSaving] = useState(false);
   const [captivePortalSaved, setCaptivePortalSaved] = useState(false);
@@ -179,7 +175,6 @@ export const SettingsTab = () => {
     try {
       data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
-      if (data?.kitchen_passcode) setKitchenPasscode(String(data.kitchen_passcode));
       if (data?.captive_portal_target) setCaptivePortalTarget(data.captive_portal_target);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
       if (data?.hotspot_ssid) setHotspotSsid(String(data.hotspot_ssid));
@@ -834,13 +829,6 @@ export const SettingsTab = () => {
         setTimeout(() => setHoursSaved(false), 2500);
       }
     );
-  };
-
-  const savePasscode = async () => {
-    if (!kitchenPasscode.trim()) return;
-    await updateSetting("kitchen_passcode", kitchenPasscode.trim());
-    setPasscodeSaved(true);
-    setTimeout(() => setPasscodeSaved(false), 2500);
   };
 
   const saveCaptivePortalTarget = async () => {

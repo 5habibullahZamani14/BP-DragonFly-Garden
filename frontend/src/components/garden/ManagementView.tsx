@@ -9,7 +9,7 @@
  *
  *   1. Secure Authentication: I implemented a two-step login process.
  *      Successful logins are stored in localStorage with a 7-day expiry
- *      (matching the kitchen's session model). I also built a password
+ *      (matching the shared staff session model). I also built a password
  *      recovery flow that uses the backend email service (Resend) to
  *      send credentials to the manager's registered email.
  *
@@ -224,7 +224,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, [isLoggedIn]);
 
-  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
+  const isWebSocketConnected = useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
     if (isLoggedIn) loadNotifications();
   }, () => {
     const saved = localStorage.getItem("managerLogin");
@@ -235,6 +235,39 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       return null;
     }
   });
+
+  const managerDisconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isLoggedIn) {
+      if (managerDisconnectTimer.current) {
+        clearTimeout(managerDisconnectTimer.current);
+        managerDisconnectTimer.current = null;
+      }
+      return;
+    }
+
+    if (isWebSocketConnected) {
+      if (managerDisconnectTimer.current) {
+        clearTimeout(managerDisconnectTimer.current);
+        managerDisconnectTimer.current = null;
+      }
+      return;
+    }
+
+    if (!managerDisconnectTimer.current) {
+      managerDisconnectTimer.current = window.setTimeout(() => {
+        notify("error", t("manager.serverDisconnected", "Server connection lost. You have been logged out."));
+        handleLogout();
+      }, 8000);
+    }
+
+    return () => {
+      if (managerDisconnectTimer.current) {
+        clearTimeout(managerDisconnectTimer.current);
+        managerDisconnectTimer.current = null;
+      }
+    };
+  }, [isLoggedIn, isWebSocketConnected, notify, t]);
 
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {

@@ -8,7 +8,7 @@
  *
  * Like orderRoutes, this file is a factory that accepts the broadcast function
  * so it can push a NEW_PAYMENT WebSocket event whenever a payment is processed,
- * allowing the kitchen and management views to reflect the updated payment
+ * allowing the payment counter and management views to reflect the updated payment
  * status without a page reload.
  */
 

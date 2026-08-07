@@ -205,8 +205,8 @@ wss.on("connection", (ws, req) => {
  */
 /**
  * Determine whether a given WebSocket client should receive this event.
- * Managers (JWT with role=manager) receive everything. Kitchen and
- * payment counters receive events relevant to their workflows. Customers
+ * Managers (JWT with role=manager) receive everything. Payment counters
+ * receive events relevant to their workflows. Customers
  * (table QR) only receive events that reference their table.
  */
 const clientShouldReceive = (client, data) => {
@@ -322,7 +322,7 @@ app.use((req, res, next) => {
 /*
  * The role-detection middleware runs on every request before any route handler.
  * It inspects the qr_code query parameter, figures out what role the caller
- * has (customer, kitchen crew, payment counter, or manager), and attaches that
+ * has (customer, payment counter staff, or manager), and attaches that
  * information to the request object so downstream middleware and controllers
  * can make authorisation decisions. See middleware/role-based-access.js for
  * the full logic.

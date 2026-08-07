@@ -2,11 +2,11 @@
 
 This is the ordering and management system built for BP Dragonfly Garden Cafe Ordering and Management System, a small farm-to-table
 cafe. The system lets customers browse the menu and place orders from their table by scanning a
-QR code, gives the kitchen crew a live view of incoming orders, and provides a payment counter
+QR code, gives staff a live view of incoming orders, and provides a payment counter
 and a manager dashboard for day-to-day operations.
 
 The entire system runs on the local Wi-Fi network inside the cafe. No internet connection is
-required once the server is running. The intended deployment hardware is a Raspberry Pi 4,
+required once the server is running. The intended deployment hardware is a Raspberry Pi 5,
 though it runs equally well on any machine with Node.js installed.
 
 ---
@@ -15,9 +15,9 @@ though it runs equally well on any machine with Node.js installed.
 
 When a customer sits down, they scan the QR code printed on their table. The QR code connects
 their phone to the cafe's local network and opens the web application in their browser. From
-there they can browse the menu, add items to a cart, and place an order. The order goes to the
-kitchen instantly, where the kitchen crew can see it and update its status as it moves from
-queued to preparing to ready.
+there they can browse the menu, add items to a cart, and place an order. The order is visible to
+staff handling order fulfillment, and they can update its status as it moves from queued to
+preparing to ready.
 
 A separate QR code is used by the payment counter staff to view all unpaid orders and process
 payments. Another QR code gives the restaurant manager access to a dashboard where they can
@@ -31,7 +31,7 @@ manage employees, inventory, system settings, and view logs.
 BP-DragonFly-Garden/
   frontend/                  React 18 + Vite + TypeScript frontend application
     src/
-      components/garden/     All main view components (customer, kitchen, payment, management)
+      components/garden/     All main view components (customer, payment, management)
       lib/                   API client, WebSocket hook, accessibility context, shared types
       pages/                 Top-level route pages
   restaurant-system/
@@ -81,9 +81,8 @@ The frontend dev server starts on port 5173. It proxies API requests to the back
 port 5000, so both must be running at the same time during development.
 
 Open http://localhost:5173 in your browser. To simulate a specific role, append the QR
-parameter to the URL: `?qr=table-1` for the customer view, `?qr=kitchen-crew-main` for the
-kitchen view, `?qr=payment-counter-main` for the payment counter, or `?qr=manager-main`
-for the manager dashboard.
+parameter to the URL: `?qr=table-1` for the customer view, `?qr=payment-counter-main` for the
+payment counter, or `?qr=manager-main` for the manager dashboard.
 
 ---
 
@@ -105,8 +104,6 @@ Notes:
   password will be migrated automatically to a secure bcrypt hash.
 
 Security recommendations:
-- Change the default kitchen passcode stored in `DEFAULT_KITCHEN_PASSCODE` (backend controller)
-  or set `kitchen_passcode` via the Settings tab in the manager dashboard after first startup.
 - Replace any placeholder API keys in `restaurant-system/backend/.env` (e.g. `RESEND_API_KEY`, `GROQ_API_KEY`) before deploying.
 
 The frontend reads from `frontend/.env`. The only variable is `VITE_API_BASE`, which should

@@ -3,7 +3,7 @@
  *
  * This controller handles the complete order lifecycle: creation, status
  * updates, archiving, and retrieval in various formats for the different
- * views (customer, kitchen, management). The most important function here
+ * views (customer, payment counter, management). The most important function here
  * is createOrder, which uses a database transaction to ensure that the order
  * row and all its item rows are written atomically — if any insert fails,
  * the whole order is rolled back so the database never ends up in a partial state.
@@ -163,7 +163,7 @@ const createOrder = async (orderData) => {
   const placeholders = uniqueMenuItemIds.map(() => "?").join(", ");
   const menuItems = await all(
     `
-      SELECT id, name, price, is_available, is_promo, promo_affects_price, promo_discount_percent
+      SELECT id, name, price, category, is_available, is_promo, promo_affects_price, promo_discount_percent
       FROM menu_items
       WHERE id IN (${placeholders})
     `,
@@ -438,102 +438,6 @@ const getOrders = async (filters) => {
 };
 
 /*
- * getKitchenOrders returns all active, non-archived orders for the kitchen board.
- * The result is assembled row-by-row from a join — SQLite does not support
- * JSON aggregation, so I collect flat rows and group them in JavaScript instead.
- * Orders are sorted oldest-first (FIFO) so the kitchen crew works through them
- * in the order they were received.
- */
-const getKitchenOrders = async (filters) => {
-  const { status } = filters;
-
-    let query = `
-    SELECT
-      o.id,
-      o.table_id,
-      t.table_number,
-      o.status,
-      o.total_price,
-      o.created_at,
-      o.order_type,
-      o.customer_name,
-      o.customer_phone,
-      o.collection_time,
-      o.delivery_address,
-      o.vat_rate,
-      o.service_charge_rate,
-      o.order_remarks,
-      (o.total_price * (1 + o.service_charge_rate) * (1 + o.vat_rate)) AS total_with_vat,
-      oi.id AS order_item_id,
-      oi.menu_item_id,
-      oi.quantity,
-      oi.price_at_order_time,
-      oi.notes,
-      oi.item_status,
-      mi.name AS item_name
-    FROM orders o
-    INNER JOIN tables t ON t.id = o.table_id
-    LEFT JOIN order_items oi ON oi.order_id = o.id
-    LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-    WHERE o.status IN ('queue', 'preparing', 'ready') AND o.kitchen_archived_at IS NULL
-  `;
-  const params = [];
-
-  if (status) {
-    query += ` AND o.status = ?`;
-    params.push(status);
-  }
-
-  query += ` ORDER BY o.created_at ASC, o.id ASC, oi.id ASC`;
-
-  const rows = await all(query, params);
-
-  /* Group flat rows into nested order objects with an items array. */
-  const orders = [];
-  const orderMap = new Map();
-
-  for (const row of rows) {
-    if (!orderMap.has(row.id)) {
-      const order = {
-        id: row.id,
-        table_id: row.table_id,
-        table_number: row.table_number,
-        status: row.status,
-        total_price: row.total_price,
-        created_at: row.created_at,
-        order_type: row.order_type,
-        customer_name: row.customer_name,
-        customer_phone: row.customer_phone,
-        collection_time: row.collection_time,
-        delivery_address: row.delivery_address,
-        vat_rate: row.vat_rate,
-        service_charge_rate: row.service_charge_rate,
-        order_remarks: row.order_remarks,
-        total_with_vat: row.total_with_vat,
-        items: []
-      };
-
-      orderMap.set(row.id, order);
-      orders.push(order);
-    }
-
-    if (row.order_item_id) {
-      orderMap.get(row.id).items.push({
-        id: row.order_item_id,
-        menu_item_id: row.menu_item_id,
-        item_name: row.item_name,
-        item_status: row.item_status,
-        quantity: row.quantity,
-        price_at_order_time: row.price_at_order_time,
-        notes: row.notes
-      });
-    }
-  }
-
-  return orders;
-};
-
-/*
  * updateOrderStatus updates an order's overall status. The transition is not
  * currently enforced against STATUS_TRANSITIONS (that validation happens in the
  * route middleware) so this function simply writes the new status and returns
@@ -629,33 +533,11 @@ const getCustomerArchivedOrdersForTable = async (tableId) => {
   return orders.filter(Boolean);
 };
 
-/* kitchenArchiveOrder timestamps the kitchen_archived_at column to clear an order from the board. */
-const kitchenArchiveOrder = async (orderId) => {
-  await run(`UPDATE orders SET kitchen_archived_at = CURRENT_TIMESTAMP WHERE id = ?`, [orderId]);
-  return fetchOrderById(orderId);
-};
-
-/*
- * getKitchenArchivedOrders returns orders the kitchen has cleared today.
- * The limit of 50 and the date filter keep the history panel manageable.
- */
-const getKitchenArchivedOrders = async () => {
-  const rows = await all(
-    `SELECT id FROM orders
-     WHERE kitchen_archived_at IS NOT NULL
-       AND date(kitchen_archived_at) = date('now', 'localtime')
-     ORDER BY kitchen_archived_at DESC
-     LIMIT 50`
-  );
-  const orders = await Promise.all(rows.map(r => fetchOrderById(r.id)));
-  return orders.filter(Boolean);
-};
-
 /*
  * archiveYesterdaysOrders runs on server startup and at 01:30 each night.
  * It automatically archives any "ready" orders that were created before today
  * and were never manually archived. This prevents stale orders from previous
- * days from appearing on the kitchen board when staff arrive in the morning.
+ * days from appearing in the active order views when staff arrive in the morning.
  */
 const archiveYesterdaysOrders = async () => {
   try {
@@ -708,14 +590,11 @@ module.exports = {
   createOrder,
   getOrder,
   getOrders,
-  getKitchenOrders,
   updateOrderStatus,
   getActiveTableOrders,
   updateItemStatus,
   customerArchiveOrder,
   getCustomerArchivedOrdersForTable,
-  kitchenArchiveOrder,
-  getKitchenArchivedOrders,
   archiveYesterdaysOrders,
   archiveStaffAssistanceRequests,
   markOrderPaid

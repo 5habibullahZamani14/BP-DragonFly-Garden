@@ -10,7 +10,7 @@
  * WebSocket events.
  *
  * Note on authentication: the manager authenticates via POST /management/auth
- * which returns a JWT. All management routes except the open auth/reset/passcode
+ * which returns a JWT. All management routes except the open auth/reset
  * helpers require that manager JWT bearer token in the Authorization header.
  */
 

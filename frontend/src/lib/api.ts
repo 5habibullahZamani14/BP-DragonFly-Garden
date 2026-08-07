@@ -55,15 +55,26 @@ const apiUrl = (path: string, qrCode?: string) => {
  * so calling code can display or log the failure without inspecting the raw
  * Response object.
  */
-const getStaffToken = (): string | null => {
-  const savedLogin = localStorage.getItem("paymentCounterLogin");
+const getSavedLogin = <T extends { token?: string; expiry?: number }>(storageKey: string): T | null => {
+  const savedLogin = localStorage.getItem(storageKey);
   if (!savedLogin) return null;
   try {
-    const parsed = JSON.parse(savedLogin);
-    return typeof parsed.token === "string" ? parsed.token : null;
+    const parsed = JSON.parse(savedLogin) as T;
+    if (!parsed.token || typeof parsed.token !== "string") return null;
+    if (parsed.expiry && typeof parsed.expiry === "number" && Date.now() >= parsed.expiry) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+    return parsed;
   } catch {
+    localStorage.removeItem(storageKey);
     return null;
   }
+};
+
+const getStaffToken = (): string | null => {
+  const parsed = getSavedLogin<{ token?: string; expiry?: number }>("paymentCounterLogin");
+  return parsed?.token ?? null;
 };
 
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
@@ -75,14 +86,9 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
 
   const headers = new Headers(init?.headers);
   if (isAdminRoute) {
-    const savedLogin = localStorage.getItem("managerLogin");
-    if (savedLogin) {
-      try {
-        const parsed = JSON.parse(savedLogin);
-        if (parsed.token) {
-          headers.set("Authorization", `Bearer ${parsed.token}`);
-        }
-      } catch (e) { /* ignore malformed stored login */ }
+    const parsed = getSavedLogin<{ token?: string; expiry?: number }>("managerLogin");
+    if (parsed?.token) {
+      headers.set("Authorization", `Bearer ${parsed.token}`);
     }
   } else {
     const staffToken = getStaffToken();
@@ -691,13 +697,6 @@ export const fetchTable = async (qr: string) => {
   return { id: m ? Number(m[1]) : 1, table_number: m ? `Table ${m[1]}` : "Table 1" };
 };
 
-// ── Kitchen ───────────────────────────────────────────────────────────────────
-
-/* fetchKitchenOrders returns all active orders for the kitchen board. */
-export const fetchKitchenOrders = async (qr: string): Promise<Order[]> => {
-  return await safeFetch<Order[]>("/orders/kitchen", undefined, qr);
-};
-
 // ── Payment counter ───────────────────────────────────────────────────────────
 
 export const fetchUnpaidOrders = async (qr: string): Promise<PaymentOrder[]> => {
@@ -1012,12 +1011,6 @@ export const customerArchiveOrder = async (qr: string, orderId: number): Promise
 
 export const fetchCustomerArchivedOrders = async (tableId: number, qr: string): Promise<Order[]> =>
   safeFetch<Order[]>(`/orders/customer-archived/${tableId}`, undefined, qr);
-
-export const kitchenArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
-  safeFetch<Order>(`/orders/${orderId}/kitchen-archive`, { method: "PATCH" }, qr);
-
-export const fetchKitchenArchivedOrders = async (qr: string): Promise<Order[]> =>
-  safeFetch<Order[]>(`/orders/kitchen-archived`, undefined, qr);
 
 export const updateOrderStatus = async (qr: string, id: number, status: string) => {
   const data = await safeFetch<Order>(`/orders/${id}/status`, {

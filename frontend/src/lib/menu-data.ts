@@ -103,11 +103,3 @@ export type Order = {
 };
 
 
-export const MOCK_KITCHEN_ORDERS: Order[] = [
-  { id: 1042, status: "queue", table_number: "Table 4", total_price: 36.8,
-    items: [{ id: 1, quantity: 1, item_name: "Ah Ma's Curry", notes: "Less spicy" }, { id: 2, quantity: 1, item_name: "Colour of Night" }] },
-  { id: 1043, status: "preparing", table_number: "Table 7", total_price: 51.4,
-    items: [{ id: 3, quantity: 2, item_name: "Spaghetti Carbonara" }, { id: 4, quantity: 1, item_name: "Mushroom Soup", notes: "Extra truffle oil" }] },
-  { id: 1044, status: "ready", table_number: "Table 2", total_price: 28.4,
-    items: [{ id: 5, quantity: 1, item_name: "Papa Sandwich" }, { id: 6, quantity: 1, item_name: "Tropicana" }] },
-];
