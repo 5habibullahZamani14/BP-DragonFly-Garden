@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
 import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -33,10 +33,6 @@ export const SettingsTab = () => {
   const [hours, setHours] = useState({ start: "09:00", end: "22:00" });
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaved, setHoursSaved] = useState(false);
-
-  const [captivePortalTarget, setCaptivePortalTarget] = useState("http://10.42.0.1:5000/");
-  const [captivePortalSaving, setCaptivePortalSaving] = useState(false);
-  const [captivePortalSaved, setCaptivePortalSaved] = useState(false);
 
   const [profile, setProfile] = useState({ name: "", id: "", email: "", phone: "" });
   const [newPassword, setNewPassword] = useState("");
@@ -65,6 +61,14 @@ export const SettingsTab = () => {
   const [restoreResult, setRestoreResult] = useState<{ message: string; isError: boolean } | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [resetOptions, setResetOptions] = useState<{ key: string; label: string; description: string }[]>([]);
+  const [resetCategory, setResetCategory] = useState<string>("all_data");
+  const [resetConfirmationInput, setResetConfirmationInput] = useState("");
+  const [resetSentenceExpected, setResetSentenceExpected] = useState("");
+  const [resetCodeExpected, setResetCodeExpected] = useState("");
+  const [resetCodeInput, setResetCodeInput] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Tax & service charge settings
   const [sstEnabled, setSstEnabled] = useState(true);
@@ -79,12 +83,6 @@ export const SettingsTab = () => {
   const [patterns, setPatterns] = useState<{ id: number; name: string; image_url: string }[]>([]);
   const [defaultPatternId, setDefaultPatternId] = useState<number | null>(null);
   const [defaultPatternSaved, setDefaultPatternSaved] = useState(false);
-
-  const [hotspotSsid, setHotspotSsid] = useState("");
-  const [hotspotPassword, setHotspotPassword] = useState("");
-  const [hotspotSecurity, setHotspotSecurity] = useState<"WPA"|"WEP"|"nopass">("WPA");
-  const [hotspotSaved, setHotspotSaved] = useState(false);
-  const [hotspotSaving, setHotspotSaving] = useState(false);
 
   // System update state
   const [updateCheckLoading, setUpdateCheckLoading] = useState(false);
@@ -175,18 +173,7 @@ export const SettingsTab = () => {
     try {
       data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
-      if (data?.captive_portal_target) setCaptivePortalTarget(data.captive_portal_target);
       if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
-      if (data?.hotspot_ssid) setHotspotSsid(String(data.hotspot_ssid));
-      if (data?.hotspot_password) setHotspotPassword(String(data.hotspot_password));
-      if (data?.hotspot_security) {
-        const security = String(data.hotspot_security).toUpperCase();
-        if (security === "WEP" || security === "NOPASS") {
-          setHotspotSecurity(security as "WPA"|"WEP"|"nopass");
-        } else {
-          setHotspotSecurity("WPA");
-        }
-      }
       // Load tax settings
       setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
       setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
@@ -210,7 +197,19 @@ export const SettingsTab = () => {
       setProfile({ name: p.name || "", id: p.id || "", email: p.email || "", phone: p.phone || "" });
     } catch (e) { safeConsoleError("Profile load failed", e); }
 
-    await Promise.all([loadBackups(), loadCloudBackups()]);
+    await Promise.all([loadBackups(), loadCloudBackups(), loadResetOptions()]);
+  };
+
+  const loadResetOptions = async () => {
+    try {
+      const data = await fetchDataResetOptions();
+      setResetOptions(data.options || []);
+      setResetCategory(data.options?.[0]?.key || "all_data");
+      setResetSentenceExpected(data.confirmationSentence || "");
+      setResetCodeExpected(data.confirmationCode || "");
+    } catch (e) {
+      safeConsoleError("Failed to load data reset options", e);
+    }
   };
 
   const loadBackups = async () => {
@@ -382,7 +381,7 @@ export const SettingsTab = () => {
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
       // Try direct backend URL to bypass potential proxy issues
-      const backendUrl = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+      const backendUrl = import.meta.env.VITE_API_BASE || "http://127.0.0.1:5000";
       console.log("[discoverPrinters] Fetching from:", `${backendUrl}/management/printers/discover`);
       
       const response = await fetch(`${backendUrl}/management/printers/discover`, {
@@ -831,47 +830,6 @@ export const SettingsTab = () => {
     );
   };
 
-  const saveCaptivePortalTarget = async () => {
-    if (!captivePortalTarget.trim()) return;
-    showConfirmation(
-      "Confirm captive portal redirect",
-      "This will update the customer redirect URL used after Wi-Fi sign-in.",
-      async () => {
-        setCaptivePortalSaving(true);
-        try {
-          await updateSetting("captive_portal_target", captivePortalTarget.trim());
-          setCaptivePortalSaved(true);
-          setTimeout(() => setCaptivePortalSaved(false), 2500);
-        } catch (e) {
-          safeConsoleError("Failed to save captive portal target", e);
-        } finally {
-          setCaptivePortalSaving(false);
-        }
-      }
-    );
-  };
-
-  const saveHotspotSettings = async () => {
-    showConfirmation(
-      "Confirm hotspot settings",
-      "The Wi-Fi hotspot credentials will be updated for customer access.",
-      async () => {
-        setHotspotSaving(true);
-        try {
-          await updateSetting("hotspot_ssid", hotspotSsid.trim());
-          await updateSetting("hotspot_password", hotspotPassword);
-          await updateSetting("hotspot_security", hotspotSecurity);
-          setHotspotSaved(true);
-          setTimeout(() => setHotspotSaved(false), 2500);
-        } catch (e) {
-          safeConsoleError("Failed to save hotspot settings", e);
-        } finally {
-          setHotspotSaving(false);
-        }
-      }
-    );
-  };
-
   const saveProfile = async () => {
     setProfileError("");
     if (!profile.name.trim() || !profile.id.trim()) {
@@ -978,9 +936,69 @@ export const SettingsTab = () => {
     }
   };
 
+  const performRestore = async (filename: string, source: "local" | "cloud") => {
+    setRestoreLoading(filename);
+    setRestoreResult(null);
+
+    try {
+      if (source === "local") {
+        await restoreBackup(filename);
+      } else {
+        await restoreCloudBackup(filename);
+      }
+      setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      setRestoreResult({ message: t("m.restoreFailed", { message: err.message || "Unknown error" }), isError: true });
+    } finally {
+      setRestoreLoading(null);
+    }
+  };
+
   const handleRestoreBackup = async (filename: string, source: "local" | "cloud") => {
-    setActiveRestoreSource(source);
-    setRestoreConfirmFile(filename);
+    showConfirmation(
+      t("m.confirmRestoreBackup"),
+      t("m.confirmRestoreBackupDescription", { filename, source: source === "local" ? t("m.localDevice") : t("m.cloud") }),
+      async () => {
+        await performRestore(filename, source);
+      }
+    );
+  };
+
+  const handlePerformDataReset = async () => {
+    setResetLoading(true);
+    setResetMessage(null);
+    try {
+      const selectedOption = resetOptions.find((option) => option.key === resetCategory);
+      if (!selectedOption) {
+        throw new Error("Please select a reset category.");
+      }
+      const payload: {
+        category: string;
+        confirmationSentence?: string;
+        confirmationCode?: string;
+        confirmationText?: string;
+      } = { category: resetCategory };
+
+      if (selectedOption.key === "all_data") {
+        payload.confirmationSentence = resetConfirmationInput.trim();
+        payload.confirmationCode = resetCodeInput.trim();
+      } else {
+        payload.confirmationText = resetConfirmationInput.trim();
+      }
+
+      await performDataReset(payload);
+      setResetMessage({ text: "✅ Data reset completed successfully.", isError: false });
+      setResetConfirmationInput("");
+      setResetCodeInput("");
+      if (selectedOption.key === "all_data") {
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    } catch (err: any) {
+      setResetMessage({ text: `⚠️ ${err.message || "Reset failed."}`, isError: true });
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const handleDownloadBackup = async (filename: string) => {
@@ -995,28 +1013,6 @@ export const SettingsTab = () => {
   const handleUploadBackupFile = (file: File | null) => {
     setUploadFile(file);
     setUploadError(null);
-  };
-
-  const executeRestore = async () => {
-    const filename = restoreConfirmFile;
-    if (!filename || !activeRestoreSource) return;
-    setRestoreConfirmFile(null);
-    
-    setRestoreLoading(filename);
-    try {
-      if (activeRestoreSource === "local") {
-        await restoreBackup(filename);
-      } else {
-        await restoreCloudBackup(filename);
-      }
-      setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setRestoreResult({ message: t("m.restoreFailed", { message: err.message || "Unknown error" }), isError: true });
-      setRestoreLoading(null);
-    } finally {
-      setActiveRestoreSource(null);
-    }
   };
 
   if (hoursLoading) return (
@@ -1274,91 +1270,6 @@ export const SettingsTab = () => {
             </div>
             <Button onClick={saveHours} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
               {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.saveHours")}
-            </Button>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-
-      <AccordionItem value="captive" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
-          <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Captive Portal Redirect</h3>
-            <p className="text-sm text-muted-foreground font-normal">Configure the local hotspot landing URL for captive portal detection traffic.</p>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="captive-portal-target">Landing URL</Label>
-              <Input
-                id="captive-portal-target"
-                type="url"
-                value={captivePortalTarget}
-                onChange={(e) => setCaptivePortalTarget(e.target.value)}
-                placeholder="http://10.42.0.1:5000/"
-              />
-              <p className="text-xs text-muted-foreground">Use the hotspot gateway address devices can reach after connecting. Defaults to the Raspberry Pi hotspot address.</p>
-            </div>
-            <Button onClick={saveCaptivePortalTarget} disabled={captivePortalSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {captivePortalSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
-                : captivePortalSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
-                : "Save Captive Portal Target"}
-            </Button>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-
-      <AccordionItem value="hotspot" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
-          <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Hotspot Wi-Fi QR</h3>
-            <p className="text-sm text-muted-foreground font-normal">Configure the wireless network details used when printing table hotspot QR codes.</p>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="hotspot-ssid">Wi-Fi SSID</Label>
-                <Input
-                  id="hotspot-ssid"
-                  type="text"
-                  value={hotspotSsid}
-                  onChange={(e) => setHotspotSsid(e.target.value)}
-                  placeholder="Dragonfly Garden"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hotspot-security">Security</Label>
-                <Select value={hotspotSecurity} onValueChange={(value) => setHotspotSecurity(value as "WPA" | "WEP" | "nopass") }>
-                  <SelectTrigger id="hotspot-security">
-                    <SelectValue placeholder="Security" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="WPA">WPA/WPA2</SelectItem>
-                    <SelectItem value="WEP">WEP</SelectItem>
-                    <SelectItem value="nopass">Open network</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {hotspotSecurity !== "nopass" && (
-              <div className="space-y-2">
-                <Label htmlFor="hotspot-password">Wi-Fi Password</Label>
-                <Input
-                  id="hotspot-password"
-                  type="password"
-                  value={hotspotPassword}
-                  onChange={(e) => setHotspotPassword(e.target.value)}
-                  placeholder="Enter network password"
-                />
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">This information is used to generate a secondary hotspot QR code for customers to scan and join the local network before ordering.</p>
-            <Button onClick={saveHotspotSettings} disabled={hotspotSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {hotspotSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
-                : hotspotSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
-                : "Save Hotspot Settings"}
             </Button>
           </div>
         </AccordionContent>
@@ -2054,7 +1965,7 @@ export const SettingsTab = () => {
                       className="rounded-r-none border-r-0 focus-visible:ring-0 focus-visible:border-blue-500"
                     />
                     <div className="h-10 px-3 flex items-center bg-gray-50 border border-l-0 border-input rounded-r-md text-sm text-gray-500 font-mono">
-                      .sqlite
+                      .tar.gz
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">{t("m.backupNameHelp")}</p>
@@ -2087,8 +1998,87 @@ export const SettingsTab = () => {
               )}
             </div>
 
+            <div className="bg-white p-5 rounded-2xl border border-orange-100 shadow-sm space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                <div>
+                  <p className="font-bold text-gray-900">System Data Reset</p>
+                  <p className="text-sm text-gray-600">Select a reset category and confirm to safely clear app data.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-category">Reset Category</Label>
+                  <Select value={resetCategory} onValueChange={(value) => setResetCategory(value)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select reset category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resetOptions.map((option) => (
+                        <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{resetOptions.find((option) => option.key === resetCategory)?.description}</p>
+                </div>
+
+                {resetCategory === "all_data" ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-confirmation-sentence">Confirmation sentence</Label>
+                      <Input
+                        id="reset-confirmation-sentence"
+                        value={resetConfirmationInput}
+                        onChange={(e) => setResetConfirmationInput(e.target.value)}
+                        placeholder="Type the exact confirmation sentence to proceed"
+                      />
+                      <p className="text-xs text-muted-foreground">Exact sentence: {resetSentenceExpected || "N/A"}</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-confirmation-code">Confirmation code</Label>
+                      <Input
+                        id="reset-confirmation-code"
+                        value={resetCodeInput}
+                        onChange={(e) => setResetCodeInput(e.target.value)}
+                        placeholder="Type the confirmation code"
+                      />
+                      <p className="text-xs text-muted-foreground">Exact code: {resetCodeExpected || "N/A"}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-confirmation-text">Confirmation text</Label>
+                    <Input
+                      id="reset-confirmation-text"
+                      value={resetConfirmationInput}
+                      onChange={(e) => setResetConfirmationInput(e.target.value)}
+                      placeholder="Type the selected category label exactly"
+                    />
+                    <p className="text-xs text-muted-foreground">Type exactly: {resetOptions.find((option) => option.key === resetCategory)?.label}</p>
+                  </div>
+                )}
+
+                {resetMessage && (
+                  <p className={`text-sm ${resetMessage.isError ? 'text-red-600' : 'text-green-600'}`}>{resetMessage.text}</p>
+                )}
+
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handlePerformDataReset}
+                    disabled={resetLoading || !resetCategory}
+                    variant="destructive"
+                    className="bg-rose-600 hover:bg-rose-700 text-white"
+                  >
+                    {resetLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Reset</> : "Reset"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-              {/* Local Backups */}
+              {/* Local Backups + Upload Restore */}
               <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-bold text-gray-800 flex items-center gap-2">
@@ -2096,6 +2086,13 @@ export const SettingsTab = () => {
                   </div>
                   <span className="text-xs text-muted-foreground">{t("m.localBackupNote")}</span>
                 </div>
+
+                {restoreResult && (
+                  <div className={`rounded-2xl border px-4 py-3 text-sm ${restoreResult.isError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}>
+                    {restoreResult.message}
+                  </div>
+                )}
+
                 {backups.length === 0 ? (
                   <div className="text-center p-6 rounded-2xl border border-dashed border-gray-300 text-gray-500 text-sm">
                     {t("m.noBackups")}
@@ -2135,9 +2132,62 @@ export const SettingsTab = () => {
                     ))}
                   </div>
                 )}
+
+                <div className="rounded-3xl border border-dashed border-gray-200 bg-slate-50 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="font-bold text-gray-800">{t("m.restoreLocalDevice")}</h4>
+                      <p className="text-sm text-gray-600 mt-1">{t("m.restoreLocalDeviceDesc")}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{t("m.restoreLocalHelp")}</span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <div>
+                      <Label htmlFor="backup-upload" className="text-xs text-muted-foreground">{t("m.uploadBackupFile")}</Label>
+                      <input
+                        id="backup-upload"
+                        type="file"
+                        title={t("m.uploadBackupFile")}
+                        aria-label={t("m.uploadBackupFile")}
+                        accept=".tar.gz,.tar.gz.enc,.enc"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null;
+                          handleUploadBackupFile(file);
+                        }}
+                        className="mt-2 block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold"
+                      />
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        if (!uploadFile) {
+                          setUploadError(t("m.uploadFileRequired"));
+                          return;
+                        }
+                        setUploadError(null);
+                        setUploadingBackup(true);
+                        try {
+                          await restoreUploadedBackup(uploadFile);
+                          setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
+                          setTimeout(() => window.location.reload(), 1500);
+                        } catch (err: any) {
+                          setUploadError(err.message || t("m.restoreFailed", { message: "Unknown error" }));
+                        } finally {
+                          setUploadingBackup(false);
+                        }
+                      }}
+                      disabled={!uploadFile || uploadingBackup}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto"
+                    >
+                      {uploadingBackup ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      {t("m.restoreFromUpload")}
+                    </Button>
+                  </div>
+                  {uploadError && <p className="mt-3 text-sm text-red-600">{uploadError}</p>}
+                </div>
               </div>
 
-              {/* Cloud Backups + Local Upload Restore */}
+              {/* Cloud Backups */}
               <div className="space-y-5">
                 <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
                   <div className="flex items-center justify-between gap-3">
@@ -2180,53 +2230,6 @@ export const SettingsTab = () => {
                       ))}
                     </div>
                   )}
-                </div>
-
-                <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-4">
-                  <h4 className="font-bold text-gray-800">{t("m.restoreLocalDevice")}</h4>
-                  <p className="text-sm text-gray-600">{t("m.restoreLocalDeviceDesc")}</p>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="backup-upload" className="text-xs text-muted-foreground">{t("m.uploadBackupFile")}</Label>
-                      <input
-                        id="backup-upload"
-                        type="file"
-                        title={t("m.uploadBackupFile")}
-                        aria-label={t("m.uploadBackupFile")}
-                        accept=".sqlite"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] ?? null;
-                          handleUploadBackupFile(file);
-                        }}
-                        className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold"
-                      />
-                    </div>
-                    <Button
-                      onClick={async () => {
-                        if (!uploadFile) {
-                          setUploadError(t("m.uploadFileRequired"));
-                          return;
-                        }
-                        setUploadError(null);
-                        setUploadingBackup(true);
-                        try {
-                          await restoreUploadedBackup(uploadFile);
-                          setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
-                          setTimeout(() => window.location.reload(), 1500);
-                        } catch (err: any) {
-                          setUploadError(err.message || t("m.restoreFailed", { message: "Unknown error" }));
-                        } finally {
-                          setUploadingBackup(false);
-                        }
-                      }}
-                      disabled={!uploadFile || uploadingBackup}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto"
-                    >
-                      {uploadingBackup ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      {t("m.restoreFromUpload")}
-                    </Button>
-                  </div>
-                  {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
                 </div>
               </div>
             </div>
@@ -2366,6 +2369,30 @@ export const SettingsTab = () => {
         </div>
       </DialogContent>
     </Dialog>
+
+      <Dialog
+        open={confirmationDialog.open}
+        onOpenChange={(open) => setConfirmationDialog(prev => ({ ...prev, open }))}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{confirmationDialog.title}</DialogTitle>
+            <DialogDescription>{confirmationDialog.description}</DialogDescription>
+          </DialogHeader>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmationDialog(prev => ({ ...prev, open: false }))}
+              disabled={confirmationDialog.pending}
+            >
+              {t("m.cancel")}
+            </Button>
+            <Button onClick={handleConfirmationConfirm} disabled={confirmationDialog.pending}>
+              {confirmationDialog.pending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />{t("m.confirm")}</> : t("m.confirm")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

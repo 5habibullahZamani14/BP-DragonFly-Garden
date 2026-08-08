@@ -1259,6 +1259,21 @@ export const restoreUploadedBackup = async (file: File): Promise<{ success: bool
   return (await res.json()) as { success: boolean; message: string };
 };
 
+export const fetchDataResetOptions = async (): Promise<{ options: { key: string; label: string; description: string }[]; confirmationSentence: string; confirmationCode: string }> =>
+  safeFetch("/management/data-reset/options");
+
+export const performDataReset = async (body: {
+  category: string;
+  confirmationSentence?: string;
+  confirmationCode?: string;
+  confirmationText?: string;
+}): Promise<{ success: boolean; message: string }> =>
+  safeFetch("/management/data-reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 export const downloadBackup = async (filename: string): Promise<void> => {
   const headers = buildAdminAuthHeaders();
   const res = await fetch(`${API_BASE}/management/backups/download?filename=${encodeURIComponent(filename)}`, {

@@ -208,6 +208,10 @@ router.get("/settings", managementController.getSettings);
  */
 router.put("/settings/:key", managementController.updateSetting);
 
+// ── Data reset / app cleanup ──────────────────────────────────────────────────
+router.get("/data-reset/options", managementController.getDataResetOptions);
+router.post("/data-reset", managementController.performDataReset);
+
 // ── Employee management ───────────────────────────────────────────────────────
 
 /*

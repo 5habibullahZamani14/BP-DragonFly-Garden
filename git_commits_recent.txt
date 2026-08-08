@@ -1,0 +1,27 @@
+﻿37ad2fb90c5e49b3546cb41bae36d46d67b52cbf\tHabibullah Zamani\t2026-08-07 09:52:34 +0430\tRefactor code structure for improved readability and maintainability
+09f9d5321da16d8c04be45b1b4609ccd76d87864\tHabibullah Zamani\t2026-07-27 16:38:40 +0800\tfix(printer): complete printer system overhaul
+320cb1bff9768ecb6d968d0820bc0b1508df67cd\tHabibullah Zamani\t2026-07-27 15:54:43 +0800\tAdd deployment scripts for management, payment counter, and table roles for PC and Pi 5 (deployment and development modes); add thermal printer integration and version tracking
+dbcce2b3ddf744e2b45643953edab64eda8d402b\tHabibullah Zamani\t2026-07-27 08:52:32 +0800\tfeat: add version display to manager view and fix system update build errors
+feeea09e1abf65a3eff910bd46d9ffbcf88d7a7d\tHabibullah Zamani\t2026-07-27 08:47:54 +0800\tfeat: Reorganize startup scripts and enhance POS/Management functionality
+2bd2d483de95ceda1763b058a9a0995731531f78\tHabibullah Zamani\t2026-07-25 11:28:48 +0800\tfeat: comprehensive system update with UI enhancements, localization, and documentation
+205813961bff5d11ac02dea3b87acaa2ff1ef508\tHabibullah Zamani\t2026-07-22 10:47:14 +0800\tchore: Add backups directory to .gitignore
+16373f561f17279e6a78039436760c6f2b04626d\tHabibullah Zamani\t2026-07-22 10:44:00 +0800\tfeat: Add raw ESC/POS thermal printer support and enhance feedback system
+061f747fd788214468ae8761afbe50232476606e\tHabibullah Zamani\t2026-07-22 06:43:32 +0800\tImplement speed, quality, efficiency, and robustness improvements
+cd7a30d3021376eb2648401a8023d8f3dfaa0a49\tHabibullah Zamani\t2026-07-21 14:44:56 +0800\tfeat: enhance printer system with auto-discovery and settings persistence
+3e8f9759d233d6e40baa5092f0ac9b82dae107e9\tHabibullah Zamani\t2026-07-18 14:24:34 +0800\tfeat: add development shortcuts and implement graceful shutdown
+b49c369230590871a7adcd811ea4b977a42d640c\tHabibullah Zamani\t2026-07-18 14:11:23 +0800\tfix: implement comprehensive graceful shutdown and improve audit trail UI
+8562c7ac3aa33777394a7f3c49bc151b0f5f006d\tHabibullah Zamani\t2026-07-18 13:57:10 +0800\tfix: improve audit trail search, chart info formatting, and password visibility
+5134e2cc3db19157eb2580153107b5c9f0697e90\tHabibullah Zamani\t2026-07-16 13:10:50 +0800\tfeat: add filtering and analytics features to management tabs, enhancing data visualization and user interaction
+b2aa6b1bad97e3ddd631bc608115c36a4df40e3d\tHabibullah Zamani\t2026-07-16 12:44:47 +0800\tRefactor code structure for improved readability and maintainability
+ba8b6e09d05f82eb6f66af0d51d3cec5463c2f0f\tHabibullah Zamani\t2026-07-15 14:37:31 +0800\tfeat: implement backend feedback system, order management routes, and frontend dashboard components.
+b120495891e58b9ca9c4f831a7876130b1beb0fb\tHabibullah Zamani\t2026-07-15 10:48:58 +0800\tfeat(dialog): enhance dialog and alert dialog responsiveness with updated dimensions
+e37a03f18c8cdf341bfdce29bb0bf2457e091ac6\tHabibullah Zamani\t2026-07-13 16:38:02 +0800\trefactor(managementController): change exports to const for system version check and update functions
+3719a44f6b05b7ea98481d02d858ae57c9a993ba\tHabibullah Zamani\t2026-07-13 16:34:36 +0800\trefactor(managementController): remove unused system version check and update functions
+ae31b1375076ef5603fb7acade99992d4d1135a1\tHabibullah Zamani\t2026-07-13 16:28:56 +0800\trefactor(localization): streamline help content for tables, employees, hours, inventory, and display settings
+1e895768fddde7ef10f6fee1fcb0b36f71436ac8\tHabibullah Zamani\t2026-07-13 16:24:38 +0800\tfeat(system-update): implement system version check and update functionality
+bce65491163af19ec0989ae6e9a9292844fe2431\tHabibullah Zamani\t2026-07-13 15:38:33 +0800\tfix(dialog): adjust DialogContent max-width for better responsiveness
+897e5fcf558f688584e69b66e54ca28503cf31d8\tHabibullah Zamani\t2026-07-13 15:27:32 +0800\tRefactor code structure for improved readability and maintainability
+371b6577d766688bb88ce35c7a3ebd960c276d3f\tHabibullah Zamani\t2026-07-12 09:03:49 +0800\tfeat(backup): enhance backup verification and restore procedures for improved data integrity
+8f76cf1d6d450fba0dfc8c9755ba1376b197a30f\tHabibullah Zamani\t2026-07-12 07:39:28 +0800\tImproved JOB_SCOPE_FORM formatting
+d04e44ad521eda8cf57cf1190846e9eccca6c959\tHabibullah Zamani\t2026-07-12 07:30:12 +0800\tRefactor code structure for improved readability and maintainability
+2572626a6609d9fb6e6979746c0018c43a6ec216\tHabibullah Zamani\t2026-07-12 06:59:46 +0800\tfix: Standardize project name capitalization across documentation

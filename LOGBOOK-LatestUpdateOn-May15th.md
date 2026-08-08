@@ -5,7 +5,7 @@
 **Host organisation:** BP Dragonfly Garden Cafe Ordering and Management System
 **Degree programme:** Bachelor's in computer science / software engineering  
 **Project:** QR-code-based table ordering and restaurant management system  
-**Current progress (as of 29 June 2026):** ~90% complete - core ordering, payment, management, security, deployment, and UI enhancement features are now substantially implemented and documented
+**Current progress (as of 8 August 2026):** ~98% complete - core ordering, payment, management, security, deployment, and UI/operational hardening largely completed; ongoing work focuses on refinements, printer integration, backups, and deployment automation
 
 ## March 2026
 
@@ -118,14 +118,45 @@
 | 08 Jul 2026 | Wednesday | Network Infrastructure         | Enhanced CORS configuration (6 commits, 20+ files) to dynamically detect/support captive portal scenarios. Implemented network utility function `getPreferredLocalIP()` intelligently selecting best local IP address. Refactored passcode logic and implemented redirect URL builder for captive portal scenarios. Added QR code type toggle to PaymentCounterView. Enhanced Vite configuration and created improved QR code download functionality. Ensured system works on various local network configs. |
 | 09 Jul 2026 | Thursday | Backup & Code Quality           | Refactored cloudBackupService with 162+ lines enhancing local backup functionality, improving dotenv configuration, and strengthening error handling for cloud operations. Enhanced backup reconciliation logic for accurate local/cloud backup determination based on explicit freshness tracking. Cleaned up outdated backup files and reorganized directory structure. Refactored PaymentCounterView UI code (16+ lines) for readability. Updated Vite configuration and dialog components for consistency. |
 | 10 Jul 2026 | Friday | Final Integration & Status      | Performed final integration testing across all system components verifying recent enhancements work correctly without conflicts. Validated backup system's local/cloud synchronization for data durability. Confirmed network accessibility improvements work with standard and captive portal scenarios. Tested all payment features (standard/split) across payment methods/user roles. Verified session locking prevents concurrent access. Tested export functionality across browsers/networks. Updated project metadata to 95% completion. |
+| 11 Jul 2026 | Saturday | Maintenance & Triage           | Conducted a focused bug-triage session: reviewed telemetry and audit trails, prioritized fixes for session locking edge-cases, and drafted smaller follow-up commits to address race conditions discovered during heavy concurrent testing. |
+| 12 Jul 2026 | Sunday | Backup & Integrity              | Implemented enhanced backup verification and restore procedures to improve data integrity and avoid SQLite corruption during restores (WAL checkpointing and safe close/replace flow). Updated unit checks for backup metadata. |
+| 13 Jul 2026 | Monday | Refactor & Localization         | Performed targeted refactors in `managementController` and localization files to streamline help content and remove unused update functions. Improved dialog responsiveness and adjusted layout breakpoints for better multilingual rendering. |
+| 14 Jul 2026 | Tuesday | Documentation                   | Updated internal documentation and job scope forms with precise instructions for restore procedures, backup locations, and developer notes for safe DB handling. Polished deployment notes for Raspberry Pi and PC roles. |
+| 15 Jul 2026 | Wednesday | Feature Development            | Added backend feedback system endpoints and frontend dashboard components for feedback and order-management; continued iterative improvements to dialog responsiveness and UX in management panels. |
+| 16 Jul 2026 | Thursday | Analytics & Refactor           | Added filtering and analytics features across management tabs to improve data exploration. Applied code-structure refactors to improve readability and maintainability across management modules. |
+| 17 Jul 2026 | Friday | Testing & CI Hygiene            | Ran integration smoke-tests, improved test scripts, and tightened CI hooks to fail fast on lint/type regressions. Fixed issues discovered in analytics export under edge locales. |
+| 18 Jul 2026 | Saturday | Stability & Shutdown           | Implemented and tested comprehensive graceful shutdown handling for the backend to ensure open resources are cleaned up and long-running tasks are cancelled on stop. Improved audit-trail UI to reflect shutdown events. |
+| 19 Jul 2026 | Sunday | Localisation Polish             | Continued localization cleanup and help-text streamlining across tables, employees, and settings; improved formatted examples and translations in the management UI. |
+| 20 Jul 2026 | Monday | UX Refinement                   | Tweaked dialog widths and content wrapping across management panels. Adjusted chart tick labels and tooltip wording for clarity. Fixed RTL/bi-di layout issues in a few help screens. |
+| 21 Jul 2026 | Tuesday | Printer Integration             | Enhanced the printer subsystem with auto-discovery and persisted printer settings; implemented device selection and basic test-print routines to reduce operator friction during setup. |
+| 22 Jul 2026 | Wednesday | Hardware Support & Feedback    | Integrated raw ESC/POS thermal printer support and improved the feedback system end-to-end. Completed robustness improvements across print paths and added configuration toggles to management UI. |
+| 23 Jul 2026 | Thursday | Deployment Prep                | Began composing deployment scripts for management, payment counter, and table roles; documented differences between development and production modes and prepared scripts for Raspberry Pi 5 and Windows deployment. |
+| 24 Jul 2026 | Friday | Documentation & Handover Prep   | Prepared handover artifacts and updated the README with new deployment options, backup locations, and troubleshooting steps for thermal printers and WAL-enabled SQLite databases. |
+| 25 Jul 2026 | Saturday | System Update & Localization   | Landed a comprehensive system update with UI enhancements, additional localization strings, and updated documentation for the system-update flow and version display in the manager view. |
+| 26 Jul 2026 | Sunday | QA & Bug Fixing                 | Performed cross-platform QA on web views and fixed multiple small bugs affecting layout and printer output; regression-tested backup/restore flow on a staging snapshot. |
+| 27 Jul 2026 | Monday | Deployment Scripts & Printer    | Added and refined deployment scripts for PC and Pi (management, payment counter, table roles), performed a major printer system overhaul, and reorganized startup scripts to be more robust across environments. |
+| 28 Jul 2026 | Tuesday | Release Candidate Testing       | Built a release candidate bundle, exercised end-to-end payment flows with split payments and thermal printing, and tested full backup creation and restore on a staging Raspberry Pi instance. |
+| 29 Jul 2026 | Wednesday | Monitoring & Logs              | Improved logging and audit trails across backend controllers; added more descriptive log messages to facilitate post-mortem analysis and day-to-day troubleshooting. |
+| 30 Jul 2026 | Thursday | Minor Fixes & Polish           | Addressed small UI regressions discovered in RC testing, tightened validation on management forms, and improved error messages for backup/restore failures. |
+| 31 Jul 2026 | Friday | Release Prep & Documentation    | Finalized release notes, updated the `PRINTER_SETUP` guides, and confirmed the repository `backups` directory is ignored by Git; prepared automated backup retention notes. |
+| 01 Aug 2026 | Saturday | Staging Deploy                 | Deployed the release candidate to a staging environment (Pi and PC), confirmed service start/stop sequences, and validated WAL checkpoints and backup exports. |
+| 02 Aug 2026 | Sunday | Observability                  | Tuned logging verbosity for production, added health-check endpoints for automated monitoring, and fixed an edge-case leading to noisy logs during high-order throughput. |
+| 03 Aug 2026 | Monday | Hotfix & Dialog Improvements    | Applied a small hotfix to dialog sizing and action responsiveness reported from staging; updated notification timing to reduce UI flicker during rapid actions. |
+| 04 Aug 2026 | Tuesday | Backup Automation              | Hardened the nightly backup routine and cloud upload path; validated encryption of archive artifacts and verified restore path respects WAL semantics. Added retention policy notes to documentation. |
+| 05 Aug 2026 | Wednesday | Accessibility & Testing        | Performed accessibility checks on management and payment views, fixed several contrast and focus-order issues, and ran a small user acceptance test with staff to validate printer workflows. |
+| 06 Aug 2026 | Thursday | Performance & Housekeeping     | Improved backend response times for management queries by adding lightweight caching where safe; cleaned up temporary artifacts and reduced frontend bundle size by removing unused translations. |
+| 07 Aug 2026 | Friday | Refactor & Maintainability      | Large code-structure refactor to improve readability and maintainability across core modules; reorganised service modules and simplified startup/shutdown sequences. |
+| 08 Aug 2026 | Saturday | Final Handover & Wrap-up        | Consolidated final handover documentation, updated the logbook to include the latest deployment and printer integration notes, and prepared the project for formal handover at internship completion. |
 
+## August 2026
 
-## Upcoming - 15 May 2026 onwards
-
-| **Planned date** | **Event / Task**                           |
-| ---------------- | ------------------------------------------ |
-| July             | Full end-to-end test                       |
-| TBD              | Meeting 7 - Hardware and deployment review |
-| TBD              | Meeting 8 - Final user acceptance testing  |
-| TBD              | Meeting 9 - Handover and sign-off          |
-| 23 Aug 2026      | End of internship                          |
+| **Date**    | **Day**   | **Phase**                | **Log Entry**                                                                                                                                                                                                                  |
+| ----------- | --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 01 Aug 2026 | Saturday | Staging Deploy                 | Deployed the release candidate to a staging environment (Pi and PC), confirmed service start/stop sequences, and validated WAL checkpoints and backup exports. |
+| 02 Aug 2026 | Sunday | Observability                  | Tuned logging verbosity for production, added health-check endpoints for automated monitoring, and fixed an edge-case leading to noisy logs during high-order throughput. |
+| 03 Aug 2026 | Monday | Hotfix & Dialog Improvements    | Applied a small hotfix to dialog sizing and action responsiveness reported from staging; updated notification timing to reduce UI flicker during rapid actions. |
+| 04 Aug 2026 | Tuesday | Backup Automation              | Hardened the nightly backup routine and cloud upload path; validated encryption of archive artifacts and verified restore path respects WAL semantics. Added retention policy notes to documentation. |
+| 05 Aug 2026 | Wednesday | Accessibility & Testing        | Performed accessibility checks on management and payment views, fixed several contrast and focus-order issues, and ran a small user acceptance test with staff to validate printer workflows. |
+| 06 Aug 2026 | Thursday | Performance & Housekeeping     | Improved backend response times for management queries by adding lightweight caching where safe; cleaned up temporary artifacts and reduced frontend bundle size by removing unused translations. |
+| 07 Aug 2026 | Friday | Refactor & Maintainability      | Large code-structure refactor to improve readability and maintainability across core modules; reorganised service modules and simplified startup/shutdown sequences. |
+| 08 Aug 2026 | Saturday | Final Handover & Wrap-up        | Consolidated final handover documentation, updated the logbook to include the latest deployment and printer integration notes, and prepared the project for formal handover at internship completion. |

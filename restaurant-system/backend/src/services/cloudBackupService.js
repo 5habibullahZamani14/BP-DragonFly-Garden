@@ -228,7 +228,7 @@ const uploadLatestLocalBackupToCloud = async (backupDir) => {
 
 const executeNightlyCloudBackup = async () => {
   const dbPath = path.join(__dirname, "../database/database.sqlite");
-  const backupDir = path.join(__dirname, "../../../backups");
+  const backupDir = path.join(__dirname, "../../../full-auto-backup");
 
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true });
@@ -362,7 +362,7 @@ const getLatestLocalBackupTime = (backupDir) => {
 };
 
 const ensureCloudBackupUpToDate = async () => {
-  const backupDir = path.join(__dirname, "../../../backups");
+  const backupDir = path.join(__dirname, "../../../full-auto-backup");
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true });
   }
@@ -417,8 +417,10 @@ module.exports = {
   downloadCloudBackup, 
   decryptFile, 
   encryptFile,
+  createLocalBackupOnly,
+  uploadLatestLocalBackupToCloud,
   downloadAndDecryptBackup: async (keyName, destinationPath) => {
-    const tmpDir = path.join(__dirname, "../../../backups");
+    const tmpDir = path.join(__dirname, "../../../full-auto-backup");
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
     const encLocalPath = path.join(tmpDir, path.basename(keyName));
     await downloadCloudBackup(keyName, encLocalPath);

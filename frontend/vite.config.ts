@@ -27,12 +27,12 @@ export default defineConfig(({ mode }) => ({
       'Expires': '0'
     },
     proxy: {
-      '/menu': 'http://localhost:5000',
-      '/orders': 'http://localhost:5000',
-      '/tables': 'http://localhost:5000',
-      '/payments': 'http://localhost:5000',
-      '/management': 'http://localhost:5000',
-      '/menu-images': 'http://localhost:5000'
+      '/menu': 'http://127.0.0.1:5000',
+      '/orders': 'http://127.0.0.1:5000',
+      '/tables': 'http://127.0.0.1:5000',
+      '/payments': 'http://127.0.0.1:5000',
+      '/management': 'http://127.0.0.1:5000',
+      '/menu-images': 'http://127.0.0.1:5000'
     }
   },
   plugins: [

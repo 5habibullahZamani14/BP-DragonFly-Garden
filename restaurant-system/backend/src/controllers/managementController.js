@@ -35,8 +35,15 @@ const { promisify } = require("util");
 const { exec: execCb } = require("child_process");
 const exec = promisify(execCb);
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
+const {
+  RESET_CONFIRMATION_SENTENCE,
+  RESET_CONFIRMATION_CODE,
+  getResetCategoryOptions,
+  getResetCategoryByKey,
+  normalizeResetCategoryKey,
+} = require("../utils/dataReset");
 
-const backupsDir = path.join(__dirname, "../../backups");
+const backupsDir = path.join(__dirname, "../../full-manual-backup");
 const backendRoot = path.resolve(__dirname, "../../..");
 const repoRoot = path.resolve(__dirname, "../../../..");
 const frontendDir = path.join(repoRoot, "frontend");
@@ -362,6 +369,244 @@ const updateSetting = async (req, res, next) => {
     
     res.json({ success: true, key, value });
   } catch (error) { next(error); }
+};
+
+const deleteFileIfExists = (filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.error("Failed to delete file:", filePath, error);
+  }
+};
+
+const clearDirectoryContents = (directoryPath) => {
+  if (!fs.existsSync(directoryPath)) return;
+  for (const entry of fs.readdirSync(directoryPath)) {
+    const entryPath = path.join(directoryPath, entry);
+    try {
+      const stat = fs.statSync(entryPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(entryPath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(entryPath);
+      }
+    } catch (error) {
+      console.error("Failed to clear directory entry:", entryPath, error);
+    }
+  }
+};
+
+const deleteMenuImageFileIfUnused = async (imageUrl) => {
+  if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
+  const remaining = await get(
+    "SELECT COUNT(*) AS count FROM menu_items WHERE image_url = ?",
+    [imageUrl]
+  );
+  if (remaining?.count) return;
+  const filePath = path.join(repoRoot, "frontend/public", imageUrl);
+  deleteFileIfExists(filePath);
+};
+
+const deleteRepoImageFileIfUnused = async (repoImageId) => {
+  if (!repoImageId) return;
+  const remaining = await get(
+    "SELECT COUNT(*) AS count FROM menu_items WHERE repo_image_id = ?",
+    [repoImageId]
+  );
+  if (remaining?.count) return;
+
+  const row = await get(
+    "SELECT image_url FROM repo_images WHERE id = ?",
+    [repoImageId]
+  );
+  if (!row || !row.image_url) return;
+
+  const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
+  deleteFileIfExists(filePath);
+  await run("DELETE FROM repo_images WHERE id = ?", [repoImageId]);
+};
+
+const getDataResetCategoryPayload = async (selectedKey) => {
+  const category = getResetCategoryByKey(selectedKey);
+  if (!category) return null;
+  return category;
+};
+
+const getDataResetOptions = async (req, res, next) => {
+  try {
+    const options = getResetCategoryOptions();
+    res.json({
+      options,
+      confirmationSentence: RESET_CONFIRMATION_SENTENCE,
+      confirmationCode: RESET_CONFIRMATION_CODE,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const performDataReset = async (req, res, next) => {
+  try {
+    const { category: rawCategory, confirmationSentence, confirmationCode, confirmationText } = req.body;
+    const category = getResetCategoryByKey(rawCategory);
+    if (!category) {
+      return next(createHttpError(400, "Invalid reset category."));
+    }
+
+    if (category.key === "all_data") {
+      if (String(confirmationSentence || "").trim() !== RESET_CONFIRMATION_SENTENCE) {
+        return next(createHttpError(400, "Confirmation sentence does not match."));
+      }
+      if (String(confirmationCode || "").trim() !== RESET_CONFIRMATION_CODE) {
+        return next(createHttpError(400, "Confirmation code does not match."));
+      }
+    } else {
+      if (String(confirmationText || "").trim() !== category.label) {
+        return next(createHttpError(400, "Please type the selected category label exactly to confirm."));
+      }
+    }
+
+    const managerProfileRow = await get(
+      "SELECT value FROM restaurant_settings WHERE key = 'manager_profile'"
+    );
+    const managerProfileValue = managerProfileRow?.value || null;
+
+    const menuImagesDir = path.join(repoRoot, "frontend/public/menu-images");
+    const feedbackImagesDir = path.join(repoRoot, "frontend/public/feedback-images");
+    const uploadsDir = path.join(__dirname, "../../uploads");
+
+    const deleteMenuImagesForType = async (type) => {
+      const rows = await all(
+        `SELECT DISTINCT image_url, repo_image_id FROM menu_items WHERE type = ? AND (image_url IS NOT NULL AND TRIM(image_url) <> '' OR repo_image_id IS NOT NULL)`,
+        [type]
+      );
+      await run(`UPDATE menu_items SET image_url = NULL, repo_image_id = NULL WHERE type = ?`, [type]);
+      for (const row of rows) {
+        await deleteMenuImageFileIfUnused(row.image_url);
+        await deleteRepoImageFileIfUnused(row.repo_image_id);
+      }
+    };
+
+    const deleteRepoImagesForType = async (type) => {
+      const rows = await all(
+        `SELECT DISTINCT repo_image_id FROM menu_items WHERE type = ? AND repo_image_id IS NOT NULL`,
+        [type]
+      );
+      await run(`UPDATE menu_items SET repo_image_id = NULL WHERE type = ?`, [type]);
+      for (const row of rows) {
+        await deleteRepoImageFileIfUnused(row.repo_image_id);
+      }
+    };
+
+    const deleteMenuItemsByType = async (type) => {
+      const rows = await all(
+        `SELECT DISTINCT image_url, repo_image_id FROM menu_items WHERE type = ?`,
+        [type]
+      );
+      await run(`DELETE FROM menu_items WHERE type = ?`, [type]);
+      for (const row of rows) {
+        await deleteMenuImageFileIfUnused(row.image_url);
+        await deleteRepoImageFileIfUnused(row.repo_image_id);
+      }
+    };
+
+    const deleteAllMenuImages = async () => {
+      const imageRows = await all(`SELECT DISTINCT image_url FROM menu_items WHERE image_url IS NOT NULL AND TRIM(image_url) <> ''`);
+      const repoRows = await all(`SELECT id, image_url FROM repo_images`);
+      await run(`UPDATE menu_items SET image_url = NULL, repo_image_id = NULL`);
+      for (const row of imageRows) {
+        await deleteMenuImageFileIfUnused(row.image_url);
+      }
+      for (const row of repoRows) {
+        const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
+        deleteFileIfExists(filePath);
+      }
+      await run(`DELETE FROM repo_images`);
+    };
+
+    const deleteAllFeedbackImages = async () => {
+      const rows = await all(`SELECT DISTINCT image_url FROM customer_feedback_images`);
+      await run(`DELETE FROM customer_feedback_images`);
+      for (const row of rows) {
+        if (row.image_url && row.image_url.startsWith("/feedback-images/")) {
+          const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
+          deleteFileIfExists(filePath);
+        }
+      }
+    };
+
+    const deleteAllFeedbackRecords = async () => {
+      await run(`DELETE FROM customer_feedback`);
+      await run(`DELETE FROM feedback_analysis_findings`);
+      await run(`DELETE FROM feedback_analysis_runs`);
+      clearDirectoryContents(feedbackImagesDir);
+    };
+
+    const deleteAllAppData = async () => {
+      await run(`DELETE FROM order_items`);
+      await run(`DELETE FROM orders`);
+      await run(`DELETE FROM order_status_history`);
+      await run(`DELETE FROM payments`);
+      await run(`DELETE FROM payment_logs`);
+      await run(`DELETE FROM archived_orders`);
+      await run(`DELETE FROM staff_assistance_requests`);
+      await run(`DELETE FROM customer_feedback_images`);
+      await run(`DELETE FROM customer_feedback`);
+      await run(`DELETE FROM feedback_analysis_findings`);
+      await run(`DELETE FROM feedback_analysis_runs`);
+      await run(`DELETE FROM menu_item_ingredients`);
+      await run(`DELETE FROM menu_items`);
+      await run(`DELETE FROM categories`);
+      await run(`DELETE FROM inventory_items`);
+      await run(`DELETE FROM employees`);
+      await run(`DELETE FROM payment_methods`);
+      await run(`DELETE FROM promo_items`); // defensive if future fallback table exists
+      await run(`DELETE FROM restaurant_settings`);
+      if (managerProfileValue) {
+        await run(
+          "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          [managerProfileValue]
+        );
+      }
+      clearDirectoryContents(menuImagesDir);
+      clearDirectoryContents(feedbackImagesDir);
+      clearDirectoryContents(uploadsDir);
+    };
+
+    if (category.key === "all_data") {
+      await deleteAllAppData();
+    } else if (category.key === "foods") {
+      await deleteMenuItemsByType("food");
+    } else if (category.key === "drinks") {
+      await deleteMenuItemsByType("drink");
+    } else if (category.key === "food_images") {
+      await deleteMenuImagesForType("food");
+    } else if (category.key === "drink_images") {
+      await deleteMenuImagesForType("drink");
+    } else if (category.key === "menu_images") {
+      await deleteAllMenuImages();
+    } else if (category.key === "feedbacks") {
+      await deleteAllFeedbackRecords();
+    } else if (category.key === "feedback_images") {
+      await deleteAllFeedbackImages();
+    }
+
+    await createLog(
+      "SYSTEM",
+      "DATA_RESET",
+      req.user?.id,
+      req.user?.name,
+      category.key,
+      category.label,
+      { category: category.key }
+    );
+
+    res.json({ success: true, message: `Reset completed for ${category.label}` });
+  } catch (error) {
+    next(error);
+  }
 };
 
 // ── Employee management ───────────────────────────────────────────────────────
@@ -822,7 +1067,10 @@ const getBackups = async (req, res, next) => {
   try {
     if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
     const files = fs.readdirSync(backupsDir)
-      .filter(f => f.endsWith(".sqlite"))
+      .filter(f => {
+        // Only expose full archive backups (tar.gz or tar.gz.enc)
+        return f.startsWith("full_backup_") || f.endsWith(".tar.gz") || f.endsWith(".tar.gz.enc");
+      })
       .map(f => {
         const stats = fs.statSync(path.join(backupsDir, f));
         return {
@@ -838,28 +1086,51 @@ const getBackups = async (req, res, next) => {
 
 const createBackup = async (req, res, next) => {
   try {
-    const { filename, overwrite } = req.body;
-    if (!filename) return next(createHttpError(400, "Filename is required"));
-    
-    let finalName = filename;
-    if (!finalName.endsWith(".sqlite")) finalName += ".sqlite";
-    
-    // Sanitize filename to prevent path traversal
-    finalName = finalName.replace(/[^a-zA-Z0-9_.-]/g, '');
-    if (!finalName) return next(createHttpError(400, "Invalid filename"));
-    
-    const targetPath = path.join(backupsDir, finalName);
-    
-    if (fs.existsSync(targetPath) && !overwrite) {
-      return res.status(409).json({ success: false, message: "A backup with this name already exists." });
+    const { filename, overwrite } = req.body || {};
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+
+    // Create a comprehensive full backup archive (same as nightly/cloud backups)
+    const { createLocalBackupOnly } = require("../services/cloudBackupService");
+
+    // Ensure writes are checkpointed
+    try { await run("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) { /* continue */ }
+
+    await createLocalBackupOnly(backupsDir);
+
+    // Find the most recent full backup (could be .tar.gz or .tar.gz.enc)
+    const candidates = fs.readdirSync(backupsDir)
+      .filter(f => f.startsWith("full_backup_") || f.endsWith(".tar.gz") || f.endsWith(".tar.gz.enc"))
+      .map(f => ({ name: f, time: fs.statSync(path.join(backupsDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    if (candidates.length === 0) {
+      return next(createHttpError(500, "Failed to create backup"));
     }
-    
-    // Force a WAL checkpoint before backing up so the .sqlite file contains all data
-    await run("PRAGMA wal_checkpoint(TRUNCATE)");
-    
-    fs.copyFileSync(dbPath, targetPath);
-    await createLog("SYSTEM", "CREATE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
-    res.json({ success: true, message: "Backup created successfully", filename: finalName });
+
+    let created = candidates[0].name;
+
+    // If user supplied a filename, rename the created archive to that name (preserve .enc suffix if present)
+    if (filename && filename.trim()) {
+      let base = filename.replace(/[^a-zA-Z0-9_.-]/g, '');
+      if (!base) base = `manual_${Date.now()}`;
+
+      const src = path.join(backupsDir, created);
+      const hasEnc = created.endsWith('.enc');
+      const ext = hasEnc ? '.tar.gz.enc' : '.tar.gz';
+      let finalName = base;
+      if (!finalName.endsWith(ext)) finalName = `${finalName}${ext}`;
+      const dest = path.join(backupsDir, finalName);
+
+      if (fs.existsSync(dest) && !overwrite) {
+        return res.status(409).json({ success: false, message: "A backup with this name already exists." });
+      }
+
+      fs.renameSync(src, dest);
+      created = finalName;
+    }
+
+    await createLog("SYSTEM", "CREATE_BACKUP", req.user?.id, req.user?.name, "system", "Backup Archive", { filename: created });
+    res.json({ success: true, message: "Full backup archive created successfully", filename: created });
   } catch (error) { next(error); }
 };
 
@@ -960,29 +1231,113 @@ const extractAndRestoreTar = async (tarPath) => {
 };
 
 const performRestore = async (filePath, originalFilename) => {
+  // Ensure pending writes are checkpointed before closing
   await run("PRAGMA wal_checkpoint(TRUNCATE)");
 
-  if (originalFilename.endsWith(".tar.gz.enc") || originalFilename.endsWith(".enc")) {
-    const encKey = process.env.BACKUP_ENC_KEY || null;
-    if (!encKey) {
-      throw new Error("BACKUP_ENC_KEY not configured; cannot decrypt backup.");
-    }
-    const decTarPath = path.join(tmpDir, `decrypted-tar-${Date.now()}.tar.gz`);
-    const { decryptFile } = require("../services/cloudBackupService");
-    decryptFile(filePath, decTarPath, encKey);
-    await extractAndRestoreTar(decTarPath);
-    try { fs.unlinkSync(decTarPath); } catch (e) {}
-  } else if (originalFilename.endsWith(".tar.gz")) {
-    await extractAndRestoreTar(filePath);
-  } else {
-    fs.copyFileSync(filePath, dbPath);
+  // Make a safe backup of the current DB in case we need to roll back
+  const timestamp = Date.now();
+  const backupPath = `${dbPath}.bak.${timestamp}`;
+  try {
+    if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, backupPath);
+  } catch (e) {
+    console.warn("[Restore] Failed to create DB backup, continuing:", e);
   }
 
+  // Close the shared DB connection before replacing the file
+  try {
+    const dbModule = require("../database/db");
+    if (dbModule && typeof dbModule.close === "function") {
+      await dbModule.close();
+      console.log("[Restore] Closed DB connection for safe restore");
+    }
+  } catch (e) {
+    console.warn("[Restore] Error closing DB module:", e);
+  }
+
+  let restoredDb = false;
+  try {
+    if (originalFilename.endsWith(".tar.gz.enc") || originalFilename.endsWith(".enc")) {
+      const encKey = process.env.BACKUP_ENC_KEY || null;
+      if (!encKey) {
+        throw new Error("BACKUP_ENC_KEY not configured; cannot decrypt backup.");
+      }
+      const decTarPath = path.join(tmpDir, `decrypted-tar-${Date.now()}.tar.gz`);
+      const { decryptFile } = require("../services/cloudBackupService");
+      decryptFile(filePath, decTarPath, encKey);
+      await extractAndRestoreTar(decTarPath);
+      try { fs.unlinkSync(decTarPath); } catch (e) {}
+      restoredDb = true;
+    } else if (originalFilename.endsWith(".tar.gz")) {
+      await extractAndRestoreTar(filePath);
+      restoredDb = true;
+    } else {
+      // For a plain .sqlite file, atomically copy into place
+      const tmpTarget = `${dbPath}.tmp.${timestamp}`;
+      fs.copyFileSync(filePath, tmpTarget);
+      fs.renameSync(tmpTarget, dbPath);
+      restoredDb = true;
+    }
+
+    // If DB restored, validate integrity before continuing
+    if (restoredDb) {
+      // Open a temporary connection to run integrity_check
+      const sqlite3 = require("sqlite3").verbose();
+      await new Promise((resolve, reject) => {
+        const tempDb = new sqlite3.Database(dbPath, (err) => {
+          if (err) return reject(err);
+          tempDb.get("PRAGMA integrity_check;", (pcErr, row) => {
+            if (pcErr) {
+              tempDb.close(() => {});
+              return reject(pcErr);
+            }
+            const res = row ? Object.values(row)[0] : null;
+            tempDb.close(() => {
+              if (res !== "ok") return reject(new Error(`Integrity check failed: ${res}`));
+              return resolve(true);
+            });
+          });
+        });
+      });
+
+      console.log("[Restore] Restored DB integrity_check OK");
+    }
+  } catch (e) {
+    // Attempt rollback
+    console.error("[Restore] Error during restore, attempting rollback:", e);
+    try {
+      if (fs.existsSync(backupPath)) {
+        fs.copyFileSync(backupPath, dbPath);
+        console.log("[Restore] Rolled back to previous DB from backup");
+      }
+    } catch (rbErr) {
+      console.error("[Restore] Failed to rollback DB:", rbErr);
+    }
+    // Reopen DB so application continues running with original DB
+    try {
+      const dbModule = require("../database/db");
+      if (dbModule && typeof dbModule.open === "function") await dbModule.open();
+    } catch (openErr) {
+      console.error("[Restore] Failed to reopen DB after rollback:", openErr);
+    }
+    throw e;
+  }
+
+  // Remove WAL/SHM from restored DB if present
   if (fs.existsSync(dbWalPath)) {
     try { fs.unlinkSync(dbWalPath); } catch (e) {}
   }
   if (fs.existsSync(dbShmPath)) {
     try { fs.unlinkSync(dbShmPath); } catch (e) {}
+  }
+
+  // Reopen main DB connection for the running app
+  try {
+    const dbModule = require("../database/db");
+    if (dbModule && typeof dbModule.open === "function") await dbModule.open();
+    console.log("[Restore] Reopened DB connection after restore");
+  } catch (e) {
+    console.error("[Restore] Failed to reopen DB after restore:", e);
+    throw e;
   }
 };
 
@@ -1039,10 +1394,11 @@ const restoreUploadedBackup = async (req, res, next) => {
     const file = req.file;
     if (!file) return next(createHttpError(400, "Backup file is required"));
     
-    const isSupported = file.originalname.endsWith(".sqlite") || file.originalname.endsWith(".tar.gz") || file.originalname.endsWith(".tar.gz.enc") || file.originalname.endsWith(".enc");
+    // Only accept full archive backups via upload (.tar.gz, .tar.gz.enc, .enc)
+    const isSupported = file.originalname.endsWith(".tar.gz") || file.originalname.endsWith(".tar.gz.enc") || file.originalname.endsWith(".enc");
     if (!isSupported) {
       fs.unlinkSync(file.path);
-      return next(createHttpError(400, "Uploaded file must be a .sqlite or tar.gz backup"));
+      return next(createHttpError(400, "Uploaded file must be a full backup archive (.tar.gz or .tar.gz.enc)"));
     }
 
     await performRestore(file.path, file.originalname);
@@ -1294,6 +1650,8 @@ module.exports = {
   updateManagerProfile,
   managerResetPassword,
   sendResetEmail,
+  getDataResetOptions,
+  performDataReset,
   getBackups,
   createBackup,
   restoreBackup,
