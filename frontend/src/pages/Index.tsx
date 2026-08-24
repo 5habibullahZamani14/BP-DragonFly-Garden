@@ -1,31 +1,17 @@
 /*
  * Index.tsx — Top-level page component and role dispatcher.
  *
- * This is the single page in the application. Instead of having separate
- * routes for each role (customer, payment, manager), I put all
- * role-based rendering here because the URL never changes after the initial
- * QR scan — the role is embedded in the query string, not the path.
+ * Customer table ordering is intentionally the only entry path driven by a
+ * table QR code. Staff and manager access is handled through dedicated login
+ * screens that require username/password verification and a server-issued JWT.
  *
- * How role detection works:
- *   The detectRole function reads the ?qr= query parameter and matches it
- *   against four regex patterns. Each pattern corresponds to one role:
+ * Role detection rules:
+ *   - ?qr=table-<n> → customer view
+ *   - ?view=payment → payment counter login screen
+ *   - ?view=manager → manager login screen
  *
- *     table-N          → customer (N is the table number, e.g. table-3)
- *     payment-counter-*→ payment
- *     manager-*        → manager
- *
- *   If the QR code is missing entirely (e.g. someone just navigates to /),
- *   the app defaults to the customer view with a fake table-1 QR so the
- *   live preview in development shows something meaningful.
- *   If the QR code is present but does not match any pattern, the landing
- *   view is shown — a simple "please scan your table QR" instruction screen.
- *
- * Toast notifications:
- *   I implemented a lightweight custom toast system here (the toast state
- *   and notify callback) rather than importing a library, because I only
- *   need a simple success/error banner at the top of the screen. The Sonner
- *   library is used by Shadcn components internally, but for the main view
- *   transitions and order confirmations I wanted full control over the styling.
+ * Any legacy manager/payment QR strings are rejected so they cannot be used
+ * as an authentication shortcut.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,29 +22,30 @@ import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
 import { ManagementView } from "@/components/garden/ManagementView";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
-/* QR code patterns — must match the patterns used in the backend middleware. */
 const TABLE_QR_PATTERN = /^table-[a-z0-9_-]+$/i;
-const PAYMENT_QR_PATTERN = /^payment-counter-[a-z0-9_-]+$/i;
-const MANAGER_QR_PATTERN = /^manager-[a-z0-9_-]+$/i;
+const LEGACY_PRIVILEGED_QR_PATTERN = /^(payment-counter|manager)-[a-z0-9_-]+$/i;
 
 type Role = "landing" | "customer" | "payment" | "manager";
 
-/*
- * detectRole reads the current URL and returns the role and QR code string.
- * It is memoised via useMemo in the component so it only runs once on mount,
- * not on every re-render.
- */
 const detectRole = (): { role: Role; qrCode: string } => {
   const params = new URLSearchParams(window.location.search);
+  const view = (params.get("view") || "").trim().toLowerCase();
   const qr = (params.get("qr") || "").trim().toLowerCase();
-  if (MANAGER_QR_PATTERN.test(qr)) return { role: "manager", qrCode: qr };
-  if (PAYMENT_QR_PATTERN.test(qr)) return { role: "payment", qrCode: qr };
+
+  if (view === "manager") return { role: "manager", qrCode: "" };
+  if (view === "payment") return { role: "payment", qrCode: "" };
+
+  if (LEGACY_PRIVILEGED_QR_PATTERN.test(qr)) {
+    return { role: "landing", qrCode: "" };
+  }
+
   if (TABLE_QR_PATTERN.test(qr)) return { role: "customer", qrCode: qr };
-  /* Default to customer preview if no QR is present (development convenience). */
-  if (!qr) {
+
+  if (!qr && !view) {
     if (import.meta.env.DEV) return { role: "customer", qrCode: "table-1" };
     return { role: "landing", qrCode: "" };
   }
+
   return { role: "landing", qrCode: "" };
 };
 

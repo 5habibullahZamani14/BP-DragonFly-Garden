@@ -1,22 +1,10 @@
 /*
- * role-based-access.js — QR-code-based role detection and access control.
+ * role-based-access.js — customer table QR detection and request context.
  *
- * This is the core security layer of the application. Because the system
- * has no traditional login screen for customers or staff, I needed
- * a different way to know who is making each request. The solution is to
- * embed the user's role in the QR code they scan to enter the application.
- *
- * When a customer scans their table QR code, the URL they land on contains
- * a parameter like ?qr=table-3. When the payment counter staff scan their QR
- * code, the URL contains ?qr=payment-counter-main. This middleware reads that
- * parameter on every incoming request and attaches the resolved role to the
- * request object. Route handlers and controllers then check req.userRole
- * instead of a session token.
- *
- * The four roles in this system are:
- *   customer_waiter   — Scanning a table QR. Can browse the menu and place orders.
- *   payment_counter   — Scanning the payment QR. Can process payments.
- *   manager           — Scanning the manager QR. Can access the full dashboard.
+ * Only customer table QR codes are treated as public entry points. Staff and
+ * manager access is authenticated via username/password and server-issued JWTs.
+ * Any legacy manager/payment QR route is rejected so that a QR value can never
+ * grant privileged access.
  */
 
 const { createHttpError } = require("./validation");
@@ -32,37 +20,21 @@ const ROLES = {
 };
 
 /*
- * QR code patterns. Each role has a distinct prefix in its QR code string.
- * The regex patterns enforce the expected format so that a malformed or
- * unknown QR code string does not accidentally grant access.
- *
- *   Table QR:      "table-1", "table-2", ...
- *   Payment QR:    "payment-counter-main", "payment-counter-demo:1", ...
- *   Manager QR:    "manager-main", ...
+ * Only table QR codes are valid for public customer entry. QR values used for
+ * staff or manager authentication are explicitly rejected.
  */
 const QR_PATTERNS = {
   TABLE_QR: /^table-\d+$/,
-  PAYMENT_QR: /^payment-counter-[\w:]+$/,
-  MANAGER_QR: /^manager-[\w:]+$/
+  LEGACY_PRIVILEGED_QR: /^(payment-counter|manager)-[\w:]+$/
 };
 
-/*
- * getRoleFromQRCode reads the QR code string and returns the matching role.
- * The order of checks matters: more specific patterns (manager, payment) are
- * tested before the general table pattern to avoid any ambiguity.
- * Returns null if the QR code does not match any known pattern.
- */
 const getRoleFromQRCode = (qrCode) => {
   if (!qrCode) {
     return null;
   }
 
-  if (QR_PATTERNS.MANAGER_QR.test(qrCode)) {
-    return ROLES.MANAGER;
-  }
-
-  if (QR_PATTERNS.PAYMENT_QR.test(qrCode)) {
-    return ROLES.PAYMENT_COUNTER;
+  if (QR_PATTERNS.LEGACY_PRIVILEGED_QR.test(qrCode)) {
+    return null;
   }
 
   if (QR_PATTERNS.TABLE_QR.test(qrCode)) {

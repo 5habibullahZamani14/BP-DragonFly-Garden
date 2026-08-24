@@ -163,9 +163,10 @@ const createOrder = async (orderData) => {
   const placeholders = uniqueMenuItemIds.map(() => "?").join(", ");
   const menuItems = await all(
     `
-      SELECT id, name, price, category, is_available, is_promo, promo_affects_price, promo_discount_percent
-      FROM menu_items
-      WHERE id IN (${placeholders})
+      SELECT mi.id, mi.name, mi.price, c.name AS category, mi.is_available, mi.is_promo, mi.promo_affects_price, mi.promo_discount_percent
+      FROM menu_items mi
+      INNER JOIN categories c ON mi.category_id = c.id
+      WHERE mi.id IN (${placeholders})
     `,
     uniqueMenuItemIds
   );

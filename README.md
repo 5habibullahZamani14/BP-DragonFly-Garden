@@ -2,8 +2,9 @@
 
 This is the ordering and management system built for BP Dragonfly Garden Cafe Ordering and Management System, a small farm-to-table
 cafe. The system lets customers browse the menu and place orders from their table by scanning a
-QR code, gives staff a live view of incoming orders, and provides a payment counter
-and a manager dashboard for day-to-day operations.
+customer table QR code, gives staff a live operational view after secure login, and provides a
+payment counter and manager dashboard that require username/password authentication and
+server-issued JWT sessions.
 
 The entire system runs on the local Wi-Fi network inside the cafe. No internet connection is
 required once the server is running. The intended deployment hardware is a Raspberry Pi 5,
@@ -19,9 +20,10 @@ there they can browse the menu, add items to a cart, and place an order. The ord
 staff handling order fulfillment, and they can update its status as it moves from queued to
 preparing to ready.
 
-A separate QR code is used by the payment counter staff to view all unpaid orders and process
-payments. Another QR code gives the restaurant manager access to a dashboard where they can
-manage employees, inventory, system settings, and view logs.
+Payment counter staff sign in with their employee credentials and receive a server-issued JWT
+session before they can view unpaid orders and process payments. The restaurant manager signs in
+with their username and password and receives a dedicated manager JWT session to manage
+employees, inventory, system settings, and logs.
 
 ---
 
@@ -80,9 +82,9 @@ npm run dev
 The frontend dev server starts on port 5173. It proxies API requests to the backend at
 port 5000, so both must be running at the same time during development.
 
-Open http://localhost:5173 in your browser. To simulate a specific role, append the QR
-parameter to the URL: `?qr=table-1` for the customer view, `?qr=payment-counter-main` for the
-payment counter, or `?qr=manager-main` for the manager dashboard.
+Open http://localhost:5173 in your browser. Customer ordering is triggered by a table QR code
+like `?qr=table-1`. Staff and manager access is opened through the dedicated login screens and
+requires a valid username/password login plus the server-issued JWT session.
 
 ---
 

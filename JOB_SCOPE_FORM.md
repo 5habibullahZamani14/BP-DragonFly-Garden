@@ -209,12 +209,12 @@ Task 5.2: Implement the customer-facing experience
 
 Task 5.3: Implement the QR-based access flow
 
-{MAIN-TASK-EXPLANATION}: The QR-based access flow has been included so that the system can be used in a cafe environment without requiring users to manually enter long addresses or complex paths. This improves convenience, reduces friction, and makes the deployment more practical for staff and customers. This task is important because it captures the current implementation context, explains why the work matters in practical operation, and provides the rationale that supports the sub-tasks that follow. It keeps the solution aligned with the real business purpose of the system, the expected user experience, and the long-term maintainability of the application.
+{MAIN-TASK-EXPLANATION}: The customer-facing access flow uses table QR codes so customers can open the ordering page without manually entering long addresses or complex paths. Staff and manager access is instead protected by username/password login and server-issued JWT sessions, which keeps administrative workflows separate from public table ordering and reduces the risk of unauthorized access. This task is important because it captures the current implementation context, explains why the work matters in practical operation, and provides the rationale that supports the sub-tasks that follow. It keeps the solution aligned with the real business purpose of the system, the expected user experience, and the long-term maintainability of the application.
 
-- Connect QR code entry points to the appropriate views.
-  - ***{EXPLANATIONS}:*** The application is designed to route users to the relevant customer, payment, or manager experience through QR-based entry points. This is important because it makes the deployment feel accessible and professional rather than technical or cumbersome.
+- Connect table QR entry points to the public customer ordering flow.
+  - ***{EXPLANATIONS}:*** The application is designed to route public customers to the correct table ordering experience through a table QR entry point. This is important because it makes the customer-facing deployment feel accessible and professional rather than technical or cumbersome without granting privileged staff access through QR values.
 - Ensure each role has the correct interface and workflow.
-  - ***{EXPLANATIONS}:*** The frontend is organized so that each role receives the interface that matches its responsibilities. This role-based presentation is essential for clarity and operational correctness.
+  - ***{EXPLANATIONS}:*** The frontend is organized so that each authenticated role receives the interface that matches its responsibilities after secure login. This role-based presentation is essential for clarity, operational correctness, and safer access control.
 
 Deliverables:
 
@@ -223,7 +223,7 @@ Deliverables:
 - Customer-facing order interface
   - ***{EXPLANATIONS}:*** The customer-facing experience includes menu browsing, item selection, and order submission. This deliverable is already ready because the interface is built and aligned with the core business objective of ordering from a cafe environment.
 - Role-based app entry points
-  - ***{EXPLANATIONS}:*** Role-based entry points exist through the customer, payment counter, and management views, with QR-based navigation linking users to the appropriate workflow. This deliverable is already ready because the application already presents distinct entry paths for the main user roles.
+  - ***{EXPLANATIONS}:*** Public customer access uses table QR navigation, while payment counter and management access are reached through authenticated login screens that issue JWT sessions. This deliverable is already ready because the application presents distinct entry paths for the main user roles without relying on QR values for privileged access.
 
 ### Phase 6: Ordering and Order Workflow Development
 
@@ -612,7 +612,7 @@ The following section expands the original deliverables listed throughout this j
 
 - Project goals — The project goals are clearly defined around creating a practical cafe ordering and management platform that supports customers, payment staff, and managers through a shared local-network experience. This deliverable is ready for delivery because the project purpose is documented, aligned with the business need, and reflected in the current system structure.
 - Functional requirements — The functional requirements are represented by the core journeys of menu browsing, order placement, payment handling, and administrative management. This deliverable is ready for delivery because the implemented application clearly supports these major workflows.
-- Initial project scope definition — The project scope is clearly bounded around a local cafe environment with QR-based user access, order processing, payment operations, management oversight, and operational readiness. This deliverable is ready for delivery because the system remains focused and purpose-driven rather than scattered across unrelated features.
+- Initial project scope definition — The project scope is clearly bounded around a local cafe environment with customer table QR access, authenticated staff/manager login, order processing, payment operations, management oversight, and operational readiness. This deliverable is ready for delivery because the system remains focused and purpose-driven rather than scattered across unrelated features.
 
 ### Phase 2 Deliverables
 
@@ -636,7 +636,7 @@ The following section expands the original deliverables listed throughout this j
 
 - Functional frontend application — The frontend application is implemented as a React-based interface with structured page components, reusable UI elements, and role-based view handling. This deliverable is ready for delivery because the user interface is present, operational, and connected to the backend services.
 - Customer-facing order interface — The customer-facing experience includes menu browsing, item selection, and order submission functions. This deliverable is ready for delivery because the customer interface is built and aligned with the core business objective of ordering from a cafe table.
-- Role-based app entry points — Role-based entry points exist through the customer, payment counter, and management views, with QR-based navigation linking users to the appropriate workflow. This deliverable is ready for delivery because the application already presents distinct entry paths for the main user roles.
+- Role-based app entry points — Role-based entry points exist through the customer ordering flow via table QR navigation, while payment counter and management views are reached through authenticated login screens that issue JWT sessions. This deliverable is ready for delivery because the application already presents distinct entry paths for the main user roles without relying on QR values for privileged access.
 
 ### Phase 6 Deliverables
 
