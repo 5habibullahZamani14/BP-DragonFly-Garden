@@ -236,7 +236,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   });
 
-  const managerDisconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const managerDisconnectTimer = useRef<number | null>(null);
   useEffect(() => {
     if (!isLoggedIn) {
       if (managerDisconnectTimer.current) {

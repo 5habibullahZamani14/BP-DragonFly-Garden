@@ -56,21 +56,27 @@ const getRestaurantSetting = (key) =>
 
 /*
  * resolveOrderingBaseUrl returns a stable base URL used for printed table
- * QR codes. It prefers the Raspberry Pi captive portal target set via the
- * backend environment or runtime settings. Falling back to the incoming
- * request host is only used for development or when no captive portal target
- * is configured.
+ * QR codes. It prefers an explicitly configured target, otherwise uses the
+ * incoming LAN host or detected network address. Raspberry Pi deployments
+ * retain the runtime hotspot setting.
  */
 const resolveOrderingBaseUrl = async (req) => {
   const localIp = getLocalNetworkAddress();
   const port = Number(process.env.PORT) || 5000;
 
+  if (process.env.CAPTIVE_PORTAL_TARGET) {
+    return normalizeBaseUrl(process.env.CAPTIVE_PORTAL_TARGET);
+  }
+
+  if (localIp !== "10.42.0.1") {
+    const requestBaseUrl = getServerBaseUrlFromRequest(req);
+    if (requestBaseUrl) return normalizeBaseUrl(requestBaseUrl);
+    if (localIp) return `http://${localIp}:${port}`;
+  }
+
   if (localIp) {
     if (localIp === "10.42.0.1") {
       // Running on the Pi
-      if (process.env.CAPTIVE_PORTAL_TARGET) {
-        return normalizeBaseUrl(process.env.CAPTIVE_PORTAL_TARGET);
-      }
       try {
         const rawValue = await getRestaurantSetting("captive_portal_target");
         if (rawValue) {

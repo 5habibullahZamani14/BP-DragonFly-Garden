@@ -75,7 +75,7 @@ import { useTranslation } from "react-i18next";
 
 const formatRM = (v: number) => `RM ${(Number(v) || 0).toFixed(2)}`;
 
-const getMenuItemPrice = (item: MenuItem) => {
+const getMenuItemPrice = (item: MenuItem | Recommendation) => {
   if (item && item.is_promo && item.promo_affects_price && item.promo_discount_percent) {
     const factor = (100 - item.promo_discount_percent) / 100;
     return item.price * factor;
@@ -103,8 +103,23 @@ type CartLine = {
   notes: string;
   selectedOptions: SelectedOption[];
 };
-type CartSource = MenuItem;
+type CartSource = MenuItem | Recommendation;
 type OrderWithVat = Order & { total_with_vat?: number | string | null };
+type DisplayOption = { option?: string; delta?: number };
+
+const isDisplayOption = (value: unknown): value is DisplayOption =>
+  typeof value === "object" && value !== null &&
+  (!("option" in value) || typeof value.option === "string") &&
+  (!("delta" in value) || typeof value.delta === "number");
+
+const parseDisplayOptions = (json: string): DisplayOption[] => {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter(isDisplayOption) : [];
+  } catch {
+    return [];
+  }
+};
 
 
 // Map category names to friendly icons (Grab-style)
@@ -521,7 +536,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     // Pre-populate with any manager-set defaults before opening the sheet
     const initialSelections: Record<number, Set<number>> = {};
     for (const g of groups) {
-      const defaultId = (g as any).default_option_id;
+      const defaultId = g.default_option_id;
       if (defaultId != null && g.options.some(o => o.id === defaultId)) {
         initialSelections[g.id] = new Set([defaultId]);
       }
@@ -1124,7 +1139,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         </p>
 
         <button
-          onClick={scrollToMenu}
+          onClick={() => scrollToMenu()}
           className="btn-gold mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[0.9rem] sm:px-6 sm:py-3 sm:text-[1rem]"
         >
           {t("customer.exploreMenu")} <ArrowRight className="h-4 w-4" />
@@ -1255,7 +1270,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
               <span className="eyebrow">{t("customer.pickedForYou")}</span>
               <h2 className="mt-1">{t("customer.recommended")}</h2>
             </div>
-            <button onClick={scrollToMenu}>{t("customer.viewAll")} <ChevronRight className="h-3 w-3" /></button>
+            <button onClick={() => scrollToMenu()}>{t("customer.viewAll")} <ChevronRight className="h-3 w-3" /></button>
           </div>
           <div className="mb-6 sm:mb-8 flex snap-x-mandatory gap-3 overflow-x-auto px-3 sm:px-5 pb-3 no-scrollbar">
             {recommended.map((item) => (
@@ -1773,7 +1788,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                 {t("customer.onceYouSend")}
               </p>
               <button
-                onClick={scrollToMenu}
+                onClick={() => scrollToMenu()}
                 className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-[var(--shadow-soft)] transition active:scale-95"
               >
                 {t("customer.browseMenu")} <ArrowRight className="h-4 w-4" />
@@ -1834,26 +1849,15 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
                                       <p className="text-sm font-semibold leading-snug">{item.item_name}</p>
                                       {item.notes && <p className="text-[0.68rem] opacity-40 italic mt-0.5">"{item.notes}"</p>}
                                       {item.options_json && (() => {
-                                        try {
-                                          const opts = JSON.parse(item.options_json);
-                                          if (Array.isArray(opts) && opts.length > 0) {
-                                            return (
-                                              <ul className="text-[0.68rem] opacity-50 mt-0.5 list-disc pl-3.5 space-y-0.5">
-                                                {opts.map((opt: any, index: number) => {
-                                                  const priceSuffix = opt.delta > 0 ? ` (+${formatRM(opt.delta)})` : "";
-                                                  return (
-                                                    <li key={index}>
-                                                      {opt.option}{priceSuffix}
-                                                    </li>
-                                                  );
-                                                })}
-                                              </ul>
-                                            );
-                                          }
-                                        } catch (e) {
-                                          return null;
-                                        }
-                                        return null;
+                                        const opts = parseDisplayOptions(item.options_json);
+                                        return opts.length ? (
+                                          <ul className="text-[0.68rem] opacity-50 mt-0.5 list-disc pl-3.5 space-y-0.5">
+                                            {opts.map((opt, index) => {
+                                              const priceSuffix = opt.delta && opt.delta > 0 ? ` (+${formatRM(opt.delta)})` : "";
+                                              return <li key={index}>{opt.option}{priceSuffix}</li>;
+                                            })}
+                                          </ul>
+                                        ) : null;
                                       })()}
                                     </div>
                                   </div>

@@ -3,7 +3,7 @@ import React from "react";
 type TickProps = {
   x?: number;
   y?: number;
-  payload?: { value: string } | any;
+  payload?: { value?: unknown };
   wordsPerLine?: number;
   fontSize?: number;
   textAnchor?: 'start' | 'middle' | 'end';

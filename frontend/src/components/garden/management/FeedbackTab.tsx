@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  API_BASE,
   fetchManagerFeedback,
   fetchLatestFeedbackAnalysis,
   runFeedbackAnalysis,
@@ -36,8 +37,6 @@ import {
   type FeedbackAnalysisResponse,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 type Notify = (kind: "success" | "error", text: string) => void;
 

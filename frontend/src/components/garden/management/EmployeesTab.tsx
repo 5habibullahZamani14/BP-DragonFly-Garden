@@ -182,7 +182,7 @@ export const EmployeesTab = () => {
   const handleArchive = async (id: number) => {
     toast(t("m.confirmArchive"), {
       action: {
-        text: t("m.archive"),
+        label: t("m.archive"),
         onClick: async () => {
           try {
             await updateEmployee(id, { is_archived: 1 });
@@ -484,7 +484,7 @@ export const EmployeesTab = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-gray-400" />
-                              <span>{t("m.joined", { date: new Date(emp.hire_date).toLocaleDateString() })}</span>
+                              <span>{emp.hire_date ? t("m.joined", { date: new Date(emp.hire_date).toLocaleDateString() }) : "—"}</span>
                             </div>
                           </div>
                         </div>

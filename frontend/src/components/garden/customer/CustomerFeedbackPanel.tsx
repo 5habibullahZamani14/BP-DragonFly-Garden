@@ -17,13 +17,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  API_BASE,
   submitFeedback,
   fetchMyFeedback,
   type CustomerFeedback,
   type Order,
 } from "@/lib/api";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 type Notify = (kind: "success" | "error", text: string) => void;
 

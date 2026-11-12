@@ -17,7 +17,9 @@ const pickPreferredLocalIp = () => {
     return null;
   }
 
-  return candidates.find((address) => address !== "127.0.0.1") || candidates[0];
+  return candidates.find((address) => address === "10.42.0.1")
+    || candidates.find((address) => address !== "127.0.0.1")
+    || candidates[0];
 };
 
 module.exports = {

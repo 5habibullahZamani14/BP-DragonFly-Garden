@@ -10,6 +10,7 @@ import {
   Plus, Trash2, Edit2, ZoomIn, ZoomOut, RotateCw, FlipHorizontal, 
   ArrowRight, ArrowLeft, ArrowUp, ArrowDown, X, Check, Settings2
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchPatterns, createPattern, updatePattern, deletePattern,
@@ -51,7 +52,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
     });
   };
 
-  const fadeDirections: { value: FadeDirection; icon: any; label: string }[] = [
+  const fadeDirections: { value: FadeDirection; icon: LucideIcon; label: string }[] = [
     { value: 'none', icon: X, label: 'None' },
     { value: 'right-to-left', icon: ArrowRight, label: '→' },
     { value: 'left-to-right', icon: ArrowLeft, label: '←' },

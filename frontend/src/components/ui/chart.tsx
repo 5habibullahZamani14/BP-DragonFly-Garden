@@ -2,6 +2,7 @@ import * as React from "react";
 import * as RechartsPrimitive from "recharts";
 
 import { cn } from "@/lib/utils";
+import ChartInfo from "@/components/ui/ChartInfo";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -39,14 +40,6 @@ const ChartContainer = React.forwardRef<
 >(({ id, className, children, config, infoKey, ...props }, ref) => {
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
-  // Lazy import to avoid cycles
-  let ChartInfo: any = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    ChartInfo = require("@/components/ui/ChartInfo").default;
-  } catch (e) {
-    ChartInfo = null;
-  }
   return (
     <ChartContext.Provider value={{ config }}>
       <div

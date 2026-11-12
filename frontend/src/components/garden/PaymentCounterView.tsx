@@ -58,7 +58,7 @@ import {
   cancelOrder,
   submitFeedback,
 } from "@/lib/api";
-import type { MenuItem, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
+import type { MenuItem, OrderType, PaymentOrder, StaffAssistanceRequest } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { HelpModal, HelpSection } from "./HelpModal";
@@ -84,6 +84,26 @@ interface Employee {
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
+
+type OrderOption = { option?: string; delta?: number };
+const isOrderOption = (value: unknown): value is OrderOption =>
+  typeof value === "object" && value !== null &&
+  (!("option" in value) || typeof value.option === "string") &&
+  (!("delta" in value) || typeof value.delta === "number");
+
+const parseOrderOptions = (json: string): OrderOption[] => {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed.filter(isOrderOption) : [];
+  } catch {
+    return [];
+  }
+};
+
+const getPosInitialOrderType = (orderType?: OrderType): "TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER" => {
+  if (orderType === "PICKUP" || orderType === "DELIVERY" || orderType === "COUNTER") return orderType;
+  return orderType === "DINE_IN" ? "COUNTER" : "TAKEAWAY";
+};
 
 const getTenderSuggestions = (remaining: number) => {
   const baseAmount = Number.isFinite(remaining) ? remaining : 0;
@@ -308,10 +328,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       } else {
         notify("error", t("payment.invalidLogin"));
       }
-    } catch (error: any) {
-      if (error?.message?.includes("429")) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "");
+      if (message.includes("429")) {
         notify("error", t("payment.rateLimited", "Too many login attempts. Please try again in 5 minutes."));
-      } else if (error?.message?.includes("401")) {
+      } else if (message.includes("401")) {
         notify("error", t("payment.invalidLogin"));
       } else {
         notify("error", t("payment.failedVerify"));
@@ -474,7 +495,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   }, getPaymentCounterToken);
 
-  const serverDisconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverDisconnectTimer = useRef<number | null>(null);
   useEffect(() => {
     if (!loggedInEmployee) {
       if (serverDisconnectTimer.current) {
@@ -702,7 +723,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       notify("success", t("feedback.submitSuccess", "Feedback submitted successfully!"));
       setFeedbackModalOpen(false);
       setFeedbackComment("");
-    } catch (err: any) {
+    } catch (err: unknown) {
       notify("error", getErrorMessage(err, t("feedback.submitFailed", "Failed to submit feedback")));
     } finally {
       setFeedbackSubmitting(false);
@@ -962,13 +983,12 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                               </span>
                             )}
                             {item.options_json && (() => {
-                              try {
-                                const opts = JSON.parse(item.options_json);
-                                if (Array.isArray(opts) && opts.length > 0) {
+                              const opts = parseOrderOptions(item.options_json);
+                              if (opts.length > 0) {
                                   return (
                                     <ul className="text-xs text-gray-500 list-disc pl-8 mt-0.5">
-                                      {opts.map((opt: any, idx: number) => {
-                                        const deltaText = opt.delta > 0 ? ` (+RM ${opt.delta.toFixed(2)})` : "";
+                                      {opts.map((opt, idx) => {
+                                        const deltaText = opt.delta && opt.delta > 0 ? ` (+RM ${opt.delta.toFixed(2)})` : "";
                                         return (
                                           <li key={idx}>
                                             {opt.option}{deltaText}
@@ -977,9 +997,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                       })}
                                     </ul>
                                   );
-                                }
-                              } catch (e) {
-                                return null;
                               }
                               return null;
                             })()}
@@ -1195,7 +1212,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         size="lg" 
                         onClick={() => {
                           setPosModalParentOrder(order);
-                          setPosModalInitialType(order.order_type as any || "TAKEAWAY");
+                          setPosModalInitialType(getPosInitialOrderType(order.order_type));
                           setPosModalOpen(true);
                         }}
                         className="flex-none font-medium bg-white hover:bg-gray-50 border-gray-200"

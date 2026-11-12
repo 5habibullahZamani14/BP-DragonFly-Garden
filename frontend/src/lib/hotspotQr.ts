@@ -1,7 +1,7 @@
 export type HotspotSecurity = "WPA" | "WEP" | "nopass";
 
 const escapeWifiValue = (value: string) =>
-  String(value || "").replace(/([\\\\;,\":])/g, "\\$1");
+  String(value || "").replace(/([\\\\;,":])/g, "\\$1");
 
 export const buildWifiQrValue = (
   ssid: string,

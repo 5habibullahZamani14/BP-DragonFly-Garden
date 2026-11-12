@@ -17,24 +17,42 @@
  * requests that do not need the role QR code appended.
  */
 
-import type { Order as BaseOrder } from "./menu-data";
+import type { ItemOptionGroup, Order as BaseOrder } from "./menu-data";
+
+export type OrderType = "DINE_IN" | "TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER";
 
 export type Order = BaseOrder & {
-  order_type?: string;
+  order_type?: OrderType;
+  table_id?: number;
   customer_name?: string;
   customer_phone?: string;
   collection_time?: string;
   delivery_address?: string;
   daily_ticket_number?: number;
   order_remarks?: string;
+  service_charge_rate?: number;
+  vat_rate?: number;
 };
 
 /*
- * API_BASE is the root URL of the backend server. During development this
- * defaults to http://localhost:5000, matching the Express dev server port.
- * In production on the Raspberry Pi it is set to the device's LAN address.
+ * Production is served by the backend, so requests stay on the current origin.
+ * During development Vite proxies requests to the local backend; a non-loopback
+ * VITE_API_BASE can still point at a separate development backend.
  */
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+export const API_BASE = (() => {
+  if (import.meta.env.PROD) return "";
+
+  const configuredBase = import.meta.env.VITE_API_BASE?.trim();
+  if (!configuredBase) return "";
+
+  try {
+    const url = new URL(configuredBase, window.location.origin);
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "0.0.0.0") return "";
+    return url.origin;
+  } catch {
+    return configuredBase;
+  }
+})();
 
 /*
  * apiUrl builds the full request URL. When a qrCode is provided it appends
@@ -47,6 +65,14 @@ const apiUrl = (path: string, qrCode?: string) => {
   if (!qrCode) return base;
   const sep = path.includes("?") ? "&" : "?";
   return `${base}${sep}qr_code=${encodeURIComponent(qrCode)}`;
+};
+
+const getApiErrorMessage = (body: unknown): string | undefined => {
+  if (typeof body === "string") return body;
+  if (!body || typeof body !== "object") return undefined;
+  if ("message" in body && typeof body.message === "string") return body.message;
+  if ("error" in body && typeof body.error === "string") return body.error;
+  return undefined;
 };
 
 /*
@@ -105,15 +131,7 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
     let errorBody: unknown = null;
     try {
       errorBody = await res.json();
-      if (errorBody && typeof errorBody === "object") {
-        if (typeof (errorBody as any).message === "string") {
-          errorMessage = (errorBody as any).message;
-        } else if (typeof (errorBody as any).error === "string") {
-          errorMessage = (errorBody as any).error;
-        }
-      } else if (typeof errorBody === "string") {
-        errorMessage = errorBody;
-      }
+      errorMessage = getApiErrorMessage(errorBody) || errorMessage;
     } catch {
       // Ignore JSON parse failures and keep the default status text.
     }
@@ -384,11 +402,15 @@ export interface MenuItem {
   promo_affects_price: boolean;
   promo_discount_percent: number | null;
   is_sold_out?: boolean;
-  option_groups?: any[];
+  option_groups?: ItemOptionGroup[];
   card_size?: "normal" | "large" | "extra_large";
   type?: 'food' | 'drink' | 'merchandise';
   is_dynamic_price?: boolean;
+  notes?: string;
 }
+
+export type MenuItemType = NonNullable<MenuItem["type"]>;
+export type MenuCardSize = NonNullable<MenuItem["card_size"]>;
 
 export interface Pattern {
   id: number;
@@ -421,14 +443,11 @@ export interface RepoSection {
   images: RepoImage[];
 }
 
-export interface Recommendation {
-  id: number;
-  name: string;
-  price: number;
-  image_url: string;
+export type Recommendation = Pick<MenuItem, "id" | "name" | "price"> &
+  Partial<Pick<MenuItem, "description" | "category_id" | "category_name" | "image_url" | "option_groups" | "is_promo" | "promo_affects_price" | "promo_discount_percent">> & {
   co_occurrences: number;
   is_fallback?: boolean;
-}
+};
 
 export const fetchRecommendations = async (cartItemIds: number[]): Promise<Recommendation[]> => {
   if (cartItemIds.length === 0) return [];
@@ -438,7 +457,7 @@ export const fetchRecommendations = async (cartItemIds: number[]): Promise<Recom
 export type MenuItemPayload = {
   name: string;
   description?: string;
-  price: number;
+  price?: number;
   category_id: number;
   image_url?: string;
   pattern_id?: number | null;
@@ -446,10 +465,12 @@ export type MenuItemPayload = {
   is_available?: boolean;
   is_popular?: boolean;
   is_promo?: boolean;
-  promo_label?: string;
+  promo_label?: string | null;
   promo_affects_price?: boolean;
   promo_discount_percent?: number | null;
   card_size?: "normal" | "large" | "extra_large";
+  is_dynamic_price?: boolean;
+  type?: MenuItemType;
 };
 
 export const createMenuItem = async (data: MenuItemPayload) =>
@@ -1242,12 +1263,7 @@ export const restoreUploadedBackup = async (file: File): Promise<{ success: bool
   if (!res.ok) {
     let errorMessage = `API Error: ${res.status} ${res.statusText}`;
     try {
-      const body = await res.json();
-      if (body && typeof body === "object") {
-        if (typeof (body as any).message === "string") {
-          errorMessage = (body as any).message;
-        }
-      }
+      errorMessage = getApiErrorMessage(await res.json()) || errorMessage;
     } catch {
       // ignore
     }
@@ -1284,12 +1300,7 @@ export const downloadBackup = async (filename: string): Promise<void> => {
   if (!res.ok) {
     let errorMessage = `API Error: ${res.status} ${res.statusText}`;
     try {
-      const body = await res.json();
-      if (body && typeof body === "object") {
-        if (typeof (body as any).message === "string") {
-          errorMessage = (body as any).message;
-        }
-      }
+      errorMessage = getApiErrorMessage(await res.json()) || errorMessage;
     } catch {
       // ignore
     }
@@ -1364,6 +1375,7 @@ export interface GlobalModifierGroup {
   name: string;
   is_required: boolean;
   is_multi_select: boolean;
+  default_option_id?: number | null;
   options: GlobalModifierOption[];
   /** Which items this group is currently assigned to */
   assignments: GlobalModifierAssignment[];

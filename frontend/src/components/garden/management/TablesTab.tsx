@@ -40,7 +40,7 @@ export const TablesTab = () => {
   const [showAutoConfirm, setShowAutoConfirm] = useState(false);
   const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
   const [showHotspotQR, setShowHotspotQR] = useState(false);
-  const [sortBy, setSortBy] = useState<"number" | "creation_date">("number"); // Sorting mode
+  const [sortBy, setSortBy] = useState<"number" | "creation_order">("number");
   const qrPrintAreaRef = useRef<HTMLDivElement | null>(null);
   const qrFrameRef = useRef<HTMLDivElement | null>(null);
   const [qrSize, setQrSize] = useState(180);
@@ -147,14 +147,8 @@ export const TablesTab = () => {
         const numB = parseInt(b.table_number.match(/\d+/)?.[0] || "999", 10);
         return numA - numB;
       });
-    } else {
-      // Sort by creation date (oldest first)
-      return filtered.sort((a, b) => {
-        const dateA = new Date(a.created_at || 0).getTime();
-        const dateB = new Date(b.created_at || 0).getTime();
-        return dateA - dateB;
-      });
     }
+    return filtered.sort((a, b) => a.id - b.id);
   };
   
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
@@ -233,7 +227,7 @@ export const TablesTab = () => {
   const handleDelete = async (id: number) => {
     toast(t("m.confirmDeleteTable"), {
       action: {
-        text: t("m.delete"),
+        label: t("m.delete"),
         onClick: async () => {
           try {
             await deleteTable(id);
@@ -279,11 +273,11 @@ export const TablesTab = () => {
               Sort by Number
             </Button>
             <Button
-              onClick={() => setSortBy("creation_date")}
-              className={sortBy === "creation_date" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
+              onClick={() => setSortBy("creation_order")}
+              className={sortBy === "creation_order" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
               size="sm"
             >
-              Sort by Creation Date
+              Sort by Creation Order
             </Button>
           </div>
           {!isAdding ? (

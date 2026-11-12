@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 type ChartExportProps = {
   targetId: string;
-  data?: any[];
+  data?: object[];
   fileName?: string;
   className?: string;
 };
@@ -114,7 +114,9 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
   const exportCsv = () => {
     if (!data || !data.length) return toast.error("No tabular data available for CSV export");
     const keys = Object.keys(data[0]);
-    const rows = [keys.join(',')].concat(data.map(r => keys.map(k => `"${String(r[k] ?? '')}"`).join(',')));
+    const rows = [keys.join(',')].concat(data.map(row =>
+      keys.map(key => `"${String(Reflect.get(row, key) ?? '')}"`).join(',')
+    ));
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     downloadBlob(blob, `${fileName}.csv`);
   };

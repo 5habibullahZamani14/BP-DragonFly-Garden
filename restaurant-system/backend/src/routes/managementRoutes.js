@@ -554,6 +554,9 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
     }
     if (defaultPrinter !== undefined) {
       await run("UPDATE restaurant_settings SET value = ? WHERE key = 'default_printer'", [defaultPrinter]);
+      if (defaultPrinter && selectedPrinter === undefined) {
+        await run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [defaultPrinter]);
+      }
     }
     
     // Handle printer profiles - if printerProfiles is provided, update the entire structure

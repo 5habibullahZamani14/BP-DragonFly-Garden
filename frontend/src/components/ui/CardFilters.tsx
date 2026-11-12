@@ -5,6 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { TimeframeValue } from "@/lib/parseDbTimestamp";
 
 type SelectOption = { value: string; label: string };
+type ProductType = "all" | "food" | "drink" | "merchandise";
+
+const isProductType = (value: string): value is ProductType =>
+  value === "all" || value === "food" || value === "drink" || value === "merchandise";
 
 type CardFiltersProps = {
   label: string;
@@ -14,8 +18,8 @@ type CardFiltersProps = {
   onStartDateChange?: (val: string) => void;
   endDate?: string;
   onEndDateChange?: (val: string) => void;
-  productType?: string;
-  onProductTypeChange?: (val: string) => void;
+  productType?: ProductType;
+  onProductTypeChange?: (val: ProductType) => void;
   secondaryLabel?: string;
   secondaryValue?: string;
   onSecondaryChange?: (val: string) => void;
@@ -70,7 +74,9 @@ export const CardFilters: React.FC<CardFiltersProps> = ({
         )}
 
         {productType !== undefined && onProductTypeChange && (
-          <Select value={productType} onValueChange={onProductTypeChange}>
+          <Select value={productType} onValueChange={(value) => {
+            if (isProductType(value)) onProductTypeChange(value);
+          }}>
             <SelectTrigger className="h-8 text-xs bg-white rounded-lg border-gray-200 min-w-[110px] w-auto">
               <SelectValue placeholder={t("m.productType")} />
             </SelectTrigger>

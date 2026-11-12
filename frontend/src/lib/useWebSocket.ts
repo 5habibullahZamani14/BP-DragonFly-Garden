@@ -33,20 +33,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { safeConsoleError, safeConsoleWarn } from "@/lib/safeConsole";
+import { API_BASE } from "@/lib/api";
 
 /*
- * getWsBase determines the WebSocket server address. In production this comes
- * from VITE_API_BASE (the same env variable used for HTTP requests), with the
- * protocol swapped from http/https to ws/wss. In development it defaults to
- * the current hostname on port 5000 (the backend dev server port).
+ * In production the backend serves the frontend on the same origin. During
+ * development the API server uses port 5000, regardless of the Vite port.
  */
 const getWsBase = () => {
-  const envBase = import.meta.env.VITE_API_BASE;
-  if (envBase) {
-    return envBase.replace(/^http/, "ws");
-  }
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.hostname}:5000`;
+  const base = API_BASE || (import.meta.env.DEV
+    ? `${window.location.protocol}//${window.location.hostname}:5000`
+    : window.location.origin);
+  return base.replace(/^http/, "ws");
 };
 
 const WS_BASE = getWsBase();
@@ -65,7 +63,8 @@ export type WSEventType =
   | "MENU_UPDATE"
   | "TABLE_UPDATE"
   | "EMPLOYEE_UPDATE"
-  | "SETTINGS_UPDATE";
+  | "SETTINGS_UPDATE"
+  | "FEEDBACK_RESPONSE";
 
 interface WSEvent {
   type: WSEventType;

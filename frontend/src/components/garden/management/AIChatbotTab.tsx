@@ -5,9 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { aiChat } from "@/lib/api";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+import { API_BASE, aiChat } from "@/lib/api";
 
 type UsageData = {
   requests_today: number;

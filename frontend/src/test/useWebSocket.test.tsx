@@ -3,8 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useCallback } from "react";
 import { useWebSocket } from "@/lib/useWebSocket";
 
-const originalWebSocket = global.WebSocket;
-
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   public onopen: (() => void) | null = null;
@@ -43,13 +41,13 @@ const TestWrapper = ({ token }: TestWrapperProps) => {
 describe("useWebSocket", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
-    global.WebSocket = MockWebSocket as any;
+    vi.stubGlobal("WebSocket", MockWebSocket);
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    global.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

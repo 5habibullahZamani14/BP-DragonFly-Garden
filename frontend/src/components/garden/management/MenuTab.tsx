@@ -22,7 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   fetchMenu, fetchCategories,
-  createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage,
+  createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuItemImage, createPattern,
   fetchPatterns, uploadMenuItemPatternImage,
   fetchRepoSections, createRepoSection, updateRepoSection, deleteRepoSection, uploadRepoImage, deleteRepoImage, assignMenuItemRepoImage,
   createCategory, updateCategory, deleteCategory, reorderCategories,
@@ -31,7 +31,7 @@ import {
   createGlobalModifierOption, updateGlobalModifierOption, deleteGlobalModifierOption,
   assignModifierToItem, unassignModifierFromItem, setModifierDefault,
   fetchPromotionTemplates, createPromotionTemplate, deletePromotionTemplate, applyPromotionToAll,
-  type MenuItem, type Category, type Pattern, type RepoSection, type GlobalModifierGroup, type GlobalModifierOption, type PromotionTemplate,
+  type MenuItem, type MenuItemPayload, type Category, type Pattern, type RepoSection, type GlobalModifierGroup, type GlobalModifierOption, type PromotionTemplate,
 } from "@/lib/api";
 import {
   Plus, Edit2, Trash2, Tag, Star, Image as ImageIcon,
@@ -93,7 +93,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       setAllGroups(all);
       setAssignedGroupIds(new Set(assigned.map(g => g.id)));
       const defs: Record<number, number | null> = {};
-      assigned.forEach(g => { defs[g.id] = (g as any).default_option_id ?? null; });
+      assigned.forEach(g => { defs[g.id] = g.default_option_id ?? null; });
       setDefaults(defs);
     } catch { /* non-critical */ }
     finally { setLoading(false); }
@@ -164,7 +164,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
   const handleGlobalDelete = async (groupId: number) => {
     toast("Delete this modifier globally? It will be removed from ALL menu items.", {
       action: {
-        text: "Delete",
+        label: "Delete",
         onClick: async () => {
           try {
             await deleteGlobalModifierGroup(groupId);
@@ -220,8 +220,9 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       setDefaults(p => ({ ...p, [g.id]: null }));
       setNewGroupName(""); setShowNewGroupForm(false);
       toast.success(`"${g.name}" created and applied to this item`);
-    } catch (e: any) {
-      toast.error(e?.message?.includes('already exists') ? 'A modifier with that name already exists' : "Failed to create modifier");
+    } catch (error: unknown) {
+      const alreadyExists = error instanceof Error && error.message.includes("already exists");
+      toast.error(alreadyExists ? "A modifier with that name already exists" : "Failed to create modifier");
     }
   };
 
@@ -633,7 +634,7 @@ export function MenuTab() {
   const handleApplyPromoToAll = async (promo: Omit<PromotionTemplate, "id">) => {
     toast("Are you sure you want to apply this promotion to ALL products? This will override active promotions for all items.", {
       action: {
-        text: "Apply",
+        label: "Apply",
         onClick: async () => {
           try {
             await applyPromotionToAll(promo);
@@ -754,7 +755,7 @@ export function MenuTab() {
   const handleDeleteRepoSection = async (sectionId: number) => {
     toast("Delete this repository section and all its images?", {
       action: {
-        text: "Delete",
+        label: "Delete",
         onClick: async () => {
           setRepoSectionDeleteLoading(sectionId);
           try {
@@ -774,7 +775,7 @@ export function MenuTab() {
   const handleDeleteRepoImage = async (imageId: number) => {
     toast("Delete this repository image?", {
       action: {
-        text: "Delete",
+        label: "Delete",
         onClick: async () => {
           setRepoImageDeletingId(imageId);
           try {
@@ -824,7 +825,7 @@ export function MenuTab() {
     if (selected.length === 0) return;
     toast(`Delete ${selected.length} selected repository image${selected.length === 1 ? "" : "s"} from '${section.name}'? This cannot be undone.`, {
       action: {
-        text: "Delete",
+        label: "Delete",
         onClick: async () => {
           setRepoImageBulkDeleting(true);
           try {
@@ -978,19 +979,34 @@ export function MenuTab() {
     if (!editingItem?.name || !editingItem?.category_id) {
       toast.error(t("m.fillRequired")); return;
     }
-    if (!editingItem?.is_dynamic_price && !editingItem?.price) {
+    if (!editingItem.is_dynamic_price && editingItem.price == null) {
       toast.error(t("m.fillRequired")); return;
     }
-    const payload = editingItem?.is_dynamic_price
-      ? { ...editingItem, price: undefined }
-      : editingItem;
+    const payload: MenuItemPayload = {
+      name: editingItem.name,
+      description: editingItem.description,
+      price: editingItem.is_dynamic_price ? undefined : editingItem.price,
+      category_id: editingItem.category_id,
+      image_url: editingItem.image_url ?? undefined,
+      pattern_id: editingItem.pattern_id,
+      repo_image_id: editingItem.repo_image_id,
+      is_available: editingItem.is_available,
+      is_popular: editingItem.is_popular,
+      is_promo: editingItem.is_promo,
+      promo_label: editingItem.promo_label,
+      promo_affects_price: editingItem.promo_affects_price,
+      promo_discount_percent: editingItem.promo_discount_percent,
+      card_size: editingItem.card_size,
+      is_dynamic_price: editingItem.is_dynamic_price,
+      type: editingItem.type,
+    };
     try {
-      let finalItemId = payload.id;
-      if (payload.id) {
-        await updateMenuItem(payload.id, payload as any);
+      let finalItemId = editingItem.id;
+      if (editingItem.id) {
+        await updateMenuItem(editingItem.id, payload);
         toast.success(t("m.itemUpdated"));
       } else {
-        const res = await createMenuItem(payload as any) as any;
+        const res = await createMenuItem(payload);
         finalItemId = res.id;
         toast.success(t("m.itemCreated"));
       }
@@ -1017,7 +1033,7 @@ export function MenuTab() {
   const handleDelete = async (id: number) => {
     toast(t("m.confirmDelete"), {
       action: {
-        text: t("m.delete"),
+        label: t("m.delete"),
         onClick: async () => {
           try { await deleteMenuItem(id); toast.success(t("m.itemDeleted")); loadData(); }
           catch { toast.error(t("m.deleteFailed")); }
@@ -1342,7 +1358,7 @@ export function MenuTab() {
                 <div className="relative z-10">
                   <div className="h-32 bg-gray-100 relative overflow-hidden">
                     { (item.image_url || item.repo_image_url)
-                      ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
+                      ? <img src={item.image_url || item.repo_image_url || undefined} alt={item.name} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
                     <div className="absolute top-2 end-2 flex gap-1">
                       {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
@@ -1450,7 +1466,7 @@ export function MenuTab() {
                 <div className="relative z-10">
                   <div className="h-32 bg-gray-100 relative overflow-hidden">
                     { (item.image_url || item.repo_image_url)
-                      ? <img src={item.image_url || item.repo_image_url} alt={item.name} className="w-full h-full object-cover" />
+                      ? <img src={item.image_url || item.repo_image_url || undefined} alt={item.name} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon className="h-8 w-8 opacity-50" /></div>}
                     <div className="absolute top-2 end-2 flex gap-1">
                       {item.is_popular && <span className="bg-orange-100 text-orange-700 p-1.5 rounded-full shadow-sm"><Star className="h-3.5 w-3.5" /></span>}
@@ -1592,7 +1608,11 @@ export function MenuTab() {
               </div>
               <div className="grid gap-2">
                 <Label>{t("m.productType")}</Label>
-                <Select value={editingItem?.type || "food"} onValueChange={v => setEditingItem(p => ({ ...p, type: v as any }))}>
+                <Select value={editingItem?.type || "food"} onValueChange={v => {
+                  if (v === "food" || v === "drink" || v === "merchandise") {
+                    setEditingItem(p => p ? { ...p, type: v } : p);
+                  }
+                }}>
                   <SelectTrigger><SelectValue placeholder={t("m.selectType")} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="food">{t("m.food")}</SelectItem>
@@ -1784,7 +1804,7 @@ export function MenuTab() {
                                     e.stopPropagation();
                                     toast(`Delete '${tpl.promo_label}' template tag?`, {
                                       action: {
-                                        text: "Delete",
+                                        label: "Delete",
                                         onClick: async () => {
                                           try {
                                             await deletePromotionTemplate(tpl.id);
@@ -1882,7 +1902,11 @@ export function MenuTab() {
                   </div>
                   <div className="grid gap-2 pt-1">
                     <Label>Card size</Label>
-                    <Select value={editingItem?.card_size || "normal"} onValueChange={v => setEditingItem(p => ({ ...p, card_size: v as any }))}>
+                    <Select value={editingItem?.card_size || "normal"} onValueChange={v => {
+                      if (v === "normal" || v === "large" || v === "extra_large") {
+                        setEditingItem(p => p ? { ...p, card_size: v } : p);
+                      }
+                    }}>
                       <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="normal">Normal — compact</SelectItem>

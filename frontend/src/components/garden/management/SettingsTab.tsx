@@ -11,7 +11,7 @@
  * reflected instantly in the UI via optimistic updates.
  */
 import { useTranslation } from "react-i18next";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,73 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
+
+type PrinterProfile = {
+  width?: number;
+  margin_left?: number;
+  margin_right?: number;
+  margin_top?: number;
+  margin_bottom?: number;
+  print_delay_seconds?: number;
+  empty_lines_before?: number;
+  empty_lines_after?: number;
+  has_auto_cutter?: boolean;
+  connection_type?: string;
+  notes?: string;
+};
+
+type ReceiptCopies = {
+  order_customer?: number;
+  order_kitchen?: number;
+  addon_customer?: number;
+  addon_kitchen?: number;
+  final_receipt?: number;
+  daily_sales_report?: number;
+};
+
+type PrinterPreferences = {
+  receipt_copies?: { global?: ReceiptCopies };
+  [key: string]: unknown;
+};
+
+type DiscoveredPrinter = {
+  name: string;
+  connectionType?: string;
+  status?: string;
+  driver?: string;
+  port?: string;
+  discoveredBy?: string;
+};
+
+type PrinterPlatformInfo = {
+  platform: string;
+  arch: string;
+  hostname: string;
+  discoveryMethods?: { mDNS?: boolean; SNMP?: boolean; USB?: boolean };
+};
+
+type PrinterApiResponse = { success: boolean; message?: string };
+type PrinterDiscoveryResponse = PrinterApiResponse & {
+  printers?: DiscoveredPrinter[];
+  platform?: PrinterPlatformInfo;
+};
+type PrinterSettingsResponse = PrinterApiResponse & {
+  selectedPrinter?: string;
+  defaultPrinter?: string;
+  printerPreferences?: PrinterPreferences;
+  printerProfiles?: Record<string, PrinterProfile>;
+};
+
+const getErrorMessage = (error: unknown, fallback = "Unknown error") =>
+  error instanceof Error ? error.message : fallback;
+
+const getErrorStatus = (error: unknown) =>
+  typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
+    ? error.status
+    : undefined;
+
+const isCardSize = (value: string): value is "normal" | "large" | "extra_large" =>
+  value === "normal" || value === "large" || value === "extra_large";
 
 export const SettingsTab = () => {
   const { t } = useTranslation();
@@ -92,21 +159,21 @@ export const SettingsTab = () => {
   const [updateMsg, setUpdateMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Printer management state
-  const [printers, setPrinters] = useState<any[]>([]);
+  const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
   const [printersLoading, setPrintersLoading] = useState(false);
   const [discoveryCountdown, setDiscoveryCountdown] = useState(0);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [defaultPrinter, setDefaultPrinter] = useState("");
-  const [printerPreferences, setPrinterPreferences] = useState<any>({});
-  const [printerProfiles, setPrinterProfiles] = useState<any>({});
+  const [printerPreferences, setPrinterPreferences] = useState<PrinterPreferences>({});
+  const [printerProfiles, setPrinterProfiles] = useState<Record<string, PrinterProfile>>({});
   const [testPrintLoading, setTestPrintLoading] = useState<string | null>(null);
   const [printerSettingsLoading, setPrinterSettingsLoading] = useState(false);
   const [printerSettingsSaved, setPrinterSettingsSaved] = useState(false);
-  const [platformInfo, setPlatformInfo] = useState<any>(null);
+  const [platformInfo, setPlatformInfo] = useState<PrinterPlatformInfo | null>(null);
   const [printDelaySeconds, setPrintDelaySeconds] = useState(0);
   const [emptyLinesBefore, setEmptyLinesBefore] = useState(2);
   const [emptyLinesAfter, setEmptyLinesAfter] = useState(3);
-  const [selectedPrinterProfile, setSelectedPrinterProfile] = useState<any>(null);
+  const [selectedPrinterProfile, setSelectedPrinterProfile] = useState<PrinterProfile | null>(null);
 
   // Paper width and margin settings
   const [paperWidth, setPaperWidth] = useState(80);
@@ -127,7 +194,6 @@ export const SettingsTab = () => {
   const [printingDailyReport, setPrintingDailyReport] = useState(false);
   const [printingTestTicket, setPrintingTestTicket] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | undefined>();
-  const [hasAutoDiscovered, setHasAutoDiscovered] = useState(false);
 
   // Confirmation dialog state
 
@@ -143,7 +209,7 @@ export const SettingsTab = () => {
   const [editProfileDialog, setEditProfileDialog] = useState<{
     open: boolean;
     printerName: string;
-    profile: any;
+    profile: PrinterProfile | null;
     pending: boolean;
   }>({ open: false, printerName: "", profile: null, pending: false });
 
@@ -173,7 +239,9 @@ export const SettingsTab = () => {
     try {
       data = await fetchSettings();
       if (data?.work_hours) setHours(data.work_hours);
-      if (data?.default_card_size) setDefaultCardSize(data.default_card_size as any);
+      if (typeof data?.default_card_size === "string" && isCardSize(data.default_card_size)) {
+        setDefaultCardSize(data.default_card_size);
+      }
       // Load tax settings
       setSstEnabled(data?.sst_enabled !== false && data?.sst_enabled !== 'false');
       setSstPercent(data?.sst_rate !== undefined ? String(Math.round(parseFloat(String(data.sst_rate)) * 100)) : "6");
@@ -258,9 +326,9 @@ export const SettingsTab = () => {
       if (!result.needs_update) {
         setUpdateMsg({ text: "✅ App is already up to date.", isError: false });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Version check failed", err);
-      setUpdateMsg({ text: `❌ Failed to check for updates: ${err.message || "Unknown error"}`, isError: true });
+      setUpdateMsg({ text: `❌ Failed to check for updates: ${getErrorMessage(err)}`, isError: true });
     } finally {
       setUpdateCheckLoading(false);
     }
@@ -281,9 +349,9 @@ export const SettingsTab = () => {
           } else {
             setUpdateMsg({ text: `⚠️ ${result.message}`, isError: true });
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           safeConsoleError("Update failed", err);
-          setUpdateMsg({ text: `❌ Update failed: ${err.message || "Unknown error"}`, isError: true });
+          setUpdateMsg({ text: `❌ Update failed: ${getErrorMessage(err)}`, isError: true });
         } finally {
           setUpdateInProgress(false);
         }
@@ -344,7 +412,7 @@ export const SettingsTab = () => {
   // Printer management functions
   const [printerError, setPrinterError] = useState<string | null>(null);
 
-  const getManagerToken = () => {
+  const getManagerToken = useCallback(() => {
     const managerLogin = localStorage.getItem("managerLogin");
     if (managerLogin) {
       try {
@@ -356,9 +424,9 @@ export const SettingsTab = () => {
       }
     }
     return null;
-  };
+  }, []);
 
-  const discoverPrinters = async () => {
+  const discoverPrinters = useCallback(async () => {
     setPrinterError(null);
     setPrintersLoading(true);
     setDiscoveryCountdown(30); // Start countdown at 30 seconds
@@ -380,11 +448,7 @@ export const SettingsTab = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      // Try direct backend URL to bypass potential proxy issues
-      const backendUrl = import.meta.env.VITE_API_BASE || "http://127.0.0.1:5000";
-      console.log("[discoverPrinters] Fetching from:", `${backendUrl}/management/printers/discover`);
-      
-      const response = await fetch(`${backendUrl}/management/printers/discover`, {
+      const response = await fetch("/management/printers/discover", {
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
@@ -404,25 +468,26 @@ export const SettingsTab = () => {
         return;
       }
       
-      const data = await response.json();
+      const data: PrinterDiscoveryResponse = await response.json();
       console.log("Response data:", data);
       
       if (data.success) {
         console.log(`[discoverPrinters] Success! Found ${data.printers?.length || 0} printers`);
-        setPrinters(data.printers || []);
-        setPlatformInfo(data.platform);
+        setPrinters(data.printers ?? []);
+        setPlatformInfo(data.platform ?? null);
       } else {
         console.log("[discoverPrinters] Backend returned failure:", data.message);
         setPrinterError(`Failed to discover printers: ${data.message}`);
         safeConsoleError("Failed to discover printers", data.message);
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
         console.log("[discoverPrinters] Request timed out after 30 seconds");
         setPrinterError("Request timed out. The printer discovery is taking too long. Please check your backend logs.");
       } else {
-        console.log("[discoverPrinters] Exception caught:", err.message);
-        setPrinterError(`Error discovering printers: ${err.message}`);
+        const message = getErrorMessage(err);
+        console.log("[discoverPrinters] Exception caught:", message);
+        setPrinterError(`Error discovering printers: ${message}`);
         safeConsoleError("Printer discovery failed", err);
       }
     } finally {
@@ -430,7 +495,7 @@ export const SettingsTab = () => {
       setPrintersLoading(false);
       setDiscoveryCountdown(0);
     }
-  };
+  }, [getManagerToken]);
 
   const loadPrinterSettings = async () => {
     setPrinterSettingsLoading(true);
@@ -447,7 +512,7 @@ export const SettingsTab = () => {
           "Content-Type": "application/json"
         }
       });
-      const data = await response.json();
+      const data: PrinterSettingsResponse = await response.json();
       if (data.success) {
         setSelectedPrinter(data.selectedPrinter || "");
         setDefaultPrinter(data.defaultPrinter || "");
@@ -455,7 +520,7 @@ export const SettingsTab = () => {
         setPrinterProfiles(data.printerProfiles || {});
         
         // Load settings from selected printer profile
-        if (data.selectedPrinter && data.printerProfiles[data.selectedPrinter]) {
+        if (data.selectedPrinter && data.printerProfiles?.[data.selectedPrinter]) {
           const profile = data.printerProfiles[data.selectedPrinter];
           setSelectedPrinterProfile(profile);
           setPrintDelaySeconds(profile.print_delay_seconds || 0);
@@ -479,8 +544,8 @@ export const SettingsTab = () => {
         }
         
         // Load receipt copy counts
-        if (data.printerPreferences.receipt_copies && data.printerPreferences.receipt_copies.global) {
-          const copies = data.printerPreferences.receipt_copies.global;
+        const copies = data.printerPreferences?.receipt_copies?.global;
+        if (copies) {
           setOrderCustomerCopies(copies.order_customer || 1);
           setOrderKitchenCopies(copies.order_kitchen || 1);
           setAddonCustomerCopies(copies.addon_customer || 1);
@@ -489,7 +554,7 @@ export const SettingsTab = () => {
           setDailySalesReportCopies(copies.daily_sales_report || 1);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to load printer settings", err);
     } finally {
       setPrinterSettingsLoading(false);
@@ -512,13 +577,13 @@ export const SettingsTab = () => {
           "Content-Type": "application/json"
         }
       });
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         console.log("Daily sales report printed successfully");
       } else {
         safeConsoleError("Failed to print daily sales report", data.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to print daily sales report", err);
     } finally {
       setPrintingDailyReport(false);
@@ -542,13 +607,13 @@ export const SettingsTab = () => {
         },
         body: JSON.stringify({ printerName: selectedPrinter })
       });
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         console.log("Test ticket printed successfully");
       } else {
         safeConsoleError("Failed to print test ticket", data.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to print test ticket", err);
     } finally {
       setPrintingTestTicket(false);
@@ -624,7 +689,7 @@ export const SettingsTab = () => {
           printerPreferences: updatedPrefs
         })
       });
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         console.log("Save successful, updating local state");
         setPrinterProfiles(updatedProfiles);
@@ -634,14 +699,14 @@ export const SettingsTab = () => {
       } else {
         safeConsoleError("Failed to save printer settings", data.message);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to save printer settings", err);
     } finally {
       setPrinterSettingsLoading(false);
     }
   };
 
-  const editPrinterProfile = (printerName: string, profile: any) => {
+  const editPrinterProfile = (printerName: string, profile: PrinterProfile) => {
     // Open the edit dialog with the profile data
     setEditProfileData({
       width: profile.width || 80,
@@ -686,7 +751,7 @@ export const SettingsTab = () => {
         })
       });
 
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         setPrinterProfiles(updatedProfiles);
         toast.success(`Updated profile for ${editProfileDialog.printerName}`);
@@ -694,7 +759,7 @@ export const SettingsTab = () => {
       } else {
         toast.error(`Failed to update profile: ${data.message}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to update printer profile", err);
       toast.error("Failed to update printer profile");
     } finally {
@@ -724,14 +789,14 @@ export const SettingsTab = () => {
         })
       });
       
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         setPrinterProfiles(updatedProfiles);
         toast.success(`Deleted profile for ${printerName}`);
       } else {
         toast.error(`Failed to delete profile: ${data.message}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Failed to delete printer profile", err);
       toast.error("Failed to delete printer profile");
     }
@@ -754,15 +819,15 @@ export const SettingsTab = () => {
         },
         body: JSON.stringify({ printerName })
       });
-      const data = await response.json();
+      const data: PrinterApiResponse = await response.json();
       if (data.success) {
         toast.success(`Test print sent successfully to ${printerName}`);
       } else {
         toast.error(`Test print failed: ${data.message}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Test print failed", err);
-      toast.error(`Test print failed: ${err.message}`);
+      toast.error(`Test print failed: ${getErrorMessage(err)}`);
     } finally {
       setTestPrintLoading(null);
     }
@@ -907,11 +972,18 @@ export const SettingsTab = () => {
 
   // Auto-discover printers when printer accordion opens
   useEffect(() => {
-    if (activeAccordion === "printers" && !hasAutoDiscovered) {
-      discoverPrinters();
-      setHasAutoDiscovered(true);
-    }
-  }, [activeAccordion]);
+    if (activeAccordion === "printers") void discoverPrinters();
+  }, [activeAccordion, discoverPrinters]);
+
+  useEffect(() => {
+    if (activeAccordion !== "printers") return;
+
+    const refreshInterval = window.setInterval(() => {
+      if (!printersLoading) void discoverPrinters();
+    }, 60_000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [activeAccordion, discoverPrinters, printersLoading]);
 
   const handleCreateBackup = async (overwrite: boolean = false) => {
     if (!backupName.trim()) return;
@@ -924,12 +996,13 @@ export const SettingsTab = () => {
       setBackupMsg({ text: "✅ Backup created successfully", isError: false });
       loadBackups();
       setTimeout(() => setBackupMsg(null), 3000);
-    } catch (err: any) {
-      const alreadyExists = err.status === 409 || (err.message && err.message.toLowerCase().includes("already exists"));
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, "");
+      const alreadyExists = getErrorStatus(err) === 409 || message.toLowerCase().includes("already exists");
       if (alreadyExists && !overwrite) {
         setShowOverwriteConfirm(true);
       } else {
-        setBackupMsg({ text: `⚠️ ${err.message || t("m.backupCreateFailed")}`, isError: true });
+        setBackupMsg({ text: `⚠️ ${message || t("m.backupCreateFailed")}`, isError: true });
       }
     } finally {
       setBackupLoading(false);
@@ -948,8 +1021,8 @@ export const SettingsTab = () => {
       }
       setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
       setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setRestoreResult({ message: t("m.restoreFailed", { message: err.message || "Unknown error" }), isError: true });
+    } catch (err: unknown) {
+      setRestoreResult({ message: t("m.restoreFailed", { message: getErrorMessage(err) }), isError: true });
     } finally {
       setRestoreLoading(null);
     }
@@ -994,8 +1067,8 @@ export const SettingsTab = () => {
       if (selectedOption.key === "all_data") {
         setTimeout(() => window.location.reload(), 1500);
       }
-    } catch (err: any) {
-      setResetMessage({ text: `⚠️ ${err.message || "Reset failed."}`, isError: true });
+    } catch (err: unknown) {
+      setResetMessage({ text: `⚠️ ${getErrorMessage(err, "Reset failed.")}`, isError: true });
     } finally {
       setResetLoading(false);
     }
@@ -1004,15 +1077,31 @@ export const SettingsTab = () => {
   const handleDownloadBackup = async (filename: string) => {
     try {
       await downloadBackup(filename);
-    } catch (err: any) {
+    } catch (err: unknown) {
       safeConsoleError("Download failed", err);
-      setBackupMsg({ text: `⚠️ ${err.message || "Download failed."}`, isError: true });
+      setBackupMsg({ text: `⚠️ ${getErrorMessage(err, "Download failed.")}`, isError: true });
     }
   };
 
   const handleUploadBackupFile = (file: File | null) => {
     setUploadFile(file);
     setUploadError(null);
+  };
+
+  const handlePrinterSelection = (printerName: string) => {
+    setSelectedPrinter(printerName);
+    const profile = printerProfiles[printerName];
+    if (!profile) return;
+
+    setSelectedPrinterProfile(profile);
+    setPrintDelaySeconds(profile.print_delay_seconds || 0);
+    setEmptyLinesBefore(profile.empty_lines_before || 2);
+    setEmptyLinesAfter(profile.empty_lines_after || 3);
+    setPaperWidth(profile.width || 80);
+    setMarginLeft(profile.margin_left || 0);
+    setMarginRight(profile.margin_right || 0);
+    setMarginTop(profile.margin_top || 0);
+    setMarginBottom(profile.margin_bottom || 0);
   };
 
   if (hoursLoading) return (
@@ -1195,7 +1284,9 @@ export const SettingsTab = () => {
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label>Default Card Size</Label>
-              <Select value={defaultCardSize} onValueChange={v => setDefaultCardSize(v as any)}>
+              <Select value={defaultCardSize} onValueChange={value => {
+                if (isCardSize(value)) setDefaultCardSize(value);
+              }}>
                 <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="normal">Normal</SelectItem>
@@ -1303,7 +1394,7 @@ export const SettingsTab = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {Object.entries(printerProfiles).map(([printerName, profile]: [string, any]) => (
+                      {Object.entries(printerProfiles).map(([printerName, profile]) => (
                         <div key={printerName} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1">
@@ -1388,8 +1479,7 @@ export const SettingsTab = () => {
                   <div className="flex gap-3">
                     <Button 
                     onClick={() => {
-                      setHasAutoDiscovered(false);
-                      discoverPrinters();
+                      void discoverPrinters();
                     }} 
                     disabled={printersLoading}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
@@ -1406,6 +1496,9 @@ export const SettingsTab = () => {
                     )}
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Printer discovery refreshes automatically every 60 seconds while this section is open.
+                  </p>
 
                   {/* Error Message */}
                   {printerError && (
@@ -1424,7 +1517,7 @@ export const SettingsTab = () => {
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-2">
-                                  {getConnectionIcon(printer.connectionType)}
+                                  {getConnectionIcon(printer.connectionType ?? "")}
                                   <span className="font-medium text-sm">{printer.name}</span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                                     printer.status === 'online' || printer.status === 'idle' 
@@ -1469,21 +1562,7 @@ export const SettingsTab = () => {
                   
                     <div className="space-y-2">
                       <Label>Selected Printer (Active)</Label>
-                      <Select value={selectedPrinter} onValueChange={(value) => {
-                        setSelectedPrinter(value);
-                        // Load profile for newly selected printer
-                        if (printerProfiles[value]) {
-                          setSelectedPrinterProfile(printerProfiles[value]);
-                          setPrintDelaySeconds(printerProfiles[value].print_delay_seconds || 0);
-                          setEmptyLinesBefore(printerProfiles[value].empty_lines_before || 2);
-                          setEmptyLinesAfter(printerProfiles[value].empty_lines_after || 3);
-                          setPaperWidth(printerProfiles[value].width || 80);
-                          setMarginLeft(printerProfiles[value].margin_left || 0);
-                          setMarginRight(printerProfiles[value].margin_right || 0);
-                          setMarginTop(printerProfiles[value].margin_top || 0);
-                          setMarginBottom(printerProfiles[value].margin_bottom || 0);
-                        }
-                      }}>
+                      <Select value={selectedPrinter} onValueChange={handlePrinterSelection}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a printer" />
                         </SelectTrigger>
@@ -1499,8 +1578,11 @@ export const SettingsTab = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Default Printer (Fallback)</Label>
-                      <Select value={defaultPrinter} onValueChange={setDefaultPrinter}>
+                      <Label>Default Printer</Label>
+                      <Select value={defaultPrinter} onValueChange={(value) => {
+                        setDefaultPrinter(value);
+                        handlePrinterSelection(value);
+                      }}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select default printer" />
                         </SelectTrigger>
@@ -1512,7 +1594,7 @@ export const SettingsTab = () => {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-muted-foreground">Used if selected printer is unavailable.</p>
+                      <p className="text-xs text-muted-foreground">The default is also made the active printer and saved for future print jobs.</p>
                     </div>
 
                     <div className="space-y-2">
@@ -2170,8 +2252,8 @@ export const SettingsTab = () => {
                           await restoreUploadedBackup(uploadFile);
                           setRestoreResult({ message: t("m.restoreSuccess"), isError: false });
                           setTimeout(() => window.location.reload(), 1500);
-                        } catch (err: any) {
-                          setUploadError(err.message || t("m.restoreFailed", { message: "Unknown error" }));
+                        } catch (err: unknown) {
+                          setUploadError(getErrorMessage(err, t("m.restoreFailed", { message: "Unknown error" })));
                         } finally {
                           setUploadingBackup(false);
                         }

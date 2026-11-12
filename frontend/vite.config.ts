@@ -39,6 +39,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
+  build: {
+    target: ["chrome105", "edge105", "firefox121", "safari15.4"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

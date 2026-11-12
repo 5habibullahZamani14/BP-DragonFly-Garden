@@ -3,7 +3,7 @@ import ChartExport from "@/components/ui/ChartExport";
 
 type ChartHeaderExportProps = {
   targetId: string;
-  data?: any[];
+  data?: object[];
   fileName: string;
 };
 

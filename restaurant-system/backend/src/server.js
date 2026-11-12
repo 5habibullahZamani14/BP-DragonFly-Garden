@@ -78,15 +78,18 @@ const isLocalHostHeader = (host) =>
 
 const getLocalNetworkAddress = () => {
   const nets = os.networkInterfaces();
+  const candidates = [];
   for (const ifaceList of Object.values(nets)) {
     if (!ifaceList) continue;
     for (const iface of ifaceList) {
       if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
+        candidates.push(iface.address);
       }
     }
   }
-  return null;
+  return candidates.find((address) => address === "10.42.0.1")
+    || candidates[0]
+    || null;
 };
 
 const getServerBaseUrlFromRequest = (req) => {
@@ -108,6 +111,15 @@ const getServerBaseUrlFromRequest = (req) => {
 const resolveCaptivePortalTarget = async (req) => {
   if (process.env.CAPTIVE_PORTAL_TARGET) {
     return normalizeUrl(process.env.CAPTIVE_PORTAL_TARGET);
+  }
+
+  const localIp = getLocalNetworkAddress();
+  const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
+
+  if (localIp !== "10.42.0.1") {
+    const requestHostUrl = getServerBaseUrlFromRequest(req);
+    if (requestHostUrl) return normalizeUrl(requestHostUrl);
+    if (localIp) return normalizeUrl(`http://${localIp}:${port}`);
   }
 
   try {

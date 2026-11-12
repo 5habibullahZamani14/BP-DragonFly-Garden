@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { createCounterOrder, fetchTables, type TableRecord } from "@/lib/api";
+import { createCounterOrder, fetchTables, type OrderType, type TableRecord } from "@/lib/api";
 import type { MenuItem, Order } from "@/lib/api";
+import type { ItemOption } from "@/lib/menu-data";
 import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check, Layers, MessageSquare } from "lucide-react";
 
 interface PosOrderModalProps {
@@ -39,7 +40,7 @@ interface CartItem {
 
 export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItems, qrCode, notify, onOrderCreated, parentOrder = null }: PosOrderModalProps) {
   const { t } = useTranslation();
-  const [orderType, setOrderType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER">(initialOrderType);
+  const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
    const [customerName, setCustomerName] = useState("");
    const [customerPhone, setCustomerPhone] = useState("");
    const [collectionTime, setCollectionTime] = useState("");
@@ -62,8 +63,8 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
   useEffect(() => {
     if (isOpen) {
       if (parentOrder) {
-        setOrderType(parentOrder.order_type as any);
-        setSelectedTableId(parentOrder.table_id || 999);
+        setOrderType(parentOrder.order_type ?? initialOrderType);
+        setSelectedTableId(parentOrder.table_id ?? 999);
       } else {
         setOrderType(initialOrderType);
         setSelectedTableId(999);
@@ -125,7 +126,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
     setSelectedGroupOptions({});
   };
 
-  const handleToggleOption = (groupId: number, isMultiSelect: boolean, option: any) => {
+  const handleToggleOption = (groupId: number, isMultiSelect: boolean, option: ItemOption) => {
     setSelectedGroupOptions(prev => {
       const current = prev[groupId] || [];
       if (!isMultiSelect) {
@@ -160,7 +161,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
     }).filter(item => item.quantity > 0));
   };
 
-  const totalAmount = cart.reduce((sum, item) => sum + (item.effectivePrice * item.quantity), 0);
+  const totalAmount = cart.reduce<number>((sum, item) => sum + (item.effectivePrice * item.quantity), 0);
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
@@ -184,7 +185,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
     setIsSubmitting(true);
     try {
       const order = await createCounterOrder(qrCode, {
-        table_id: parentOrder ? parentOrder.table_id : (orderType === "COUNTER" ? selectedTableId : 999),
+        table_id: parentOrder ? (parentOrder.table_id ?? selectedTableId) : (orderType === "COUNTER" ? selectedTableId : 999),
         order_type: orderType,
         customer_name: parentOrder ? parentOrder.customer_name : customerName,
         customer_phone: parentOrder ? parentOrder.customer_phone : customerPhone,
@@ -378,7 +379,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
               <div className="p-6 pb-2 border-b bg-white">
                 <h2 className="text-xl font-bold text-gray-800 flex items-center justify-between">
                   {t("pos.currentOrder")}
-                  <span className="bg-gray-100 text-gray-600 text-sm px-2 py-1 rounded-full">{t("pos.cartItemCount", { count: cart.reduce((a, b) => a + b.quantity, 0) })}</span>
+                  <span className="bg-gray-100 text-gray-600 text-sm px-2 py-1 rounded-full">{t("pos.cartItemCount", { count: cart.reduce<number>((sum, item) => sum + item.quantity, 0) })}</span>
                 </h2>
               </div>
               
@@ -469,7 +470,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {(group.options || []).map((opt: any) => {
+                    {(group.options || []).map((opt) => {
                       const selectedList = selectedGroupOptions[group.id] || [];
                       const isSelected = selectedList.some(o => o.optionId === opt.id);
                       return (

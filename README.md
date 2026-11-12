@@ -7,8 +7,8 @@ payment counter and manager dashboard that require username/password authenticat
 server-issued JWT sessions.
 
 The entire system runs on the local Wi-Fi network inside the cafe. No internet connection is
-required once the server is running. The intended deployment hardware is a Raspberry Pi 5,
-though it runs equally well on any machine with Node.js installed.
+required once the server is running. The initial deployment hardware was a Raspberry Pi 5.
+The backend can also run on Windows laptops/desktops and Linux PCs with Node.js installed.
 
 ---
 
@@ -108,11 +108,59 @@ Notes:
 Security recommendations:
 - Replace any placeholder API keys in `restaurant-system/backend/.env` (e.g. `RESEND_API_KEY`, `GROQ_API_KEY`) before deploying.
 
-The frontend reads from `frontend/.env`. The only variable is `VITE_API_BASE`, which should
-point to the backend server address. During local development this is handled automatically
-by the Vite proxy, so no `.env` change is needed for dev.
+The frontend reads from `frontend/.env`. `VITE_API_BASE` is optional: local
+development uses the Vite proxy, while production always uses the same origin
+as the backend. Set `VITE_API_BASE` only when development needs a separate,
+non-loopback backend.
 
 ---
+
+## Deployment on a Windows PC or laptop
+
+Install Node.js 20 LTS or newer, ensure the backend `.env` file and restaurant
+database are present, then double-click
+[`START_DRAGONFLY_GARDEN.bat`](./Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
+The launcher installs missing dependencies, builds the frontend, starts the
+backend (which serves the production frontend), and opens the app. It works
+from the repository's current folder; it does not depend on a fixed `C:\` path.
+
+The server listens on all network interfaces. For other devices to connect,
+allow inbound TCP port 5000 through Windows Firewall and use the PC's LAN
+address. The production frontend and its API/WebSocket connections use the
+same host, so clients do not accidentally connect to their own `localhost`.
+For a restaurant, a dedicated Wi-Fi router/access point is the most reliable
+way to provide customer coverage.
+For a manually configured hotspot, set `CAPTIVE_PORTAL_TARGET` in the backend
+`.env` to that adapter's address (for example `http://192.168.137.1:5000/`);
+leave it unset to use the detected LAN address. Open the manager UI through
+that same address when generating customer QR codes.
+
+The app cannot reliably enable a Wi-Fi hotspot automatically on every laptop:
+hotspot support, Wi-Fi adapter capabilities, OS permissions, and upstream
+network-sharing rules vary by device and operating system. Configure Windows
+Mobile Hotspot, macOS Internet Sharing, or Linux NetworkManager/hostapd
+manually, or use a router. A captive-portal prompt is also controlled by each
+customer device and is not guaranteed; table QR codes should point directly to
+the server's LAN address.
+
+Printer discovery runs when the manager opens Printer Management and refreshes
+every 60 seconds while that section remains open. Selecting a default printer
+also makes it the active printer for new print jobs. The printer must still be
+installed or paired by the operating system and supported by its driver/print
+queue. Bluetooth discovery can find printer devices exposed by the OS (usually
+paired devices); the app cannot silently pair every nearby Bluetooth printer.
+USB access and raw thermal printing likewise depend on OS drivers, permissions,
+and printer support.
+
+The production frontend build targets current Chrome/Edge (105+), Firefox
+(121+), and Safari (15.4+). Browser vendors, OS versions, and device-specific
+features can still affect rendering; this does not guarantee support for every
+historical browser version.
+
+On macOS or Linux, install Node.js 20 LTS or newer, configure
+`restaurant-system/backend/.env`, then run `npm ci` and `npm run build` in
+`frontend/`; run `npm ci` and `npm start` in `restaurant-system/backend/`.
+The backend serves the built frontend on port 5000.
 
 ## Deployment on Raspberry Pi
 
