@@ -120,9 +120,14 @@ non-loopback backend.
 Install Node.js 20 LTS or newer, ensure the backend `.env` file and restaurant
 database are present, then double-click
 [`START_DRAGONFLY_GARDEN.bat`](./Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
-The launcher installs missing dependencies, builds the frontend, starts the
-backend (which serves the production frontend), and opens the app. It works
-from the repository's current folder; it does not depend on a fixed `C:\` path.
+The launcher opens the manager view by default. The other role-specific launchers
+open the table 1 customer view or payment-counter view. Each launcher checks the
+backend health endpoint first and reuses a healthy server instead of starting a
+duplicate. If the server is not running, it installs missing dependencies,
+builds the frontend, and starts the backend. In production the backend serves
+the frontend on the same port (5000); there is no separate frontend server on
+port 3000. The launchers work from the repository's current folder and do not
+depend on a fixed `C:\` path.
 
 The server listens on all network interfaces. For other devices to connect,
 allow inbound TCP port 5000 through Windows Firewall and use the PC's LAN
@@ -134,6 +139,12 @@ For a manually configured hotspot, set `CAPTIVE_PORTAL_TARGET` in the backend
 `.env` to that adapter's address (for example `http://192.168.137.1:5000/`);
 leave it unset to use the detected LAN address. Open the manager UI through
 that same address when generating customer QR codes.
+
+The launcher's command window can be closed without stopping the server. To
+stop a server that the launcher started, press Ctrl+C in the **DragonFly Garden
+Backend** window and wait for its graceful shutdown message; it closes active
+WebSocket connections, the HTTP server, and the database. If the launcher found
+an already-running server, it does not own or stop that server.
 
 The app cannot reliably enable a Wi-Fi hotspot automatically on every laptop:
 hotspot support, Wi-Fi adapter capabilities, OS permissions, and upstream

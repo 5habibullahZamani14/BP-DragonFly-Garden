@@ -1,17 +1,45 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 set "BACKEND=%ROOT%\restaurant-system\backend"
 set "FRONTEND=%ROOT%\frontend"
+set "ROLE=%~1"
+set "PAGE="
+if not defined ROLE set "ROLE=manager"
+
+if /I "%ROLE%"=="manager" set "PAGE=/?view=manager"
+if /I "%ROLE%"=="customer" set "PAGE=/?qr=table-1"
+if /I "%ROLE%"=="payment" set "PAGE=/?view=payment"
+if /I "%ROLE%"=="home" set "PAGE=/"
+if not defined PAGE (
+  echo Usage: START_DRAGONFLY_GARDEN.bat [manager^|customer^|payment^|home]
+  pause
+  exit /b 2
+)
+
+if not exist "%BACKEND%\src\server.js" (
+  echo ERROR: Could not find the backend under "%BACKEND%".
+  pause
+  exit /b 1
+)
 
 echo ========================================
 echo DragonFly Garden - PC/Laptop Server
 echo ========================================
 echo.
 
-if not exist "%BACKEND%\src\server.js" (
-  echo ERROR: Could not find the backend under "%BACKEND%".
+set "APP_ALREADY_RUNNING=0"
+call :CHECK_HEALTH
+if not errorlevel 1 (
+  set "APP_ALREADY_RUNNING=1"
+  goto :OPEN_APP
+)
+
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+  echo Port 5000 is already listening, but the DragonFly Garden health check failed.
+  echo The launcher will not start a duplicate server. Check the process using port 5000.
   pause
   exit /b 1
 )
@@ -83,11 +111,12 @@ popd
 
 echo Starting the backend server...
 start "DragonFly Garden Backend" /D "%BACKEND%" cmd /k "npm start"
-
 echo Waiting for the application to become ready...
+set "APP_READY=0"
 for /L %%I in (1,1,30) do (
-  powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/health' -TimeoutSec 2).StatusCode -eq 200 } catch { $false }" | findstr /i "True" >nul
-  if not errorlevel 1 goto :READY
+  call :CHECK_HEALTH
+  if not errorlevel 1 set "APP_READY=1"
+  if "!APP_READY!"=="1" goto :OPEN_APP
   timeout /t 1 /nobreak >nul
 )
 
@@ -95,14 +124,30 @@ echo ERROR: The server did not become ready. Check the DragonFly Garden Backend 
 pause
 exit /b 1
 
-:READY
+:OPEN_APP
+set "SERVER_IP="
+for /f "delims=" %%A in ('powershell -NoProfile -Command "$configs=Get-NetIPConfiguration; foreach ($config in $configs) { if ($config.NetAdapter.Status -eq 'Up' -and $config.IPv4DefaultGateway) { $ip=$config.IPv4Address[0].IPAddress; if ($ip -and $ip -notlike '169.254.*') { $ip; break } } }; if (-not $ip) { foreach ($address in (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue)) { if ($address.IPAddress -ne '127.0.0.1' -and $address.IPAddress -notlike '169.254.*') { $address.IPAddress; break } } }"') do if not defined SERVER_IP set "SERVER_IP=%%A"
+if not defined SERVER_IP set "SERVER_IP=localhost"
+set "APP_URL=http://%SERVER_IP%:5000%PAGE%"
+
 echo.
-echo Application is ready at http://localhost:5000
-echo LAN addresses (allow TCP port 5000 through Windows Firewall for other devices):
-powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { !$_.SkipAsSource -and !$_.IPAddress.StartsWith('169.254.') -and $_.IPAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty IPAddress"
+if "%APP_ALREADY_RUNNING%"=="1" (
+  echo DragonFly Garden is already running. No duplicate server was started.
+) else (
+  echo DragonFly Garden is running.
+)
+echo Opening %ROLE% view: %APP_URL%
+echo Customer devices on the same network can use http://%SERVER_IP%:5000
 echo.
-echo Wi-Fi hotspot startup is not automatic. Configure the OS hotspot or use a router.
-echo Printer discovery refreshes every 60 seconds while Printer Management is open.
-start "" "http://localhost:5000"
+echo The frontend is served by the backend on port 5000; there is no separate production frontend process.
+echo To stop a server started by this launcher, press Ctrl+C in the DragonFly Garden Backend window.
+echo The backend will close WebSocket clients, the HTTP server, and the database gracefully.
+echo Closing this launcher window does not stop the server.
 echo.
+start "" "%APP_URL%"
 pause
+exit /b 0
+
+:CHECK_HEALTH
+powershell -NoProfile -Command "try { if ((Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5000/health' -TimeoutSec 2).StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+exit /b %errorlevel%
