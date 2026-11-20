@@ -1,0 +1,16 @@
+EMERGENCY DATA RECOVERY
+=======================
+
+Do not run node src/restoreBackup.js or the old emergency restore scripts. The legacy
+script writes a downloaded cloud object directly as SQLite, but current cloud backups
+are encrypted archives. This may corrupt the database.
+
+If the manager application is available, use Settings -> Backup & Restore, confirm the
+backup date, and wait for the restore result. Verify login, menu, employees, settings,
+images, and a physical printer test before accepting orders.
+
+If the application is unavailable, stop the server and use a verified local archive.
+Preserve the current database before replacing it. Do not overwrite another computer's
+.env file without reviewing host-specific settings. If uncertain, stop and get help.
+
+See 05.2-RESTORE_PROCEDURES.md for details.

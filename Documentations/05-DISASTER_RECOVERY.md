@@ -1,61 +1,35 @@
-# 05 - DISASTER RECOVERY GUIDE
+# 05 - DISASTER RECOVERY
 
-> **This guide is for COMPLETE BEGINNERS. We will explain EVERYTHING step by step. This shows you how to back up, restore, and sync your system.**
+This section explains how to preserve data and recover service after a hardware or
+software failure. The system does not automatically keep the Pi, laptop, and spare SD card
+in sync. Use one active server and treat other devices as standby.
 
----
+## Guides
 
-## 🤔 WHAT IS DISASTER RECOVERY?
+- [05.1-BACKUP_PROCEDURES.md](05.1-BACKUP_PROCEDURES.md): create and verify backups.
+- [05.2-RESTORE_PROCEDURES.md](05.2-RESTORE_PROCEDURES.md): restore selected data safely.
+- [05.3-SYNC_BETWEEN_DEVICES.md](05.3-SYNC_BETWEEN_DEVICES.md): use a standby device
+  without creating conflicting databases.
+- [05.4-QUICK_RECOVERY.md](05.4-QUICK_RECOVERY.md): initial troubleshooting checklist.
 
-Disaster recovery means: "If something breaks, how do I fix it?"
+## Data locations
 
-### Scenarios covered:
-1. **SD card dies** - Need to restore to new SD card
-2. **Pi hardware dies** - Need to use laptop instead
-3. **Data gets corrupted** - Need to restore from backup
-4. **Need to sync between devices** - Keep all 3 locations updated
+- SQLite database: `restaurant-system/backend/src/database/database.sqlite`
+- Menu/feedback images: `frontend/public/menu-images/` and
+  `frontend/public/feedback-images/`
+- Runtime settings/secrets: `restaurant-system/backend/.env` and, if present,
+  `.env.local`
+- Backend logs: `restaurant-system/backend/logs/`
 
----
+The `.env` files contain secrets and may be host-specific. Keep them private and do not
+blindly restore one machine's configuration onto another. The project does not use a
+configurable `DATABASE_PATH`; SQLite uses the fixed path above.
 
-## 📖 TABLE OF CONTENTS
+## Cloud backup limitations
 
-- [05.1-BACKUP_PROCEDURES.md](05.1-BACKUP_PROCEDURES.md) - How to create backups
-- [05.2-RESTORE_PROCEDURES.md](05.2-RESTORE_PROCEDURES.md) - How to restore from backup
-- [05.3-SYNC_BETWEEN_DEVICES.md](05.3-SYNC_BETWEEN_DEVICES.md) - How to sync between Pi, backup SD, and laptop
-- [05.4-QUICK_RECOVERY.md](05.4-QUICK_RECOVERY.md) - Quick recovery checklist
+Cloud backup is conditional on the backend running, valid B2 settings, and a configured
+`BACKUP_ENC_KEY`. Scheduled backup attempts are logged; verify that an archive exists and
+test a restore rather than assuming every nightly backup succeeded. Do not use the legacy
+`node src/restoreBackup.js` tool: it is incompatible with encrypted archive backups.
 
----
-
-## 🎯 QUICK REFERENCE
-
-### What to back up:
-- `.env` file (passwords and settings)
-- `database.sqlite` (all your data)
-- `menu-images/` (menu pictures)
-- `feedback-images/` (feedback pictures)
-- `dragonfly-garden.service` (auto-start config)
-
-### Where to find them:
-| On Pi | On Laptop |
-|-------|---------|
-| `/home/pi/BP-DragonFly-Garden/restaurant-system/backend/.env` | `C:\BP-DragonFly-Garden\restaurant-system\backend\.env` |
-| `/home/pi/BP-DragonFly-Garden/restaurant-system/backend/src/database/database.sqlite` | `C:\BP-DragonFly-Garden\restaurant-system\backend\src\database\database.sqlite` |
-| `/home/pi/BP-DragonFly-Garden/frontend/public/menu-images/` | `C:\BP-DragonFly-Garden\frontend\public\menu-images\` |
-| `/home/pi/BP-DragonFly-Garden/frontend/public/feedback-images/` | `C:\BP-DragonFly-Garden\frontend\public\feedback-images\` |
-
----
-
-## 🔧 QUICK COMMANDS
-
-| Command | What it does |
-|---------|-------------|
-| `node src/restoreBackup.js` | Restore from cloud backup |
-| `npm run start` | Start the backend |
-| `npm run build` | Build the frontend |
-
----
-
-## ✅ YOU'RE DONE!
-
-### What to do next:
-- Read [05.1-BACKUP_PROCEDURES.md](05.1-BACKUP_PROCEDURES.md) to learn about backups
-- Or read [05.4-QUICK_RECOVERY.md](05.4-QUICK_RECOVERY.md) for emergency steps
+For first-time laptop setup, see [03-LAPTOP_SETUP_GUIDE.md](03-LAPTOP_SETUP_GUIDE.md).

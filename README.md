@@ -6,17 +6,19 @@ customer table QR code, gives staff a live operational view after secure login, 
 payment counter and manager dashboard that require username/password authentication and
 server-issued JWT sessions held in HttpOnly cookies.
 
-The entire system runs on the local Wi-Fi network inside the cafe. No internet connection is
-required once the server is running. The initial deployment hardware was a Raspberry Pi 5.
+Core ordering and management run on the local Wi-Fi network inside the cafe. Optional email
+and cloud-backup integrations, and downloading code updates, require internet access. The
+initial deployment hardware was a Raspberry Pi 5.
 The backend can also run on Windows laptops/desktops and Linux PCs with Node.js installed.
 
 ---
 
 ## How the system works
 
-When a customer sits down, they scan the QR code printed on their table. The QR code connects
-their phone to the cafe's local network and opens the web application in their browser. From
-there they can browse the menu, add items to a cart, and place an order. The order is visible to
+When a customer sits down, they connect their phone to the cafe's local network and scan the
+QR code printed on their table. The QR code opens the web application in their browser; it
+does not itself connect the phone to Wi-Fi. From there they can browse the menu, add items
+to a cart, and place an order. The order is visible to
 staff handling order fulfillment, and they can update its status as it moves from queued to
 preparing to ready.
 
@@ -49,7 +51,7 @@ BP-DragonFly-Garden/
         routes/              HTTP route definitions
         middleware/          Request validation and role-based access control
         database/            SQLite schema, seed data, and database connection
-        services/            Thermal printer integration
+        services/            Printer, backup, and other integrations
         utils/               Shared helper utilities
         constants/           Shared constants (order statuses, etc.)
 ```
@@ -68,12 +70,12 @@ React Router, WebSocket (native browser API).
 
 ## Running locally for development
 
-You need Node.js 18 or newer. Open two terminal windows.
+Use Node.js 20 or newer. Open two terminal windows.
 
 **Terminal 1 — Backend:**
 ```
 cd restaurant-system/backend
-npm install
+npm ci
 npm run dev
 ```
 The backend starts on port 5000 by default. It creates and seeds the database automatically
@@ -82,7 +84,7 @@ on first run.
 **Terminal 2 — Frontend:**
 ```
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 The frontend dev server starts on port 5173. It proxies API requests to the backend at
@@ -139,8 +141,8 @@ non-loopback backend.
 
 ## Deployment on a Windows PC or laptop
 
-Install Node.js 20 LTS or newer, ensure the backend `.env` file and restaurant
-database are present, then double-click
+Install Node.js 20 or newer, create a machine-specific backend `.env` file, then
+double-click
 [`START_DRAGONFLY_GARDEN.bat`](./Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
 The launcher opens the manager view by default. The other role-specific launchers
 open the table 1 customer view or payment-counter view. Each launcher checks the
@@ -190,7 +192,7 @@ The production frontend build targets current Chrome/Edge (105+), Firefox
 features can still affect rendering; this does not guarantee support for every
 historical browser version.
 
-On macOS or Linux, install Node.js 20 LTS or newer, configure
+On macOS or Linux, install Node.js 20 or newer, configure
 `restaurant-system/backend/.env`, then run `npm ci` and `npm run build` in
 `frontend/`; run `npm ci` and `npm start` in `restaurant-system/backend/`.
 The backend serves the built frontend on port 5000.
@@ -201,8 +203,8 @@ Build the frontend first, then start the backend. The Express server detects the
 frontend and serves it as static files alongside the API.
 
 ```
-cd frontend && npm install && npm run build
-cd ../restaurant-system/backend && npm install && npm run start
+cd frontend && npm ci && npm run build
+cd ../restaurant-system/backend && npm ci && npm run start
 ```
 
 On the Pi, make sure backend config allows the local hotspot origin:
@@ -218,35 +220,7 @@ If you want development access from the Vite dev server as well, you can include
 
 - `http://localhost:5173`
 
-### systemd service example
-
-Create `/etc/systemd/system/dragonfly-garden.service` on the Raspberry Pi with:
-
-```ini
-[Unit]
-Description=Dragonfly Garden Backend
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/BP-DragonFly-Garden/restaurant-system/backend
-EnvironmentFile=/home/pi/BP-DragonFly-Garden/restaurant-system/backend/.env
-ExecStart=/usr/bin/node src/server.js
-Restart=on-failure
-RestartSec=5s
-LimitNOFILE=4096
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start it:
-
-```
-sudo systemctl daemon-reload
-sudo systemctl enable --now dragonfly-garden.service
-sudo systemctl status dragonfly-garden.service
-```
-
-Access the app from any device on the Pi network at `http://10.42.0.1:5000`.
+For systemd setup, use [02.4-SYSTEMD_SERVICES.md](./Documentations/02.4-SYSTEMD_SERVICES.md);
+the service account, project path, and Node executable must match the target Pi. See
+[02.2-NETWORK_HOTSPOT.md](./Documentations/02.2-NETWORK_HOTSPOT.md) before assuming the
+Pi address is `10.42.0.1`.

@@ -1,169 +1,46 @@
-# 🚀 QUICK START GUIDE - 5 MINUTE SETUP
+# 01 - QUICK START
 
-> **This guide is for COMPLETE BEGINNERS. If you know nothing about computers, this is for you.**
+This is a checklist, not a five-minute installation. It assumes the Raspberry Pi has
+already been installed, configured, and tested. For a new installation, use
+[02-PI_SETUP_GUIDE.md](02-PI_SETUP_GUIDE.md) or
+[03-LAPTOP_SETUP_GUIDE.md](03-LAPTOP_SETUP_GUIDE.md).
 
----
+## What you need
 
-## 📦 WHAT YOU NEED
+- A configured Raspberry Pi or Windows computer with the project installed.
+- Node.js 20 or newer on Windows; use the version and systemd setup described in the
+  relevant installation guide on Linux.
+- A valid machine-specific backend `.env` containing a non-placeholder `JWT_SECRET`.
+- A receipt printer installed and tested by the operating system.
+- Manager login credentials. Do not put credentials in this document.
 
-| Item | What to buy/get |
-|------|-----------------|
-| 1 | Raspberry Pi 5 (the small computer) |
-| 2 | Micro SD card (32GB or larger) |
-| 3 | USB-C power adapter (for Pi) |
-| 4 | YHD-8390 thermal printer (80mm with auto cutter) |
-| 5 | A Windows laptop (for backup) |
-| 6 | USB drive or internet (for copying files) |
+The actual printer model, paper width, cutter capability, Wi-Fi name/password, server
+address, and manager credentials must be confirmed on the installed equipment. Do not
+assume a model, width, or cutter based on an example in an old guide.
 
----
+## Start and verify the configured system
 
-## ⏱️ STEP 1: FLASH THE OPERATING SYSTEM (OS) TO THE SD CARD
+1. Start the server:
+   - Raspberry Pi with systemd: `sudo systemctl start dragonfly-garden`
+   - Windows: run
+     [`START_DRAGONFLY_GARDEN.bat`](../Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat)
+     and keep its backend window open.
+2. From the server, check `http://127.0.0.1:5000/health`.
+3. Connect a phone/computer to the same trusted network. Open the published app address
+   in a browser; do not assume the device will open it automatically.
+4. Sign in with the manager's credentials.
+5. In **Settings → Printer Management**, select the installed printer and submit a test
+   print. Confirm the paper physically prints and check cutter behavior separately.
+6. Confirm the menu and existing data before accepting orders.
 
-### What is an OS?
-The OS is like Windows for your Pi. It makes the Pi work.
+## If something fails
 
-### What to do:
-1. **Download Raspberry Pi Imager**
-   - Open your laptop
-   - Open Chrome or Edge browser
-   - Go to: `https://www.raspberrypi.com/software/`
-   - Click the big blue button that says "Download for Windows"
-   - Wait for download to finish
+- Network setup: [02.2-NETWORK_HOTSPOT.md](02.2-NETWORK_HOTSPOT.md)
+- Printer setup/troubleshooting: [04-PRINTER_TROUBLESHOOTING.md](04-PRINTER_TROUBLESHOOTING.md)
+- Backups/recovery: [05-DISASTER_RECOVERY.md](05-DISASTER_RECOVERY.md)
+- Updates: [06-UPDATE_GUIDE.md](06-UPDATE_GUIDE.md)
 
-2. **Install Raspberry Pi Imager**
-   - Find the downloaded file (usually in "Downloads" folder)
-   - Double-click it
-   - Click "Next" until it installs
-   - Click "Finish"
-
-3. **Put the SD card in your laptop**
-   - Use the SD card adapter if needed
-   - Put it in the slot on your laptop
-
-4. **Open Raspberry Pi Imager**
-   - Click the Start button (Windows logo)
-   - Type "Raspberry Pi Imager"
-   - Click on it
-
-5. **Choose the OS**
-   - Click "Choose OS"
-   - Click "Raspberry Pi OS (other)"
-   - Click "Raspberry Pi OS (64-bit)" ← IMPORTANT!
-
-6. **Choose the SD card**
-   - Click "Choose Storage"
-   - Click on your SD card
-   - Make sure it's the right one! (Check the size)
-
-7. **Write the OS**
-   - Click "Write"
-   - Click "Yes" if Windows asks
-   - Wait 5-10 minutes
-   - When done, click "Continue"
-
-8. **Eject the SD card**
-   - Right-click the SD card in "This PC"
-   - Click "Eject"
-   - Remove the SD card
-
----
-
-## ⏱️ STEP 2: FIRST BOOT THE PI
-
-### What to do:
-1. **Put SD card in Pi**
-   - Find the SD card slot on the Pi (bottom side)
-   - Push the SD card in until it clicks
-
-2. **Connect the printer**
-   - Plug the printer USB cable into the Pi
-   - Turn on the printer
-
-3. **Power on the Pi**
-   - Plug the USB-C cable into the Pi
-   - Plug the other end into the power adapter
-   - Plug the adapter into the wall
-   - The Pi will start (lights will blink)
-
-4. **Wait 2 minutes**
-   - The Pi is starting up
-   - Be patient!
-
----
-
-## ⏱️ STEP 3: CONNECT TO THE HOTSPOT
-
-### What to do:
-1. **On your phone or laptop**
-   - Open WiFi settings
-   - Look for WiFi named "DragonflyHotspot"
-   - Click on it
-   - Password: (ask the manager)
-
-2. **Open a browser**
-   - Chrome, Edge, Safari, or Firefox
-   - Type in the address bar: `http://10.42.0.1:5000`
-   - Press Enter
-
----
-
-## ⏱️ STEP 4: LOGIN TO THE SYSTEM
-
-### What to do:
-1. **You will see a login screen**
-   - Click "Manager Login"
-
-2. **Enter username and password**
-   - Username: (ask the manager)
-   - Password: (ask the manager)
-   - Click "Login"
-
----
-
-## ⏱️ STEP 5: TEST THE PRINTER
-
-### What to do:
-1. **Go to Settings**
-   - Click "Settings" in the menu
-
-2. **Go to Printer Management**
-   - Click "Printer Management"
-
-3. **Click "Test Print"**
-   - Click the "Test Print" button
-   - The printer should print a test page
-   - If it doesn't work, read the PRINTER_TROUBLESHOOTING guide
-
----
-
-## ⏱️ STEP 6: YOU'RE DONE!
-
-### What to do next:
-- The system is now running
-- Customers can connect to the WiFi and order
-- Fulfillment staff can see orders
-- Payment counter can process payments
-
----
-
-## ❓ WHAT IF SOMETHING DOESN'T WORK?
-
-| Problem | Solution |
-|---------|----------|
-| Can't find WiFi "DragonflyHotspot" | Wait 2 more minutes, check Step 2 |
-| Can't open `http://10.42.0.1:5000` | Check Step 3, make sure connected to WiFi |
-| Login failed | Ask manager for correct username/password |
-| Printer not working | Read PRINTER_TROUBLESHOOTING guide |
-| Need to update system | Read UPDATE_GUIDE |
-| SD card died, need to restore | Read DISASTER_RECOVERY guide |
-
----
-
-## 📞 NEED HELP?
-
-Read the other guides in this folder:
-- `02-PI_SETUP_GUIDE.md` - Full Pi setup
-- `03-LAPTOP_SETUP_GUIDE.md` - Laptop setup
-- `04-PRINTER_TROUBLESHOOTING.md` - Fix printer problems
-- `05-DISASTER_RECOVERY.md` - Backup and restore
-- `06-UPDATE_GUIDE.md` - Update the system
+The system can perform core local-network operations without internet after setup.
+Optional email/cloud integrations and downloading updates require internet access. This
+guide does not certify the physical printer, Wi-Fi coverage, or production readiness;
+test those on site.

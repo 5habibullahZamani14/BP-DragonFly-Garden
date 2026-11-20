@@ -14,14 +14,20 @@ Pulau Pinang
 
 2025/2026
 
+> **Author review note:** This is a first-person historical report. Repository review cannot
+> independently verify personal experiences, dates, organization details, supervisor
+> feedback, university requirements, or the completeness of reported work. Confirm those
+> items against official records before submission. Relative timing and any readiness
+> claims in this draft should be checked against the actual submission date and test
+> evidence.
+
 **Abstract**
 
 Industrial training is an important component of the Bachelor of
 Computer Science (Honours) programme because it connects theory with
 real software engineering practice. This report documents my internship
 at Innovatree Technologies Sdn. Bhd., George Town, Pulau Pinang, from 17
-March 2026 to 31 August 2026 -- still one week is remaining to conclude
-the internship at the time of submitting this report. The company is
+March 2026 to 31 August 2026. The company is
 small, informal, and entrepreneur-led, and this had a major impact on
 the nature of my role.
 
@@ -72,8 +78,8 @@ and may not be reproduced without permission from the university and the
 host organization. I accept responsibility for the preparation,
 accuracy, and originality of the content in this report.
 
-![](media/image1.png){width="1.775955818022747in"
-height="0.9722222222222222in"}
+> The referenced university logo (`media/image1.png`) is absent from this checkout.
+> Insert the approved image if the final report format requires it.
 
 **Acknowledgement**
 
@@ -593,14 +599,15 @@ the restaurant business and were necessary to make the system more
 capable and realistic.
 
 The implementation also had to account for hardware constraints. A
-Raspberry Pi 5 was introduced as the local production host, and a
+Raspberry Pi 5 was selected as the intended local host, and a
 thermal printer was integrated to support the service workflow and
 receipt printing process. This reflects the fact that the project was
 not purely software-based; it was a combination of software and
-practical business infrastructure. The system was also designed to work
-without external internet access once the local network was active,
-which was a major consideration for a cafe environment that depended on
-local service continuity. In practical terms, the design had to handle
+practical business infrastructure. Core ordering was designed to work
+on the local network without internet access; optional email, cloud
+backup, and update functions require internet. This was a major
+consideration for a cafe environment that depended on local service
+continuity. In practical terms, the design had to handle
 table QR customer access, authenticated staff and manager login through
 username/password and JWT sessions, live order updates across devices,
 and operational checks such as business hours, payment processing, and
@@ -1000,8 +1007,8 @@ evaluating options, and implementing a practical resolution.
 
 ## Appendix E: Major Milestones in the Project Timeline
 
-The project was completed through a series of major development
-milestones that reflected the real progression of the work. These
+The project work progressed through a series of development milestones
+that reflected the author's account of the work. These
 milestones included:
 
 - Initial project discovery and technology comparison, where I evaluated
@@ -1026,11 +1033,11 @@ milestones included:
 - Security and access hardening, covering role-based restrictions,
   session locking, safer authentication patterns, and improved reserve
   and audit behavior.
-- Backup, restore, and continuity improvements, which became essential
-  as the system approached handover and production-level readiness.
-- Final accessibility, performance, release testing, and documentation
-  updates, which completed the transition from prototype to practical
-  business-ready deployment.
+- Backup, restore, and continuity work, which still requires operational
+  verification before it can support a handover or production-readiness claim.
+- Accessibility, performance, release-testing, and documentation work.
+  Completion and business readiness should be stated only when supported
+  by test evidence and stakeholder acceptance.
 
 These milestones demonstrate that the internship was shaped by real
 project progression, not by isolated coding tasks. Each phase
@@ -1045,8 +1052,8 @@ share a project.
 \(b\) The report must be prepared as a Word document, single spacing and
 typed on one side of the page, except for appendix/attachment.
 
-\(c\) Date of submission: within one week after completion of industrial
-training.
+\(c\) Verify the report submission date and deadline against the current
+School of Computer Science requirements before submission.
 
 \(d\) Two copies of the report must be prepared. One copy to the
 organization and one copy to the School.

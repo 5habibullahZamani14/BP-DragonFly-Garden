@@ -1,69 +1,56 @@
-#!/bin/bash
-# Create Full Backup Script for Raspberry Pi
-# This creates a tar.gz file with all important data
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-echo "========================================"
-echo "DragonFly Garden - Create Full Backup"
-echo "========================================"
-echo
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BACKEND="$PROJECT_ROOT/restaurant-system/backend"
+DATABASE="$BACKEND/src/database/database.sqlite"
 
-# Set the project folder
-PROJECT_FOLDER="/home/pi/BP-DragonFly-Garden"
+echo "Dragonfly Garden - manual data backup"
+echo "Project: $PROJECT_ROOT"
+echo "Stop the restaurant application before continuing."
 
-# Create backup folder
-BACKUP_FOLDER="$PROJECT_FOLDER/backup"
-mkdir -p "$BACKUP_FOLDER"
-
-echo "Creating backup..."
-echo
-
-# Copy .env file
-if [ -f "$PROJECT_FOLDER/restaurant-system/backend/.env" ]; then
-    cp "$PROJECT_FOLDER/restaurant-system/backend/.env" "$BACKUP_FOLDER/"
-    echo "Copied .env file"
-else
-    echo "WARNING: .env file not found"
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet dragonfly-garden; then
+  echo "ERROR: dragonfly-garden is active. Stop it and retry." >&2
+  exit 1
 fi
 
-# Copy database
-if [ -f "$PROJECT_FOLDER/restaurant-system/backend/src/database/database.sqlite" ]; then
-    cp "$PROJECT_FOLDER/restaurant-system/backend/src/database/database.sqlite" "$BACKUP_FOLDER/"
-    echo "Copied database.sqlite"
-else
-    echo "WARNING: database.sqlite not found"
+if command -v ss >/dev/null 2>&1 && ss -H -ltn 'sport = :5000' | grep -q LISTEN; then
+  echo "ERROR: port 5000 is listening. Confirm the application is stopped and retry." >&2
+  exit 1
 fi
 
-# Copy menu images
-if [ -d "$PROJECT_FOLDER/frontend/public/menu-images" ]; then
-    cp -r "$PROJECT_FOLDER/frontend/public/menu-images" "$BACKUP_FOLDER/"
-    echo "Copied menu-images"
-else
-    echo "WARNING: menu-images folder not found"
+if [[ ! -f "$DATABASE" ]]; then
+  echo "ERROR: database not found: $DATABASE" >&2
+  exit 1
 fi
 
-# Copy feedback images
-if [ -d "$PROJECT_FOLDER/frontend/public/feedback-images" ]; then
-    cp -r "$PROJECT_FOLDER/frontend/public/feedback-images" "$BACKUP_FOLDER/"
-    echo "Copied feedback-images"
-else
-    echo "WARNING: feedback-images folder not found"
-fi
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/dragonfly-backup.XXXXXX")"
+trap 'rm -rf -- "$STAGE"' EXIT
 
-echo
-echo "Creating tar.gz file..."
+cp -- "$DATABASE" "$STAGE/database.sqlite"
+for suffix in -wal -shm; do
+  if [[ -f "$DATABASE$suffix" ]]; then
+    cp -- "$DATABASE$suffix" "$STAGE/database.sqlite$suffix"
+  fi
+done
 
-# Get current date
-DATE_STR=$(date +%Y%m%d)
+for relative in \
+  frontend/public/menu-images \
+  frontend/public/feedback-images \
+  restaurant-system/backend/uploads; do
+  if [[ -d "$PROJECT_ROOT/$relative" ]]; then
+    mkdir -p "$STAGE/$(dirname "$relative")"
+    cp -a -- "$PROJECT_ROOT/$relative" "$STAGE/$relative"
+  fi
+done
 
-# Create tar.gz
-cd "$BACKUP_FOLDER"
-tar -czf "$PROJECT_FOLDER/dragonfly-backup-$DATE_STR.tar.gz" .
-
-echo
-echo "Backup created: $PROJECT_FOLDER/dragonfly-backup-$DATE_STR.tar.gz"
-echo
-
-# Clean up
-rm -rf "$BACKUP_FOLDER"
-
-echo "Done!"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="$HOME/DragonflyBackups"
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+ARCHIVE="$BACKUP_DIR/dragonfly-backup-$STAMP.tar.gz"
+tar -czf "$ARCHIVE" -C "$STAGE" .
+chmod 600 "$ARCHIVE"
+echo "Backup created: $ARCHIVE"
+echo "The archive contains restaurant data. Store it securely."

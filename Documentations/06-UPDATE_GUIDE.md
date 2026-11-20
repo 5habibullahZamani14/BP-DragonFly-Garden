@@ -1,42 +1,21 @@
 # 06 - UPDATE GUIDE
 
-> **This guide is for COMPLETE BEGINNERS. We will explain EVERYTHING step by step. This shows you how to update the system.**
+Update application code only during a maintenance window, after a verified backup. Keep
+the production database and machine-specific `.env` separate from code updates.
 
----
+## Choose a procedure
 
-## 🤔 WHY UPDATE?
+- [06.1-GITHUB_UPDATES.md](06.1-GITHUB_UPDATES.md): update from the Git repository.
+- [06.2-MANUAL_UPDATES.md](06.2-MANUAL_UPDATES.md): update from a complete, trusted
+  offline release.
+- [06.3-VERSION_CHECK.md](06.3-VERSION_CHECK.md): compare local and remote code versions.
 
-Updates fix problems and add new features.
+## Important
 
-### You should update:
-- When the manager tells you to
-- When you see a new version is available
-- When something isn't working right
+The dashboard's **Check for Updates** feature can check the remote version. Do not use
+**Update Now** on a production installation: the current updater uses `git reset --hard
+origin/main`, which can discard local changes, and does not reliably restart the backend.
 
----
-
-## 📖 TABLE OF CONTENTS
-
-- [06.1-GITHUB_UPDATES.md](06.1-GITHUB_UPDATES.md) - Update from GitHub
-- [06.2-MANUAL_UPDATES.md](06.2-MANUAL_UPDATES.md) - Manual update process
-- [06.3-VERSION_CHECK.md](06.3-VERSION_CHECK.md) - Check for updates
-
----
-
-## 🎯 QUICK REFERENCE
-
-### Update commands:
-| Command | What it does |
-|---------|-------------|
-| `git pull` | Download latest code |
-| `npm install` | Install/update dependencies |
-| `npm run build` | Build the frontend |
-| `sudo systemctl restart dragonfly-garden` | Restart the system |
-
----
-
-## ✅ YOU'RE DONE!
-
-### What to do next:
-- Read [06.1-GITHUB_UPDATES.md](06.1-GITHUB_UPDATES.md) to update from GitHub
-- Or read the other guides in this folder
+After an update, verify the health endpoint, manager login, saved data, and physical
+printer output. A successful build alone does not prove that the restaurant is ready for
+service.
