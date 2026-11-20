@@ -275,7 +275,7 @@ const initializeDatabase = async () => {
   `);
 
   /*
-   * Customer feedback — private to sender (view_token) and manager dashboard.
+   * Legacy view tokens remain private to the server for one-time session migration.
    */
   await run(`
     CREATE TABLE IF NOT EXISTS customer_feedback (
@@ -299,6 +299,23 @@ const initializeDatabase = async () => {
       responded_at DATETIME,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       archived_at DATETIME
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS customer_feedback_access_sessions (
+      id TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS customer_feedback_access_entries (
+      session_id TEXT NOT NULL,
+      feedback_id INTEGER NOT NULL,
+      PRIMARY KEY (session_id, feedback_id),
+      FOREIGN KEY (session_id) REFERENCES customer_feedback_access_sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (feedback_id) REFERENCES customer_feedback(id) ON DELETE CASCADE
     )
   `);
 

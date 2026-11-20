@@ -9,9 +9,15 @@ const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const { validateFeedbackText } = require("../utils/profanityFilter");
 const { analyzeFeedback, RATING_DIMS } = require("../services/feedbackAnalyzer");
-const { generateAIAnalysis, generateAIFindings, generateChatResponse } = require("../services/aiFeedbackAnalyzer");
-const { trackRequest, getUsage } = require("../services/usageTracker");
+const { generateAIAnalysis, generateAIFindings } = require("../services/aiFeedbackAnalyzer");
 const { compressImage } = require("../utils/imageCompressor");
+const {
+  FEEDBACK_SESSION_MAX_AGE_SECONDS,
+  getAuthCookieValue,
+  setAuthCookie,
+} = require("../middleware/authCookies");
+
+const FEEDBACK_SESSION_ROLE = "feedback";
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -90,10 +96,48 @@ const mapFeedbackRow = async (row) => {
   };
 };
 
-const stripTokenForManager = (row) => {
+const stripFeedbackToken = (row) => {
   if (!row) return row;
   const { view_token, ...rest } = row;
   return rest;
+};
+
+const hashFeedbackSession = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const getFeedbackSession = async (req) => {
+  const token = getAuthCookieValue(req.headers?.cookie, FEEDBACK_SESSION_ROLE);
+  if (!token) return null;
+
+  const id = hashFeedbackSession(token);
+  const session = await get(
+    `SELECT id FROM customer_feedback_access_sessions WHERE id = ? AND expires_at > ?`,
+    [id, Date.now()],
+  );
+  return session || null;
+};
+
+const createFeedbackSession = async (req, res) => {
+  const currentSession = await getFeedbackSession(req);
+  if (currentSession) return currentSession;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const id = hashFeedbackSession(token);
+  const expiresAt = Date.now() + FEEDBACK_SESSION_MAX_AGE_SECONDS * 1000;
+  await run(`DELETE FROM customer_feedback_access_sessions WHERE expires_at <= ?`, [Date.now()]);
+  await run(
+    `INSERT INTO customer_feedback_access_sessions (id, expires_at) VALUES (?, ?)`,
+    [id, expiresAt],
+  );
+  setAuthCookie(res, req, FEEDBACK_SESSION_ROLE, token, FEEDBACK_SESSION_MAX_AGE_SECONDS);
+  return { id };
+};
+
+const linkFeedbackToSession = async (sessionId, feedbackId) => {
+  await run(
+    `INSERT OR IGNORE INTO customer_feedback_access_entries (session_id, feedback_id) VALUES (?, ?)`,
+    [sessionId, feedbackId],
+  );
 };
 
 exports.submitFeedback = async (req, res) => {
@@ -184,6 +228,8 @@ exports.submitFeedback = async (req, res) => {
   const row = await mapFeedbackRow(
     await get("SELECT * FROM customer_feedback WHERE id = ?", [result.id]),
   );
+  const session = await createFeedbackSession(req, res);
+  await linkFeedbackToSession(session.id, result.id);
 
   // Emit WebSocket event for new feedback
   const broadcast = getBroadcast();
@@ -191,10 +237,10 @@ exports.submitFeedback = async (req, res) => {
     broadcast({ type: "NEW_FEEDBACK", payload: { id: result.id } });
   }
 
+  res.set("Cache-Control", "no-store");
   res.status(201).json({
     id: row.id,
-    view_token: viewToken,
-    feedback: row,
+    feedback: stripFeedbackToken(row),
   });
 };
 
@@ -202,39 +248,66 @@ exports.fetchMyFeedback = async (req, res) => {
   const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
   if (!entries.length) return res.json([]);
 
+  let session = await getFeedbackSession(req);
   const results = [];
   for (const entry of entries.slice(0, 50)) {
     const id = Number(entry?.id);
-    const token = String(entry?.view_token || "");
-    if (!id || !token) continue;
-    const row = await get(
-      `SELECT * FROM customer_feedback WHERE id = ? AND view_token = ?`,
-      [id, token],
-    );
+    if (!Number.isSafeInteger(id) || id <= 0) continue;
+
+    let row = null;
+    if (session) {
+      row = await get(
+        `SELECT feedback.*
+           FROM customer_feedback feedback
+           JOIN customer_feedback_access_entries access
+             ON access.feedback_id = feedback.id
+          WHERE access.session_id = ? AND feedback.id = ?`,
+        [session.id, id],
+      );
+    }
+
+    const legacyToken = String(entry?.view_token || "");
+    if (!row && legacyToken) {
+      row = await get(
+        `SELECT * FROM customer_feedback WHERE id = ? AND view_token = ?`,
+        [id, legacyToken],
+      );
+      if (row) {
+        session = session || await createFeedbackSession(req, res);
+        await linkFeedbackToSession(session.id, id);
+      }
+    }
+
     if (row) {
       const mapped = await mapFeedbackRow(row);
-      results.push({
-        ...mapped,
-        view_token: token,
-      });
+      results.push(stripFeedbackToken(mapped));
     }
   }
+  res.set("Cache-Control", "no-store");
   res.json(results);
 };
 
-exports.getFeedbackByToken = async (req, res) => {
+exports.getMyFeedbackById = async (req, res) => {
   const id = Number(req.params.id);
-  const token = String(req.query.view_token || "");
-  if (!id || !token) throw createHttpError(400, "Invalid feedback access.");
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw createHttpError(400, "Invalid feedback access.");
+  }
 
+  const session = await getFeedbackSession(req);
+  if (!session) throw createHttpError(404, "Feedback not found.");
   const row = await get(
-    `SELECT * FROM customer_feedback WHERE id = ? AND view_token = ?`,
-    [id, token],
+    `SELECT feedback.*
+       FROM customer_feedback feedback
+       JOIN customer_feedback_access_entries access
+         ON access.feedback_id = feedback.id
+      WHERE access.session_id = ? AND feedback.id = ?`,
+    [session.id, id],
   );
   if (!row) throw createHttpError(404, "Feedback not found.");
 
   const mapped = await mapFeedbackRow(row);
-  res.json({ ...mapped, view_token: token });
+  res.set("Cache-Control", "no-store");
+  res.json(stripFeedbackToken(mapped));
 };
 
 exports.listFeedbackForManager = async (req, res) => {
@@ -267,7 +340,7 @@ exports.listFeedbackForManager = async (req, res) => {
   const rows = await all(sql, params);
   const list = [];
   for (const row of rows) {
-    list.push(stripTokenForManager(await mapFeedbackRow(row)));
+    list.push(stripFeedbackToken(await mapFeedbackRow(row)));
   }
   res.json(list);
 };
@@ -276,7 +349,7 @@ exports.getFeedbackDetailForManager = async (req, res) => {
   const id = Number(req.params.id);
   const row = await get("SELECT * FROM customer_feedback WHERE id = ?", [id]);
   if (!row) throw createHttpError(404, "Feedback not found.");
-  res.json(stripTokenForManager(await mapFeedbackRow(row)));
+  res.json(stripFeedbackToken(await mapFeedbackRow(row)));
 };
 
 exports.respondToFeedback = async (req, res) => {
@@ -306,7 +379,7 @@ exports.respondToFeedback = async (req, res) => {
     broadcast({ type: "FEEDBACK_RESPONSE", payload: { id } });
   }
 
-  res.json(stripTokenForManager(await mapFeedbackRow(row)));
+  res.json(stripFeedbackToken(await mapFeedbackRow(row)));
 };
 
 exports.archiveFeedback = async (req, res) => {
@@ -317,7 +390,7 @@ exports.archiveFeedback = async (req, res) => {
   );
   const row = await get("SELECT * FROM customer_feedback WHERE id = ?", [id]);
   if (!row) throw createHttpError(404, "Feedback not found.");
-  res.json(stripTokenForManager(await mapFeedbackRow(row)));
+  res.json(stripFeedbackToken(await mapFeedbackRow(row)));
 };
 
 exports.deleteFeedback = async (req, res) => {
@@ -515,146 +588,6 @@ exports.deleteFinding = async (req, res) => {
   const id = Number(req.params.id);
   await run(`DELETE FROM feedback_analysis_findings WHERE id = ?`, [id]);
   res.json({ success: true });
-};
-
-// Intent classification to determine what context data is needed
-const classifyIntent = (message) => {
-  const lowerMessage = message.toLowerCase();
-  
-  const intents = {
-    menu: ['menu', 'item', 'food', 'drink', 'price', 'category', 'available', 'popular', 'promo'],
-    orders: ['order', 'orders', 'customer', 'table', 'served', 'pending', 'completed', 'archived'],
-    revenue: ['revenue', 'sales', 'income', 'money', 'earn', 'profit', 'today', 'week', 'month'],
-    feedback: ['feedback', 'review', 'rating', 'comment', 'customer opinion', 'satisfaction'],
-    employees: ['employee', 'staff', 'worker', 'team', 'department', 'salary', 'hire'],
-    inventory: ['inventory', 'stock', 'ingredient', 'recipe', 'low stock', 'supplies'],
-    general: ['help', 'what can you', 'how are you', 'who are you', 'status', 'system']
-  };
-  
-  const detectedIntents = [];
-  for (const [intent, keywords] of Object.entries(intents)) {
-    if (keywords.some(keyword => lowerMessage.includes(keyword))) {
-      detectedIntents.push(intent);
-    }
-  }
-  
-  // If no specific intent detected, return all (general query)
-  return detectedIntents.length > 0 ? detectedIntents : ['menu', 'orders', 'revenue', 'feedback'];
-};
-
-const getChatContext = async (intents = ['menu', 'orders', 'revenue', 'feedback']) => {
-  const context = {};
-  
-  // Only load data based on detected intents
-  if (intents.includes('menu')) {
-    context.menu = await all(
-      "SELECT mi.id, mi.name, mi.price, c.name as category_name, mi.is_available FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id ORDER BY c.name, mi.name"
-    );
-  }
-  
-  if (intents.includes('orders')) {
-    context.orders_today = await all(
-      "SELECT id, status, total_price, order_type, created_at FROM orders WHERE date(created_at) = date('now','localtime') ORDER BY created_at DESC LIMIT 10"
-    );
-    context.top_sold_items = await all(
-      "SELECT mi.name, SUM(oi.quantity) as total_sold FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id JOIN orders o ON oi.order_id = o.id WHERE o.created_at >= datetime('now', '-7 days') GROUP BY mi.id, mi.name ORDER BY total_sold DESC LIMIT 10"
-    );
-  }
-  
-  if (intents.includes('revenue')) {
-    context.revenue_today = await get(
-      "SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE date(created_at) = date('now','localtime') AND (payment_status = 'paid' OR status = 'archived')"
-    );
-  }
-  
-  if (intents.includes('feedback')) {
-    context.feedback_recent = await all(
-      "SELECT comment, rating_food, rating_staff, rating_atmosphere FROM customer_feedback ORDER BY created_at DESC LIMIT 10"
-    );
-    context.feedback_stats = await get(
-      "SELECT AVG(rating_food) as avg_food, AVG(rating_staff) as avg_staff, AVG(rating_atmosphere) as avg_atmosphere FROM customer_feedback WHERE status = 'active'"
-    );
-  }
-  
-  if (intents.includes('employees')) {
-    context.employees = await all(
-      "SELECT name, department FROM employees WHERE is_archived = 0 ORDER BY department, name"
-    );
-  }
-  
-  if (intents.includes('inventory')) {
-    context.low_stock = await all(
-      "SELECT name, category, current_stock, max_stock FROM inventory_items WHERE is_archived = 0 AND (CAST(current_stock AS REAL) / CAST(max_stock AS REAL) * 100) <= low_stock_threshold_percent ORDER BY (CAST(current_stock AS REAL) / CAST(max_stock AS REAL)) ASC LIMIT 10"
-    );
-  }
-  
-  // Always include tables for context
-  context.tables = await all("SELECT table_number FROM tables ORDER BY table_number");
-  
-  return context;
-};
-
-exports.aiChat = async (req, res) => {
-  const { message } = req.body;
-  if (!message || !message.trim()) {
-    return res.status(400).json({ success: false, error: "Message is required" });
-  }
-
-  try {
-    // Classify intent to determine what context data is needed
-    const intents = classifyIntent(message);
-    console.log(`[DragonBot] Detected intents: ${intents.join(', ')}`);
-    
-    const contextData = await getChatContext(intents);
-
-    trackRequest();
-
-    const messages = [{ role: "user", content: message }];
-    const result = await generateChatResponse(messages, contextData);
-
-    if (!result.success) {
-      return res.status(503).json({ success: false, error: result.reason });
-    }
-
-    res.json({ success: true, response: result.response, usage: getUsage() });
-  } catch (error) {
-    console.error("AI chat error:", error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.getClientContext = async (req, res) => {
-  try {
-    const { message } = req.query;
-    
-    // Classify intent if message is provided to filter context
-    const intents = message ? classifyIntent(message) : ['menu', 'orders', 'revenue', 'feedback'];
-    console.log(`[DragonBot Client-Context] Detected intents: ${intents.join(', ')}`);
-    
-    const contextData = await getChatContext(intents);
-    res.json({
-      success: true,
-      apiKey: process.env.GROQ_API_KEY || null,
-      contextData,
-    });
-  } catch (error) {
-    console.error("Failed to fetch client context:", error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.trackChatUsage = async (req, res) => {
-  try {
-    trackRequest();
-    res.json(getUsage());
-  } catch (error) {
-    console.error("Failed to track usage:", error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-exports.getChatUsage = async (req, res) => {
-  res.json(getUsage());
 };
 
 exports.setBroadcast = setBroadcast;

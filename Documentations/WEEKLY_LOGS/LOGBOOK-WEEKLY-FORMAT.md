@@ -211,3 +211,7 @@ This file condenses the daily logbook into weekly summaries. Weeks are defined i
 | 30 Aug 2026 | Saturday | Release & Tag                   | Tagged repository with a release candidate tag, created a release archive including the final full backup, and verified uploader/cloud synchronization for critical backups.
 | 31 Aug 2026 | Sunday | Internship Wrap-up               | Internship formally concluded. Consolidated all documentation, created the final handover package, pushed and tagged the final release, and provided operational notes for the host team. Celebrated the handover and outlined recommended next steps: scheduled regression testing, extended monitoring, and prioritized backlog items for the next team.
 ```
+| 25 | 09 Nov 2026 — 15 Nov 2026 | Summary: see details below |
+```
+| 13 Nov 2026 | Friday | Product Scope Decision | At the restaurant owner's request, removed DragonBot from the current application. The owner considered it an optional bonus feature that added unnecessary weight and slowed the system; core restaurant workflows remain the priority. The separate feedback-analysis feature remains.
+```

@@ -184,7 +184,7 @@ export const InventoryTab = ({
       await loadData();
       onInventoryChanged?.();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Inventory request failed", e);
     }
   };
 
@@ -205,7 +205,7 @@ export const InventoryTab = ({
       await loadData();
       onInventoryChanged?.();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Inventory update failed", e);
     }
   };
 
@@ -215,7 +215,7 @@ export const InventoryTab = ({
       await loadData();
       onInventoryChanged?.();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Recipe request failed", e);
     }
   };
 
@@ -261,7 +261,7 @@ export const InventoryTab = ({
       setSelectedMenuItem(null);
       loadData();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Recipe update failed", e);
     }
   };
 

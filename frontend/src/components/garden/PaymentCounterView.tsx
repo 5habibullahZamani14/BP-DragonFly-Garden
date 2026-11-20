@@ -51,6 +51,8 @@ import {
   addOrderItem,
   fetchMenuItems,
   verifyEmployeeCredentials,
+  getPaymentCounterSession,
+  logoutPaymentCounter,
   fetchPublicSettings,
   printFinalBill,
   fetchStaffAssistanceRequests,
@@ -134,7 +136,7 @@ const acquireSessionLock = (key: string, session: Record<string, unknown>) => {
   const existing = readStoredSession<Record<string, unknown>>(key);
   const now = Date.now();
   if (existing?.expiry && typeof existing.expiry === "number" && existing.expiry > now) {
-    if (existing.token && session.token && existing.token === session.token) return true;
+    if (existing.id && session.id && existing.id === session.id) return true;
     return false;
   }
 
@@ -254,35 +256,27 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   }, []);
 
   // Check login state on mount
-  const getSavedPaymentCounterLogin = () => {
-    const savedLogin = localStorage.getItem("paymentCounterLogin");
-    if (!savedLogin) return null;
-    try {
-      const parsed = JSON.parse(savedLogin);
-      if (!parsed.token || !parsed.expiry || !parsed.name || !parsed.id) return null;
-      if (Date.now() >= parsed.expiry) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-
   useEffect(() => {
-    const savedLogin = getSavedPaymentCounterLogin();
-    if (savedLogin) {
-      const lockAcquired = acquireSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY, savedLogin);
-      if (!lockAcquired) {
-        localStorage.removeItem("paymentCounterLogin");
-        releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
+    let active = true;
+    getPaymentCounterSession().then(result => {
+      if (!active || !result.success) return;
+      const sessionMetadata = {
+        id: result.employee.id,
+        name: result.employee.name,
+        expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      };
+      if (!acquireSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY, sessionMetadata)) {
         notify("error", t("payment.sessionInUse"));
-      } else {
-        setLoggedInEmployee({ name: savedLogin.name, id: savedLogin.id });
+        return;
       }
-    } else {
+      localStorage.setItem("paymentCounterLogin", JSON.stringify(sessionMetadata));
+      setLoggedInEmployee({ name: result.employee.name, id: result.employee.id });
+    }).catch(() => {
       localStorage.removeItem("paymentCounterLogin");
       releaseSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY);
-    }
-  }, []);
+    });
+    return () => { active = false; };
+  }, [notify, t]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -290,7 +284,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       if (!event.newValue) return;
       const incoming = readStoredSession<Record<string, unknown>>(PAYMENT_COUNTER_SESSION_LOCK_KEY);
       const current = readStoredSession<Record<string, unknown>>("paymentCounterLogin");
-      if (incoming?.token && current?.token && incoming.token !== current.token) {
+      if (incoming?.id && current?.id && incoming.id !== current.id) {
         setLoggedInEmployee(null);
         setLoginInputId("");
         setLoginInputName("");
@@ -311,11 +305,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
     try {
       const result = await verifyEmployeeCredentials(loginInputId, loginInputName);
-      if (result.success && result.employee && result.token) {
+      if (result.success && result.employee) {
         const sessionPayload = {
           id: result.employee.id,
           name: result.employee.name,
-          token: result.token,
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
         };
         const lockAcquired = acquireSessionLock(PAYMENT_COUNTER_SESSION_LOCK_KEY, sessionPayload);
@@ -370,6 +363,9 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   }, [loggedInEmployee]);
 
   const handleLogout = () => {
+    void logoutPaymentCounter().catch(error => {
+      safeConsoleError("Payment-counter logout request failed", error);
+    });
     setLoggedInEmployee(null);
     setLoginInputId("");
     setLoginInputName("");
@@ -467,11 +463,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   };
 
-  const getPaymentCounterToken = useCallback(() => {
-    const savedLogin = getSavedPaymentCounterLogin();
-    return savedLogin?.token || null;
-  }, [loggedInEmployee]);
-
   const isWebSocketConnected = useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
     if (event.type === "CALL_WAITER") {
       const request = event.payload as StaffAssistanceRequest;
@@ -493,7 +484,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     if (loggedInEmployee) {
       loadData();
     }
-  }, getPaymentCounterToken);
+  }, undefined, "payment_counter", Boolean(loggedInEmployee));
 
   const serverDisconnectTimer = useRef<number | null>(null);
   useEffect(() => {

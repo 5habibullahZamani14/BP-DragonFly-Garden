@@ -70,6 +70,7 @@ import {
   type CustomerFeedback,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 import { SettingsModal } from "./SettingsModal";
 import { useTranslation } from "react-i18next";
 
@@ -235,9 +236,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         return;
       }
       const list = await fetchMyFeedback(qrCode, refs);
+      sessionStorage.setItem(
+        `dfg_feedback_refs_${qrCode}`,
+        JSON.stringify(refs.map((ref: { id: number }) => ({ id: ref.id }))),
+      );
       setFeedbackList(list);
     } catch (e) {
-      console.error("Failed to load feedback replies", e);
+      safeConsoleError("Failed to load feedback replies", e);
       setFeedbackList([]);
     } finally {
       setLoadingFeedback(false);
@@ -386,7 +391,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
       return cur;
     });
-  }, () => qrCode, "qr");
+  }, () => qrCode);
 
   const switchTab = (next: CustomerTab, animate = true) => {
     const prev = tabRef.current;

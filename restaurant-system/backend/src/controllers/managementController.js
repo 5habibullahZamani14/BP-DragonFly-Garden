@@ -34,6 +34,7 @@ const crypto = require("crypto");
 const { promisify } = require("util");
 const { exec: execCb } = require("child_process");
 const exec = promisify(execCb);
+const { setAuthCookie } = require("../middleware/authCookies");
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 const {
   RESET_CONFIRMATION_SENTENCE,
@@ -730,6 +731,7 @@ const verifyEmployee = async (req, res, next) => {
         [JSON.stringify(sessionPayload)]
       );
 
+      setAuthCookie(res, req, "payment_counter", token);
       res.json({
         success: true,
         employee: {
@@ -737,8 +739,7 @@ const verifyEmployee = async (req, res, next) => {
           name: employee.name,
           department: employee.department,
           role
-        },
-        token
+        }
       });
     } else {
       res.status(401).json({ success: false, message: "Invalid employee credentials" });
@@ -933,7 +934,8 @@ const managerAuth = async (req, res, next) => {
         "INSERT INTO restaurant_settings (key, value) VALUES ('manager_session', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [JSON.stringify(sessionPayload)]
       );
-      res.json({ success: true, name: profile.name, token });
+      setAuthCookie(res, req, "manager", token);
+      res.json({ success: true, id: profile.id, name: profile.name });
     } else {
       res.status(401).json({ success: false, message: "Invalid credentials" });
     }

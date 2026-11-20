@@ -18,6 +18,7 @@
 
 /* Valid order status values, used by multiple validators. */
 const ORDER_STATUSES = ["queue", "preparing", "ready"];
+const { redactSensitiveData, redactText } = require("./secretRedaction");
 
 /* Hard limits to protect against abusive or malformed requests. */
 const MAX_ORDER_ITEMS = 25;
@@ -449,7 +450,7 @@ const validateSplitPayment = (req, res, next) => {
  * error to errorHandler below.
  */
 const notFoundHandler = (req, res, next) => {
-  next(createHttpError(404, `Route not found: ${req.method} ${req.originalUrl}`));
+  next(createHttpError(404, `Route not found: ${req.method} ${req.path}`));
 };
 
 /*
@@ -463,7 +464,7 @@ const notFoundHandler = (req, res, next) => {
  * Everything else uses the statusCode set by createHttpError, defaulting to 500.
  */
 const errorHandler = (err, req, res, next) => {
-  console.error("Error:", err);
+  console.error("Request failed:", redactText(err && err.message ? err.message : "Unknown error"));
 
   if (err.type === "entity.parse.failed") {
     return res.status(400).json({
@@ -480,12 +481,12 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const payload = {
-    error: err.message || "Internal server error",
+    error: redactText(err.message || "Internal server error"),
     timestamp: new Date().toISOString()
   };
 
   if (err.details !== undefined) {
-    payload.details = err.details;
+    payload.details = redactSensitiveData(err.details);
   }
 
   return res.status(err.statusCode || 500).json(payload);

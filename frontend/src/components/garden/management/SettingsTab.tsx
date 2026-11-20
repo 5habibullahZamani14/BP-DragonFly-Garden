@@ -167,6 +167,11 @@ export const SettingsTab = () => {
   const [printerPreferences, setPrinterPreferences] = useState<PrinterPreferences>({});
   const [printerProfiles, setPrinterProfiles] = useState<Record<string, PrinterProfile>>({});
   const [testPrintLoading, setTestPrintLoading] = useState<string | null>(null);
+  const [testPrintResult, setTestPrintResult] = useState<{
+    printerName: string;
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [printerSettingsLoading, setPrinterSettingsLoading] = useState(false);
   const [printerSettingsSaved, setPrinterSettingsSaved] = useState(false);
   const [platformInfo, setPlatformInfo] = useState<PrinterPlatformInfo | null>(null);
@@ -403,7 +408,7 @@ export const SettingsTab = () => {
           setDefaultPatternSaved(true);
           setTimeout(() => setDefaultPatternSaved(false), 2500);
         } catch (e) {
-          console.error(e);
+          safeConsoleError("Failed to load saved printer state", e);
         }
       }
     );
@@ -412,56 +417,25 @@ export const SettingsTab = () => {
   // Printer management functions
   const [printerError, setPrinterError] = useState<string | null>(null);
 
-  const getManagerToken = useCallback(() => {
-    const managerLogin = localStorage.getItem("managerLogin");
-    if (managerLogin) {
-      try {
-        const parsed = JSON.parse(managerLogin);
-        return parsed.token;
-      } catch (e) {
-        console.error("Failed to parse managerLogin:", e);
-        return null;
-      }
-    }
-    return null;
-  }, []);
-
   const discoverPrinters = useCallback(async () => {
     setPrinterError(null);
     setPrintersLoading(true);
     setDiscoveryCountdown(30); // Start countdown at 30 seconds
-    console.log("[discoverPrinters] Starting discovery, loading state set to true");
     try {
-      const token = getManagerToken();
-      
-      if (!token) {
-        setPrinterError("Manager authentication required. Please log in to access printer management.");
-        safeConsoleError("Manager token not found");
-        setPrintersLoading(false);
-        setDiscoveryCountdown(0);
-        return;
-      }
-      
-      console.log("Discovering printers...");
-      
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
       const response = await fetch("/management/printers/discover", {
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
-      console.log("Response status:", response.status);
-      
       if (response.status === 401) {
-        const errorText = await response.text();
-        console.log("401 Error response:", errorText);
         setPrinterError("Authentication failed. Your session may have expired. Please log in again.");
         setPrintersLoading(false);
         setDiscoveryCountdown(0);
@@ -469,46 +443,34 @@ export const SettingsTab = () => {
       }
       
       const data: PrinterDiscoveryResponse = await response.json();
-      console.log("Response data:", data);
       
       if (data.success) {
-        console.log(`[discoverPrinters] Success! Found ${data.printers?.length || 0} printers`);
         setPrinters(data.printers ?? []);
         setPlatformInfo(data.platform ?? null);
       } else {
-        console.log("[discoverPrinters] Backend returned failure:", data.message);
         setPrinterError(`Failed to discover printers: ${data.message}`);
         safeConsoleError("Failed to discover printers", data.message);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
-        console.log("[discoverPrinters] Request timed out after 30 seconds");
         setPrinterError("Request timed out. The printer discovery is taking too long. Please check your backend logs.");
       } else {
         const message = getErrorMessage(err);
-        console.log("[discoverPrinters] Exception caught:", message);
         setPrinterError(`Error discovering printers: ${message}`);
         safeConsoleError("Printer discovery failed", err);
       }
     } finally {
-      console.log("[discoverPrinters] Finally block, setting loading to false");
       setPrintersLoading(false);
       setDiscoveryCountdown(0);
     }
-  }, [getManagerToken]);
+  }, []);
 
   const loadPrinterSettings = async () => {
     setPrinterSettingsLoading(true);
     try {
-      const token = getManagerToken();
-      if (!token) {
-        safeConsoleError("Manager token not found");
-        return;
-      }
-      
       const response = await fetch("/management/printers/settings", {
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         }
       });
@@ -564,23 +526,15 @@ export const SettingsTab = () => {
   const printDailySalesReport = async () => {
     setPrintingDailyReport(true);
     try {
-      const token = getManagerToken();
-      if (!token) {
-        safeConsoleError("Manager token not found");
-        return;
-      }
-      
       const response = await fetch("/management/printers/daily-sales-report", {
         method: "POST",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         }
       });
       const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        console.log("Daily sales report printed successfully");
-      } else {
+      if (!data.success) {
         safeConsoleError("Failed to print daily sales report", data.message);
       }
     } catch (err: unknown) {
@@ -593,24 +547,16 @@ export const SettingsTab = () => {
   const printTestTicket = async () => {
     setPrintingTestTicket(true);
     try {
-      const token = getManagerToken();
-      if (!token) {
-        safeConsoleError("Manager token not found");
-        return;
-      }
-      
       const response = await fetch("/management/printers/test", {
         method: "POST",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ printerName: selectedPrinter })
       });
       const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        console.log("Test ticket printed successfully");
-      } else {
+      if (!data.success) {
         safeConsoleError("Failed to print test ticket", data.message);
       }
     } catch (err: unknown) {
@@ -623,23 +569,6 @@ export const SettingsTab = () => {
   const savePrinterSettings = async () => {
     setPrinterSettingsLoading(true);
     try {
-      const token = getManagerToken();
-      if (!token) {
-        safeConsoleError("Manager token not found");
-        return;
-      }
-      
-      console.log("Saving printer settings with values:", {
-        paperWidth,
-        marginLeft,
-        marginRight,
-        marginTop,
-        marginBottom,
-        printDelaySeconds,
-        emptyLinesBefore,
-        emptyLinesAfter,
-        selectedPrinter
-      });
       // Update printer profile for selected printer
       const updatedProfiles = { ...printerProfiles };
       if (selectedPrinter) {
@@ -657,8 +586,6 @@ export const SettingsTab = () => {
           margin_bottom: marginBottom,
         };
       }
-      
-      console.log("Updated printer profiles:", updatedProfiles);
       
       // Update local state immediately so it persists during the session
       setPrinterProfiles(updatedProfiles);
@@ -678,8 +605,8 @@ export const SettingsTab = () => {
       
       const response = await fetch("/management/printers/settings", {
         method: "PUT",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -691,7 +618,6 @@ export const SettingsTab = () => {
       });
       const data: PrinterApiResponse = await response.json();
       if (data.success) {
-        console.log("Save successful, updating local state");
         setPrinterProfiles(updatedProfiles);
         setPrinterPreferences(updatedPrefs);
         setPrinterSettingsSaved(true);
@@ -728,12 +654,6 @@ export const SettingsTab = () => {
   };
 
   const saveEditedProfile = async () => {
-    const token = getManagerToken();
-    if (!token) {
-      safeConsoleError("Manager token not found");
-      return;
-    }
-
     setEditProfileDialog(prev => ({ ...prev, pending: true }));
 
     try {
@@ -742,8 +662,8 @@ export const SettingsTab = () => {
 
       const response = await fetch("/management/printers/settings", {
         method: "PUT",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -768,20 +688,14 @@ export const SettingsTab = () => {
   };
 
   const deletePrinterProfile = async (printerName: string) => {
-    const token = getManagerToken();
-    if (!token) {
-      safeConsoleError("Manager token not found");
-      return;
-    }
-
     try {
       const updatedProfiles = { ...printerProfiles };
       delete updatedProfiles[printerName];
       
       const response = await fetch("/management/printers/settings", {
         method: "PUT",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -804,30 +718,31 @@ export const SettingsTab = () => {
 
   const testPrinter = async (printerName: string) => {
     setTestPrintLoading(printerName);
+    setTestPrintResult(null);
     try {
-      const token = getManagerToken();
-      if (!token) {
-        safeConsoleError("Manager token not found");
-        return;
-      }
-      
       const response = await fetch("/management/printers/test", {
         method: "POST",
+        credentials: "include",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({ printerName })
       });
       const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        toast.success(`Test print sent successfully to ${printerName}`);
+      if (response.ok && data.success) {
+        const message = data.message || `Test print queued for ${printerName}`;
+        setTestPrintResult({ printerName, success: true, message });
+        toast.success(message);
       } else {
-        toast.error(`Test print failed: ${data.message}`);
+        const message = data.message || `Print request failed (HTTP ${response.status})`;
+        setTestPrintResult({ printerName, success: false, message });
+        toast.error(`Test print failed: ${message}`);
       }
     } catch (err: unknown) {
       safeConsoleError("Test print failed", err);
-      toast.error(`Test print failed: ${getErrorMessage(err)}`);
+      const message = getErrorMessage(err, "Could not read the printer response.");
+      setTestPrintResult({ printerName, success: false, message });
+      toast.error(`Test print failed: ${message}`);
     } finally {
       setTestPrintLoading(null);
     }
@@ -860,7 +775,7 @@ export const SettingsTab = () => {
           setDefaultPatternSaved(true);
           setTimeout(() => setDefaultPatternSaved(false), 2500);
         } catch (e) {
-          console.error(e);
+          safeConsoleError("Failed to read saved card size", e);
         }
       }
     );
@@ -1550,6 +1465,17 @@ export const SettingsTab = () => {
                                 )}
                               </Button>
                             </div>
+                            {testPrintResult?.printerName === printer.name && (
+                              <p
+                                role={testPrintResult.success ? "status" : "alert"}
+                                className={`mt-3 text-sm ${
+                                  testPrintResult.success ? "text-green-700" : "text-red-700"
+                                }`}
+                              >
+                                {testPrintResult.success ? "Test print: " : "Test print failed: "}
+                                {testPrintResult.message}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>

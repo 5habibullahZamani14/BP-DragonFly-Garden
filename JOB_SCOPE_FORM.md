@@ -412,12 +412,14 @@ Task 10.4: Integrate supporting services
 
 Task 10.5: Implement AI-powered feedback and chatbot support
 
-{MAIN-TASK-EXPLANATION}: The system has been enhanced with AI-assisted feedback analysis and a chatbot-style interface to make user feedback more actionable and easier to use. This adds a modern and intelligent layer to the project while still preserving the core restaurant functionality. This task is important because it captures the current implementation context, explains why the work matters in practical operation, and provides the rationale that supports the sub-tasks that follow. It keeps the solution aligned with the real business purpose of the system, the expected user experience, and the long-term maintainability of the application.
+Historical scope record — superseded by the stakeholder decision dated 13 November 2026: DragonBot was implemented as an optional bonus feature. The restaurant owner later requested that it be removed, considering it unnecessary to the core system and believing it added weight and slowed the application. The chatbot is not included in the current application; the separate feedback-analysis feature remains.
 
+{MAIN-TASK-EXPLANATION}: The system was enhanced with AI-assisted feedback analysis and a chatbot-style interface to make customer feedback more actionable and easier to use. This added an optional intelligent layer while preserving the core restaurant functionality. The chatbot portion records historical scope only and was retired following the stakeholder decision above.
+
+- Create a chatbot feedback experience (historical; removed).
+  - ***{EXPLANATIONS}:*** A dedicated manager tab previously provided conversational answers about restaurant data. It was removed at the owner's request because it was a bonus feature that the owner felt made the system unnecessarily heavy and slow.
 - Add feedback intelligence.
-  - ***{EXPLANATIONS}:*** The application includes AI-based feedback processing that summarizes and analyzes responses to improve insight quality. This moves the project beyond basic data collection and into a more intelligent operational support model.
-- Create a chatbot feedback experience.
-  - ***{EXPLANATIONS}:*** A dedicated feedback tab has been designed to provide conversational guidance and response summaries. This improves the user experience and gives the system a more advanced and professional feel.
+  - ***{EXPLANATIONS}:*** The application includes AI-based feedback processing that summarizes and analyzes responses to improve insight quality. Rule-based analysis remains available when the optional AI service is not configured.
 - Improve feedback presentation.
   - ***{EXPLANATIONS}:*** The interface has been refined to make feedback results easier to understand and more useful for evaluation. This helps ensure that the system can provide meaningful insight rather than simply storing raw comments.
 

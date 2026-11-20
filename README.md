@@ -4,7 +4,7 @@ This is the ordering and management system built for BP Dragonfly Garden Cafe Or
 cafe. The system lets customers browse the menu and place orders from their table by scanning a
 customer table QR code, gives staff a live operational view after secure login, and provides a
 payment counter and manager dashboard that require username/password authentication and
-server-issued JWT sessions.
+server-issued JWT sessions held in HttpOnly cookies.
 
 The entire system runs on the local Wi-Fi network inside the cafe. No internet connection is
 required once the server is running. The initial deployment hardware was a Raspberry Pi 5.
@@ -20,10 +20,16 @@ there they can browse the menu, add items to a cart, and place an order. The ord
 staff handling order fulfillment, and they can update its status as it moves from queued to
 preparing to ready.
 
-Payment counter staff sign in with their employee credentials and receive a server-issued JWT
-session before they can view unpaid orders and process payments. The restaurant manager signs in
-with their username and password and receives a dedicated manager JWT session to manage
+Payment counter staff sign in with their employee credentials and receive a server-issued session
+cookie before they can view unpaid orders and process payments. The restaurant manager signs in
+with their username and password and receives a separate manager session cookie to manage
 employees, inventory, system settings, and logs.
+
+## Product scope decision
+
+The manager chatbot (DragonBot) was an optional bonus feature and has been removed from the
+current application at the restaurant owner's request. The owner felt it added unnecessary
+weight and slowed the system. The separate customer-feedback analysis feature remains available.
 
 ---
 
@@ -91,8 +97,8 @@ requires a valid username/password login plus the server-issued JWT session.
 ## Environment variables
 
 The backend reads from `restaurant-system/backend/.env`. Copy `.env.example` to `.env` and
-fill in the values before starting the server. The only required variable for basic operation
-is `PORT` (defaults to 5000 if not set). The `RESEND_API_KEY` is needed only for the password
+fill in the values before starting the server. `JWT_SECRET` is required for secure
+authentication; `PORT` defaults to 5000. `RESEND_API_KEY` is needed only for the password
 reset email feature.
 
 Security-sensitive variables (required)
@@ -106,7 +112,23 @@ Notes:
   password will be migrated automatically to a secure bcrypt hash.
 
 Security recommendations:
-- Replace any placeholder API keys in `restaurant-system/backend/.env` (e.g. `RESEND_API_KEY`, `GROQ_API_KEY`) before deploying.
+- Replace placeholder service keys in `restaurant-system/backend/.env` before deploying. `RESEND_API_KEY` enables password-reset email; optional `GROQ_API_KEY` enables AI-generated feedback insights. Feedback analysis remains available without the Groq key.
+
+Manager and payment-counter JWTs are sent only as role-specific `HttpOnly`,
+`SameSite=Strict` cookies; they are not returned in login JSON, saved in browser
+storage, or placed in WebSocket URLs. Customer feedback access uses a separate
+`HttpOnly` cookie and server-side session mapping; feedback access tokens are
+not returned to page scripts or stored in browser storage. Existing feedback
+references are migrated on their next successful refresh. The frontend build
+also scans its public output for common credential formats. These protections
+prevent page scripts from reading session cookies, but the person controlling
+the browser can still inspect their own network traffic and cookies in developer
+tools. Use HTTPS on untrusted networks because cookies sent over plain HTTP can
+be intercepted.
+When the frontend is hosted on a different origin, configure
+`CORS_ALLOWED_ORIGINS` with its exact origin. The current strict-cookie setup
+supports same-site deployments; a frontend hosted on a different site requires
+an explicit HTTPS and CSRF design change rather than simply enabling CORS.
 
 The frontend reads from `frontend/.env`. `VITE_API_BASE` is optional: local
 development uses the Vite proxy, while production always uses the same origin

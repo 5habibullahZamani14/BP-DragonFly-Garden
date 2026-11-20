@@ -209,7 +209,7 @@ export const TablesTab = () => {
       setNewTable({ table_number: "", qr_code: "" });
       loadTables();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Table request failed", e);
     }
   };
 
@@ -220,7 +220,7 @@ export const TablesTab = () => {
       setEditingTableId(null);
       loadTables();
     } catch (e) {
-      console.error(e);
+      safeConsoleError("Table update failed", e);
     }
   };
 
@@ -233,7 +233,7 @@ export const TablesTab = () => {
             await deleteTable(id);
             loadTables();
           } catch (e) {
-            console.error(e);
+            safeConsoleError("Table deletion failed", e);
           }
         },
       },

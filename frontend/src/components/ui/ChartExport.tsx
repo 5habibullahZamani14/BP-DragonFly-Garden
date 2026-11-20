@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { safeConsoleError } from "@/lib/safeConsole";
 
 type ChartExportProps = {
   targetId: string;
@@ -72,7 +73,7 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
       const blob = await svgToPng(svg);
       if (blob) downloadBlob(blob, `${fileName}.png`);
     } catch (err) {
-      console.error(err);
+      safeConsoleError("Chart export failed", err);
       toast.error("Failed to export PNG");
     }
   };
@@ -86,7 +87,7 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
       const blob = await svgToJpeg(svg);
       if (blob) downloadBlob(blob, `${fileName}.jpg`);
     } catch (err) {
-      console.error(err);
+      safeConsoleError("Chart export failed", err);
       toast.error("Failed to export JPG");
     }
   };
@@ -106,7 +107,7 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
         w.onload = () => { w.print(); };
       }
     } catch (err) {
-      console.error(err);
+      safeConsoleError("Chart export failed", err);
       toast.error("Failed to prepare PDF (use PNG export as fallback)");
     }
   };

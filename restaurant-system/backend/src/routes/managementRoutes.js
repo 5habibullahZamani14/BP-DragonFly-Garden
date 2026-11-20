@@ -9,9 +9,8 @@
  * (not a factory function) because the management routes do not need to push
  * WebSocket events.
  *
- * Note on authentication: the manager authenticates via POST /management/auth
- * which returns a JWT. All management routes except the open auth/reset
- * helpers require that manager JWT bearer token in the Authorization header.
+ * The manager authenticates via POST /management/auth. The backend stores the
+ * JWT in an HttpOnly cookie; all management routes require a valid session.
  */
 
 const express = require("express");
@@ -30,7 +29,10 @@ const {
 
 
 const feedbackController = require("../controllers/feedbackController");
-const { requireManagerToken } = require("../middleware/jwt-auth");
+const { requireManagerToken, requirePaymentToken, verifyJwtToken } = require("../middleware/jwt-auth");
+const { ROLES } = require("../middleware/role-based-access");
+const { clearAuthCookie } = require("../middleware/authCookies");
+const { revokeStoredSession } = require("../services/sessionRevocation");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const path = require("path");
@@ -58,7 +60,10 @@ const verifyToken = (req, res, next) => {
   // Allow open routes that are needed before a manager login session exists.
   const openRoutes = new Set([
     '/auth',
+    '/auth/session',
+    '/employees/session',
     '/employees/verify',
+    '/employees/logout',
     '/send-reset-email',
     '/manager-profile/reset',
     '/settings/public',
@@ -79,7 +84,7 @@ router.use(verifyToken);
  * employee is explicitly identified in the request body.
  */
 router.use((req, res, next) => {
-  req.user = { id: "admin", name: "manager" };
+  req.user = { ...req.user, id: req.user?.id || "admin", name: req.user?.name || "manager" };
   next();
 });
 
@@ -87,11 +92,25 @@ router.use((req, res, next) => {
 
 /*
  * POST /management/auth
- * Validates the manager's ID and password. Returns { success: true, name: "..." }
- * on success. The frontend stores the result in localStorage to maintain the
- * manager session across page reloads.
+ * Validates manager credentials and issues an HttpOnly session cookie.
  */
 router.post("/auth", authLimiter, managementController.managerAuth);
+router.get("/auth/session", async (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const user = await verifyJwtToken(req, [ROLES.MANAGER]);
+    return res.json({ success: true, id: user.id, name: user.name || "manager" });
+  } catch (error) {
+    if (error.statusCode === 401) return res.json({ success: false });
+    return next(error);
+  }
+});
+router.post("/auth/logout", requireManagerToken, async (req, res) => {
+  const db = require("../database/db");
+  const revoked = await revokeStoredSession(db, "manager_session", req.user.sessionId);
+  if (revoked) clearAuthCookie(res, req, "manager");
+  res.json({ success: true });
+});
 
 /*
  * POST /management/employees/verify
@@ -99,6 +118,23 @@ router.post("/auth", authLimiter, managementController.managerAuth);
  * without a manager session. Rate-limited to prevent brute-force.
  */
 router.post("/employees/verify", authLimiter, managementController.verifyEmployee);
+router.get("/employees/session", requirePaymentToken, (req, res) => {
+  res.json({
+    success: true,
+    employee: {
+      id: req.user.id,
+      name: req.user.name,
+      department: req.user.department,
+      role: req.user.role
+    }
+  });
+});
+router.post("/employees/logout", requirePaymentToken, async (req, res) => {
+  const db = require("../database/db");
+  const revoked = await revokeStoredSession(db, "payment_counter_session", req.user.sessionId);
+  if (revoked) clearAuthCookie(res, req, "payment_counter");
+  res.json({ success: true });
+});
 
 /*
  * POST /management/send-reset-email
@@ -326,11 +362,6 @@ router.patch("/feedback/:id/archive", feedbackController.archiveFeedback);
 router.delete("/feedback/:id", feedbackController.deleteFeedback);
 router.patch("/feedback/analysis/findings/:id", feedbackController.updateFindingStatus);
 router.delete("/feedback/analysis/findings/:id", feedbackController.deleteFinding);
-
-router.post("/feedback/ai-chat", feedbackController.aiChat);
-router.get("/feedback/ai-chat/usage", feedbackController.getChatUsage);
-router.get("/feedback/ai-chat/client-context", feedbackController.getClientContext);
-router.post("/feedback/ai-chat/track", feedbackController.trackChatUsage);
 
 // Set up broadcast function for feedback controller
 const setupFeedbackBroadcast = (broadcastFn) => {
@@ -657,7 +688,7 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
 
 /*
  * POST /management/printers/test
- * Prints a minimal test ticket to verify printer settings
+ * Submits a minimal test ticket to the selected printer queue
  * Returns: { success: true, message: string }
  */
 router.post("/printers/test", requireManagerToken, async (req, res) => {
@@ -671,42 +702,18 @@ router.post("/printers/test", requireManagerToken, async (req, res) => {
       return res.status(400).json({ success: false, message: "Printer name is required" });
     }
     
-    console.log(`[thermal] ROUTE B calling printerService.printTestTicket()`);
-    
-    // Temporarily set the selected printer for this test
-    const db = require("../database/db");
-    const currentSelected = await new Promise((resolve, reject) => {
-      db.get("SELECT value FROM restaurant_settings WHERE key = 'selected_printer'", (err, row) => {
-        if (err) reject(err);
-        else resolve(row ? row.value : null);
-      });
-    });
-    
-    // Set the test printer as selected temporarily
-    await new Promise((resolve, reject) => {
-      db.run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [printerName], (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    
-    await printerService.printTestTicket();
-    
-    // Restore original selected printer if it existed
-    if (currentSelected) {
-      await new Promise((resolve, reject) => {
-        db.run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [currentSelected], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
+    const result = await printerService.printTestTicket(printerName);
+    if (!result || result.success !== true) {
+      return res.status(503).json({
+        success: false,
+        message: result?.message || "The printer did not accept the test print job"
       });
     }
-    
-    console.log(`[thermal] ROUTE B success`);
-    res.json({ success: true, message: "Test ticket printed successfully" });
+
+    res.json({ success: true, message: result.message });
   } catch (error) {
     console.error(`[thermal] ROUTE B error:`, error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(503).json({ success: false, message: error.message });
   }
 });
 

@@ -2,13 +2,21 @@ const jwt = require("jsonwebtoken");
 const { createHttpError } = require("./validation");
 const { ROLES } = require("./role-based-access");
 const db = require("../database/db");
+const { getAuthCookieValue } = require("./authCookies");
 
-const getBearerToken = (req) => {
+const getBearerToken = (req, allowedRoles = []) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return null;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.slice("Bearer ".length).trim() || null;
   }
-  return authHeader.split(" ")[1];
+
+  if (allowedRoles.includes(ROLES.MANAGER)) {
+    return getAuthCookieValue(req.headers.cookie, "manager");
+  }
+  if (allowedRoles.includes(ROLES.PAYMENT_COUNTER)) {
+    return getAuthCookieValue(req.headers.cookie, "payment_counter");
+  }
+  return null;
 };
 
 const getRestaurantSetting = (key) =>
@@ -29,7 +37,7 @@ const parseStoredSession = (value) => {
 };
 
 const verifyJwtToken = async (req, allowedRoles = []) => {
-  const token = getBearerToken(req);
+  const token = getBearerToken(req, allowedRoles);
   if (!token) {
     throw createHttpError(401, "Unauthorized: Missing token");
   }

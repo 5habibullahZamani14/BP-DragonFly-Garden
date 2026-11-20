@@ -1,7 +1,6 @@
 /*
  * printerService.js — Thermal printer integration for order tickets.
- * Rewritten to support Advanced C# GDI Printing with Rich Text tags
- * on Windows, and clean plain-text fallback on Linux (Raspberry Pi).
+ * Sends Windows jobs through the installed printer driver and uses CUPS on Linux.
  * 
  * Updated with circuit breaker pattern for resilience.
  * 
@@ -17,7 +16,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const db = require("../database/db");
-const { withCircuitBreaker, STATE } = require("./circuitBreaker");
+const { withCircuitBreaker } = require("./circuitBreaker");
+const { submitWindowsPrintJob } = require("./windowsPrintJob");
 
 // Load thermalPrinterService with explicit error logging
 let thermalPrinterService;
@@ -273,480 +273,87 @@ const wrapText = (text, maxWidth) => {
   return lines;
 };
 
-/**
- * Internal print execution logic (not wrapped with circuit breaker).
- * This is the actual implementation that gets wrapped.
- */
-const _executePrintWithPrinter = (ticket, filenamePrefix, printerName) =>
-  new Promise((resolve, reject) => {
-    try {
-      console.log(`\n========== PRINTING ${filenamePrefix} TO SPECIFIC PRINTER: ${printerName} ==========`);
-      console.log(ticket);
-      console.log("=====================================\n");
+const formatTicketForPrinter = (ticket, settings, skipMargins = false) => {
+  if (skipMargins) return ticket;
 
-      // Use system temp directory with shorter path to avoid issues
-      const os = require('os');
-      const tempDir = os.tmpdir();
-      const timestamp = Date.now();
-      const filename = `${filenamePrefix}_${timestamp}.txt`;
-      const filepath = path.join(tempDir, filename);
+  const leftMargin = ' '.repeat(settings.marginLeft);
+  const topMargin = '\n'.repeat(settings.marginTop);
+  const bottomMargin = '\n'.repeat(settings.marginBottom);
+  const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
+  const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
+  const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
+  const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
+  const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
+  return beforeLines + ticketWithMargins + afterLines;
+};
 
-      getPrinterSettings(printerName)
-        .then(settings => {
-          console.log(`Printer settings: width=${settings.width}, margins=${settings.marginLeft},${settings.marginRight},${settings.marginTop},${settings.marginBottom}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
-          
-          // For test prints, skip margin application
-          const isTestPrint = filenamePrefix === 'printer_test';
-          let finalTicket;
-          
-          if (isTestPrint) {
-            finalTicket = ticket;
-            console.log(`Test print detected, skipping margin application`);
-          } else {
-            // Apply margins by adding spaces/padding
-            const leftMargin = ' '.repeat(settings.marginLeft);
-            const rightMargin = ' '.repeat(settings.marginRight);
-            const topMargin = '\n'.repeat(settings.marginTop);
-            const bottomMargin = '\n'.repeat(settings.marginBottom);
-            
-            // Calculate effective width (total width minus margins)
-            const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-            
-            const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
-            
-            // Apply left margin to each line
-            const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
-            
-            const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
-            const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
-            finalTicket = beforeLines + ticketWithMargins + afterLines;
-          }
-          
-          console.log(`Ticket length: ${finalTicket.length} chars`);
+const submitPrintJob = async (ticket, printerName, filename, settings) => {
+  let result;
+  if (process.platform === 'win32') {
+    result = await submitWindowsPrintJob(ticket, printerName, filename);
+  } else {
+    const logsDir = path.join(__dirname, '../../logs');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+    const filepath = path.join(logsDir, filename);
+    fs.writeFileSync(filepath, ticket, 'utf8');
 
-          if (process.platform === "win32") {
-            console.log(`[thermal] Windows platform detected, printing to: ${printerName}`);
-            
-            // Write content to system temp directory (short path, no spaces)
-            const os = require('os');
-            const tempDir = os.tmpdir();
-            const tempFilename = `${filenamePrefix}_${Date.now()}.txt`;
-            const tempFilepath = path.join(tempDir, tempFilename);
-            const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-            fs.writeFileSync(tempFilepath, formattedTicketCRLF);
+    result = await new Promise((resolve, reject) => {
+      const proc = spawn('lp', ['-d', printerName, filepath], { shell: false });
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', data => { stdout += data; });
+      proc.stderr.on('data', data => { stderr += data; });
+      proc.once('close', code => {
+        if (code === 0) {
+          resolve({
+            success: true,
+            message: `Print job submitted to ${printerName}`,
+            filename,
+            method: 'lp'
+          });
+        } else {
+          reject(new Error(stderr.trim() || stdout.trim() || `lp command failed (exit code ${code})`));
+        }
+      });
+      proc.once('error', error => reject(new Error(`Could not start lp: ${error.message}`)));
+    });
+  }
 
-            const tryPrintMethods = async () => {
-              const methods = [];
-              
-              // METHOD 1: cmd.exe /c copy /b to \\localhost\PrinterName (most reliable)
-              methods.push(async () => {
-                return new Promise((resolveMethod, rejectMethod) => {
-                  const escapedPath = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
-                  const escapedPrinter = printerName.replace(/'/g, "''");
-                  const cmd = `copy /b ${escapedPath} "\\\\localhost\\${escapedPrinter}"`;
-                  console.log(`[thermal] METHOD 1: copy /b: ${cmd}`);
-                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                  let stdout = '', stderr = '';
-                  proc.stdout.on('data', d => stdout += d);
-                  proc.stderr.on('data', d => stderr += d);
-                  proc.on('close', (code) => {
-                    const output = (stdout + stderr).toLowerCase();
-                    if (code === 0 && output.includes('1 file(s) copied')) {
-                      resolveMethod({ success: true, method: 'copy' });
-                    } else {
-                      rejectMethod(new Error(`copy /b failed (${code}): ${stdout || stderr}`));
-                    }
-                  });
-                  proc.on('error', (err) => rejectMethod(new Error(`copy spawn: ${err.message}`)));
-                });
-              });
-              
-              // METHOD 2: cmd.exe /c print command (Windows built-in)
-              methods.push(async () => {
-                return new Promise((resolveMethod, rejectMethod) => {
-                  const escapedPrinter = printerName.replace(/"/g, '\\"');
-                  const escapedPath = tempFilepath;
-                  const cmd = `print /D:"${escapedPrinter}" "${escapedPath}"`;
-                  console.log(`[thermal] METHOD 2: print /D: ${cmd}`);
-                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                  let stdout = '', stderr = '';
-                  proc.stdout.on('data', d => stdout += d);
-                  proc.stderr.on('data', d => stderr += d);
-                  proc.on('close', (code) => {
-                    if (code === 0) {
-                      resolveMethod({ success: true, method: 'print' });
-                    } else {
-                      rejectMethod(new Error(`print command failed (${code}): ${stdout || stderr}`));
-                    }
-                  });
-                  proc.on('error', (err) => rejectMethod(new Error(`print spawn: ${err.message}`)));
-                });
-              });
-              
-              // METHOD 3: Write directly to printer port
-              methods.push(async () => {
-                const escapedName = printerName.replace(/'/g, "''");
-                const portScript = `$p = Get-Printer -Name '${escapedName}' -ErrorAction SilentlyContinue; if ($p -and $p.PortName) { Write-Output $p.PortName } else { Write-Error 'NO_PORT' }`;
-                const portName = await new Promise((resolvePort) => {
-                  const proc = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', portScript], { shell: false });
-                  let stdout = '';
-                  proc.stdout.on('data', d => stdout += d);
-                  proc.on('close', () => resolvePort(stdout.trim()));
-                  proc.on('error', () => resolvePort(''));
-                });
-                if (!portName) throw new Error('No port name found');
-                console.log(`[thermal] METHOD 3: Direct port write to \\\\.\\${portName}`);
-                return new Promise((resolveMethod, rejectMethod) => {
-                  const escapedPath = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
-                  const cmd = `copy /b ${escapedPath} "\\\\.\\${portName}"`;
-                  const proc = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                  let stdout = '', stderr = '';
-                  proc.stdout.on('data', d => stdout += d);
-                  proc.stderr.on('data', d => stderr += d);
-                  proc.on('close', (code) => {
-                    const output = (stdout + stderr).toLowerCase();
-                    if (code === 0 && output.includes('1 file(s) copied')) {
-                      resolveMethod({ success: true, method: 'port' });
-                    } else {
-                      rejectMethod(new Error(`port write failed (${code}): ${stdout || stderr}`));
-                    }
-                  });
-                  proc.on('error', (err) => rejectMethod(new Error(`port spawn: ${err.message}`)));
-                });
-              });
+  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
+    await new Promise(resolve => setTimeout(resolve, settings.delaySeconds * 1000));
+  }
+  return result;
+};
 
-              let lastError = null;
-              for (const method of methods) {
-                try {
-                  const result = await method();
-                  console.log(`[thermal] Print succeeded via method: ${result.method}`);
-                  return result;
-                } catch (err) {
-                  console.warn(`[thermal] Method failed: ${err.message}`);
-                  lastError = err;
-                }
-              }
-              throw lastError || new Error('All print methods failed');
-            };
+const executeTicketPrint = async (ticket, filenamePrefix, printerName, isTestPrint) => {
+  const settings = await getPrinterSettings(printerName);
+  const filename = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  const finalTicket = formatTicketForPrinter(ticket, settings, isTestPrint);
+  console.log(`Submitting ${filenamePrefix} print job to ${printerName}`);
+  return submitPrintJob(finalTicket, printerName, filename, settings);
+};
 
-            tryPrintMethods()
-              .then(() => {
-                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
-                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                  setTimeout(() => {
-                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                  }, settings.delaySeconds * 1000);
-                } else {
-                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                }
-              })
-              .catch((err) => {
-                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
-                reject(new Error(`Windows native print failed for ${printerName}: ${err.message}`));
-              });
-          } else {
-            // ── Raspberry Pi / Linux: use lp command ────────────────────
-            fs.writeFileSync(filepath, finalTicket);
+const _executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
+  if (!printerName || !String(printerName).trim()) {
+    throw new Error('A printer must be selected before printing');
+  }
+  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test');
+};
 
-            const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
-            let stdout = "";
-            let stderr = "";
-            proc.stdout.on("data", (data) => stdout += data);
-            proc.stderr.on("data", (data) => stderr += data);
-            
-            proc.on("close", (code) => {
-              if (code === 0) {
-                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                  setTimeout(() => {
-                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                  }, settings.delaySeconds * 1000);
-                } else {
-                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                }
-              } else {
-                reject(new Error(`lp command failed: ${stderr}`));
-              }
-            });
-            proc.on("error", (err) => reject(new Error(`lp execution failed: ${err.message}`)));
-          }
-        })
-        .catch(err => {
-          console.error(`Error getting printer settings for ${printerName}:`, err.message);
-          reject(err);
-        });
-    } catch (error) {
-      console.error(`Print execution error: ${error.message}`);
-      reject(error);
-    }
-  });
-
-const _executePrint = (ticket, filenamePrefix) =>
-  new Promise((resolve, reject) => {
-    try {
-      console.log(`\n========== PRINTING ${filenamePrefix} ==========`);
-      console.log(ticket);
-      console.log("=====================================\n");
-
-      const logsDir = path.join(__dirname, "../../logs");
-      if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `${filenamePrefix}_${timestamp}.txt`;
-      const filepath = path.join(logsDir, filename);
-
-      getSelectedPrinter()
-        .then(printerName => {
-          console.log(`Using printer: ${printerName}`);
-          return getPrinterSettings(printerName).then(settings => ({ printerName, settings }));
-        })
-        .then(({ printerName, settings }) => {
-          console.log(`Printer settings: width=${settings.width}, margins=${settings.marginLeft},${settings.marginRight},${settings.marginTop},${settings.marginBottom}, delay=${settings.delaySeconds}s, before=${settings.emptyLinesBefore} lines, after=${settings.emptyLinesAfter} lines, autoCutter=${settings.hasAutoCutter}`);
-          
-          // Apply margins by adding spaces/padding
-          const leftMargin = ' '.repeat(settings.marginLeft);
-          const rightMargin = ' '.repeat(settings.marginRight);
-          const topMargin = '\n'.repeat(settings.marginTop);
-          const bottomMargin = '\n'.repeat(settings.marginBottom);
-          
-          // Calculate effective width (total width minus margins)
-          const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-          
-          const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
-          
-          // Apply left margin to each line
-          const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
-          
-          const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
-          const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
-          const finalTicket = beforeLines + ticketWithMargins + afterLines;
-          
-          console.log(`Ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
-
-          if (process.platform === "win32") {
-            console.log(`[thermal] Windows platform detected, printing to: ${printerName}`);
-            
-            const os = require('os');
-            const tempDir = os.tmpdir();
-            const tempFilepath = path.join(tempDir, `${filenamePrefix}_${Date.now()}.txt`);
-            const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-            fs.writeFileSync(tempFilepath, formattedTicketCRLF);
-
-            const tryPrintMethods = async () => {
-              async function method1() {
-                return new Promise((res, rej) => {
-                  const sp = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
-                  const cmd = `copy /b ${sp} "\\\\localhost\\${printerName}"`;
-                  console.log(`[thermal] METHOD 1: ${cmd}`);
-                  const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                  let o = '', e = '';
-                  p.stdout.on('data', d => o += d);
-                  p.stderr.on('data', d => e += d);
-                  p.on('close', (c) => {
-                    if (c === 0 && (o+e).toLowerCase().includes('1 file(s) copied')) res({method:'copy'})
-                    else rej(new Error(`copy /b (${c}): ${o||e}`));
-                  });
-                  p.on('error', rej);
-                });
-              }
-              async function method2() {
-                return new Promise((res, rej) => {
-                  const cmd = `print /D:"${printerName}" "${tempFilepath}"`;
-                  console.log(`[thermal] METHOD 2: ${cmd}`);
-                  const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                  let o = '', e = '';
-                  p.stdout.on('data', d => o += d);
-                  p.stderr.on('data', d => e += d);
-                  p.on('close', (c) => {
-                    if (c === 0) res({method:'print'})
-                    else rej(new Error(`print (${c}): ${o||e}`));
-                  });
-                  p.on('error', rej);
-                });
-              }
-              let lastErr = null;
-              for (const fn of [method1, method2]) {
-                try { return await fn(); }
-                catch (err) { console.warn(`[thermal] Method failed: ${err.message}`); lastErr = err; }
-              }
-              throw lastErr || new Error('All methods failed');
-            };
-
-            tryPrintMethods()
-              .then((result) => {
-                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
-                console.log(`[thermal] Print succeeded via: ${result.method}`);
-                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                  setTimeout(() => resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
-                } else {
-                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                }
-              })
-              .catch((err) => {
-                try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (e) { }
-                reject(new Error(`Windows native print failed for ${printerName}: ${err.message}`));
-              });
-          } else {
-            // ── Raspberry Pi / Linux: use lp command ────────────────────
-            fs.writeFileSync(filepath, finalTicket);
-
-            const proc = spawn("lp", ["-d", printerName, filepath], { shell: false });
-            let stdout = "";
-            let stderr = "";
-            proc.stdout.on("data", (data) => stdout += data);
-            proc.stderr.on("data", (data) => stderr += data);
-            
-            proc.on("close", (code) => {
-              if (code === 0) {
-                if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                  setTimeout(() => {
-                    resolve({ success: true, message: `Ticket printed on ${printerName} with ${settings.delaySeconds}s delay`, filename });
-                  }, settings.delaySeconds * 1000);
-                } else {
-                  resolve({ success: true, message: `Ticket printed on ${printerName}`, filename });
-                }
-              } else {
-                reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
-              }
-            });
-            proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
-          }
-        })
-        .catch(err => {
-          console.error("Error getting printer settings, using default:", err);
-          const defaultPrinter = "BP_DragonFly_Garden_Confirmed";
-          
-          getPrinterSettings(defaultPrinter)
-            .then(settings => {
-              console.log(`Using default printer: ${defaultPrinter} with settings:`, settings);
-              
-              // Apply margins by adding spaces/padding
-              const leftMargin = ' '.repeat(settings.marginLeft);
-              const rightMargin = ' '.repeat(settings.marginRight);
-              const topMargin = '\n'.repeat(settings.marginTop);
-              const bottomMargin = '\n'.repeat(settings.marginBottom);
-              
-              // Calculate effective width (total width minus margins)
-              const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-              
-              const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
-              
-              // Apply left margin to each line
-              const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
-              
-              const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
-              const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
-              const finalTicket = beforeLines + ticketWithMargins + afterLines;
-              
-              console.log(`Fallback ticket length: ${finalTicket.length} chars, effective width: ${effectiveWidth}, before lines: ${settings.emptyLinesBefore + settings.marginTop}, after lines: ${settings.emptyLinesAfter + settings.marginBottom}`);
-
-              if (process.platform === "win32") {
-                console.log(`[thermal] Fallback printing to ${defaultPrinter}`);
-                const fallbackPrint = () => new Promise((fbResolve, fbReject) => {
-                  const os = require('os');
-                  const tempFilepath = path.join(os.tmpdir(), `fb_${Date.now()}.txt`);
-                  const formattedTicketCRLF = finalTicket.replace(/\n/g, "\r\n");
-                  fs.writeFileSync(tempFilepath, formattedTicketCRLF);
-                  const tryCopy = (cb) => {
-                    const sp = tempFilepath.includes(' ') ? `"${tempFilepath}"` : tempFilepath;
-                    const cmd = `copy /b ${sp} "\\\\localhost\\${defaultPrinter}"`;
-                    const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                    let o = '', e = '';
-                    p.stdout.on('data', d => o += d);
-                    p.stderr.on('data', d => e += d);
-                    p.on('close', (c) => {
-                      try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (x) { }
-                      if (c === 0 && (o+e).toLowerCase().includes('1 file(s) copied')) cb(null);
-                      else cb(new Error(`${o||e}`));
-                    });
-                    p.on('error', cb);
-                  };
-                  const tryPrint = (cb) => {
-                    const cmd = `print /D:"${defaultPrinter}" "${tempFilepath}"`;
-                    const p = spawn('cmd.exe', ['/c', cmd], { shell: false });
-                    let o = '', e = '';
-                    p.stdout.on('data', d => o += d);
-                    p.stderr.on('data', d => e += d);
-                    p.on('close', (c) => {
-                      try { if (fs.existsSync(tempFilepath)) fs.unlinkSync(tempFilepath); } catch (x) { }
-                      if (c === 0) cb(null);
-                      else cb(new Error(`${o||e}`));
-                    });
-                    p.on('error', cb);
-                  };
-                  tryCopy((err) => {
-                    if (!err) return fbResolve();
-                    console.warn(`[thermal] Fallback copy failed, trying print: ${err.message}`);
-                    tryPrint((err2) => {
-                      if (!err2) return fbResolve();
-                      fbReject(err2 || new Error('All fallback methods failed'));
-                    });
-                  });
-                });
-                fallbackPrint()
-                  .then(() => {
-                    if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                      setTimeout(() => resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
-                    } else {
-                      resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                    }
-                  })
-                  .catch(err => {
-                    reject({ success: false, message: "Fallback printing failed", error: err.message });
-                  });
-              } else {
-                // ── Raspberry Pi / Linux fallback ────────────────────────
-                fs.writeFileSync(filepath, finalTicket);
-                const proc = spawn("lp", ["-d", defaultPrinter, filepath], { shell: false });
-                let stdout = "";
-                let stderr = "";
-                proc.stdout.on("data", (data) => stdout += data);
-                proc.stderr.on("data", (data) => stderr += data);
-                proc.on("close", (code) => {
-                  if (code === 0) {
-                    if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-                      setTimeout(() => resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback) with ${settings.delaySeconds}s delay`, filename }), settings.delaySeconds * 1000);
-                    } else {
-                      resolve({ success: true, message: `Ticket printed on ${defaultPrinter} (fallback)`, filename });
-                    }
-                  } else {
-                    reject({ success: false, message: "Linux native print failed", error: stderr || stdout });
-                  }
-                });
-                proc.on("error", (err) => reject({ success: false, message: "Linux native print command failed", error: err.message }));
-              }
-            })
-            .catch(err => {
-              reject({ success: false, message: "Error getting default printer settings", error: err.message });
-            });
-        });
-    } catch (error) {
-      reject({ success: false, message: "Error printing ticket", error: error.message });
-    }
-  });
-
-/**
- * executePrintWithPrinter - Wrapped with circuit breaker for resilience.
- */
+const _executePrint = async (ticket, filenamePrefix) => {
+  const printerName = await getSelectedPrinter();
+  if (!printerName || !String(printerName).trim()) {
+    throw new Error('No default printer is selected');
+  }
+  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test');
+};
 const executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
   const breaker = withCircuitBreaker('printer', _executePrintWithPrinter, {
     failureThreshold: 3,
     timeoutMs: 60000,
     successThreshold: 2
   });
-  
-  try {
-    return await breaker(ticket, filenamePrefix, printerName);
-  } catch (error) {
-    if (error.message.includes('Circuit is OPEN')) {
-      return {
-        success: false,
-        message: 'Printer service temporarily unavailable. Please try again in a moment.',
-        error: error.message,
-        circuitState: 'OPEN'
-      };
-    }
-    throw error;
-  }
+  return breaker(ticket, filenamePrefix, printerName);
 };
 
 /**
@@ -758,20 +365,7 @@ const executePrint = async (ticket, filenamePrefix) => {
     timeoutMs: 60000,
     successThreshold: 2
   });
-  
-  try {
-    return await breaker(ticket, filenamePrefix);
-  } catch (error) {
-    if (error.message.includes('Circuit is OPEN')) {
-      return {
-        success: false,
-        message: 'Printer service temporarily unavailable. Please try again in a moment.',
-        error: error.message,
-        circuitState: 'OPEN'
-      };
-    }
-    throw error;
-  }
+  return breaker(ticket, filenamePrefix);
 };
 
 // ── Ticket Formatting Functions ──────────────────────────────────────────

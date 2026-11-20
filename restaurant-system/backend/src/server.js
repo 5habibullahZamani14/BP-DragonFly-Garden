@@ -23,6 +23,10 @@ const http = require("http");
 const cors = require("cors");
 const { WebSocketServer } = require("ws");
 const helmet = require("helmet");
+const { getAuthCookieValue } = require("./middleware/authCookies");
+const { verifyJwtToken } = require("./middleware/jwt-auth");
+const { redactSensitiveData, redactText } = require("./middleware/secretRedaction");
+const { isTrustedOrigin, createTrustedOriginMiddleware } = require("./middleware/trustedOrigin");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const retryAsync = async (work, attempts = 3, initialDelayMs = 5000) => {
@@ -32,7 +36,7 @@ const retryAsync = async (work, attempts = 3, initialDelayMs = 5000) => {
       return await work();
     } catch (err) {
       lastError = err;
-      console.error(`Retry attempt ${attempt} failed:`, err);
+      console.error(`Retry attempt ${attempt} failed:`, redactText(err && err.message ? err.message : "Unknown error"));
       if (attempt < attempts) {
         await wait(initialDelayMs * Math.pow(2, attempt - 1));
       }
@@ -152,40 +156,34 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 /*
- * Handle new WebSocket connections. Require a `token` query parameter with a
- * valid JWT (signed with `JWT_SECRET`). This prevents anonymous clients from
- * receiving sensitive management events. Non-browser clients (like mobile
- * devices) should connect using `wss://.../?token=<JWT>`.
+ * Browser WebSocket authentication uses HttpOnly session cookies. Tokens in
+ * query strings are rejected so they cannot leak through URLs or diagnostics.
  */
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   try {
+    const wsProtocol = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || (req.socket.encrypted ? "https" : "http");
+    if (!isTrustedOrigin(req.headers.origin, req.headers.host, allowedOrigins, allowDevelopmentPort, wsProtocol)) {
+      ws.close(4003, "WebSocket origin is not allowed");
+      return;
+    }
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const token = url.searchParams.get('token');
     const qr = url.searchParams.get('qr') || url.searchParams.get('qr_code');
 
-    const jwtLib = require('jsonwebtoken');
     const { getRoleFromQRCode, getTableNumberFromQR } = require('./middleware/role-based-access');
 
-    // Prefer JWT token for authenticated/staff/manager clients
-    if (token) {
-      if (!process.env.JWT_SECRET) {
-        console.error('JWT_SECRET not configured; rejecting WS connection');
-        ws.close(1011, 'Server misconfiguration');
-        return;
-      }
-      const decoded = jwtLib.verify(token, process.env.JWT_SECRET);
-      ws._auth = decoded; // attach decoded JWT for use elsewhere
-      ws._role = decoded?.role || null;
-      console.log(`WS client connected via token (${ws._role || 'unknown'})`);
-    } else if (qr) {
+    if (url.searchParams.has("token")) {
+      ws.close(4003, "Query-string authentication is disabled");
+      return;
+    }
+
+    if (qr) {
       const role = getRoleFromQRCode(qr);
       if (!role) {
         ws.close(4003, 'Invalid QR code');
         return;
       }
 
-      // Only customer table WebSocket connections are allowed without JWT.
-      // Staff and management clients must authenticate using a bearer token.
+      // Customer QR codes are the only unauthenticated WebSocket entry point.
       if (role !== 'customer_waiter') {
         ws.close(4003, 'Staff and management WebSocket connections must use auth tokens');
         return;
@@ -197,13 +195,23 @@ wss.on("connection", (ws, req) => {
       ws._tableNumber = tableNumber; // numeric table id
       console.log(`WS client connected via QR (${role})`);
     } else {
-      ws.close(4001, 'Missing auth token or QR');
-      return;
-    }
+      const requestedRole = url.searchParams.get("role");
+      const cookieRole = requestedRole === "payment_counter" ? "payment_counter" : "manager";
+      const cookieToken = getAuthCookieValue(req.headers.cookie, cookieRole);
+      if (!cookieToken) {
+        ws.close(4001, "Missing authenticated session or QR");
+        return;
+      }
 
-    ws.on('close', () => console.log('Client disconnected'));
+      const decoded = await verifyJwtToken(
+        { headers: { authorization: `Bearer ${cookieToken}` } },
+        [cookieRole]
+      );
+      ws._auth = decoded;
+      ws._role = decoded.role;
+    }
   } catch (err) {
-    console.warn('WS connection auth failed:', err.message);
+    console.warn('WS connection authentication failed');
     try { ws.close(4002, 'Auth failed'); } catch (e) {}
   }
 });
@@ -277,32 +285,18 @@ const broadcast = (data) => {
 const frontendDistPath = path.resolve(__dirname, "../../../frontend/dist");
 
 /* Configure CORS: permissive in dev, restricted in production via CORS_ALLOWED_ORIGINS */
-if (process.env.VITE_DEV_MODE === '1') {
-  app.use(cors());
-} else {
-  const allowed = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-  app.use(cors({ origin: (origin, cb) => {
-    // No Origin header (curl, devices, or same-origin) — allow.
-    if (!origin) return cb(null, true);
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean);
+const allowDevelopmentPort = process.env.VITE_DEV_MODE === "1";
+const getRequestProtocol = req => req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
+app.use(cors((req, callback) => {
+  const origin = req.get("Origin");
+  if (!origin) return callback(null, { origin: false, credentials: true });
 
-    // If no allowed origins configured, allow common captive-portal check
-    // hosts (msftconnecttest) so devices' "Open browser and connect" flows
-    // can fetch the frontend assets while the browser's Host header is
-    // rewritten by the captive portal DNS redirect.
-    if (allowed.length === 0) {
-      try {
-        const lower = String(origin).toLowerCase();
-        if (lower.includes('msftconnecttest.com')) return cb(null, true);
-      } catch (e) {
-        // fall through to error
-      }
-      return cb(new Error('CORS not configured'));
-    }
-
-    if (allowed.includes(origin)) return cb(null, true);
-    return cb(new Error('CORS origin not allowed'));
-  }}));
-}
+  const trusted = isTrustedOrigin(origin, req.get("host"), allowedOrigins, allowDevelopmentPort, getRequestProtocol(req))
+    || origin.toLowerCase().includes("msftconnecttest.com");
+  callback(null, { origin: trusted ? origin : false, credentials: true });
+}));
+app.use(createTrustedOriginMiddleware(allowedOrigins, allowDevelopmentPort, getRequestProtocol));
 
 // Apply basic security headers
 app.use(
@@ -316,6 +310,11 @@ app.use(
 
 /* Parse incoming JSON request bodies, capped at 100 KB to prevent abuse. */
 app.use(express.json({ limit: "100kb" }));
+app.use((req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = body => json(redactSensitiveData(body));
+  next();
+});
 
 /* Serve dynamic menu images directly from the backend to bypass Vite caching issues. */
 app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
@@ -426,7 +425,8 @@ app.get('/ready', async (req, res) => {
     await initializeDatabase();
     res.json({ ready: true });
   } catch (err) {
-    res.status(503).json({ ready: false, error: String(err) });
+    console.error("Readiness check failed:", redactText(err && err.message ? err.message : "Unknown error"));
+    res.status(503).json({ ready: false, error: "Service is not ready" });
   }
 });
 

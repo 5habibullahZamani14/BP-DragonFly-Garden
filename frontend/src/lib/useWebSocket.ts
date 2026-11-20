@@ -84,8 +84,9 @@ type EventCallback = (event: WSEvent) => void;
 export const useWebSocket = (
   eventTypes: WSEventType[],
   callback: EventCallback,
-  authParamGetter?: () => string | null,
-  authParamName: string = "token"
+  qrCodeGetter?: () => string | null,
+  clientRole?: "manager" | "payment_counter",
+  enabled = true
 ) => {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -93,8 +94,8 @@ export const useWebSocket = (
   /* Store the latest callback and eventTypes in refs so the effect stays stable. */
   const callbackRef = useRef(callback);
   const eventTypesRef = useRef(eventTypes);
-  const authValueRef = useRef<string | null>(null);
-  const authValue = authParamGetter ? authParamGetter() : null;
+  const qrCodeGetterRef = useRef(qrCodeGetter);
+  const qrCode = qrCodeGetter ? qrCodeGetter() : null;
 
   useEffect(() => {
     callbackRef.current = callback;
@@ -105,17 +106,22 @@ export const useWebSocket = (
   }, [eventTypes]);
 
   useEffect(() => {
+    qrCodeGetterRef.current = qrCodeGetter;
+  }, [qrCodeGetter]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setIsConnected(false);
+      return;
+    }
+
     let reconnectTimeout: ReturnType<typeof setTimeout>;
     let reconnectAttempts = 0;
     let cleanupRequested = false;
     let currentWs: WebSocket | null = null;
 
     const connect = () => {
-      // Synchronously update the ref to avoid race condition where
-      // the effect runs before the authValueRef update effect fires.
-      authValueRef.current = authValue;
-      
-      if (authParamGetter && !authValueRef.current) {
+      if (qrCodeGetterRef.current && !qrCode) {
         setIsConnected(false);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
@@ -124,21 +130,17 @@ export const useWebSocket = (
       }
 
       const sep = WS_BASE.includes("?") ? "&" : "?";
-      const url = authValueRef.current
-        ? `${WS_BASE}${sep}${encodeURIComponent(authParamName)}=${encodeURIComponent(authValueRef.current)}`
-        : WS_BASE;
+      const params = new URLSearchParams();
+      if (qrCode) params.set("qr", qrCode);
+      if (clientRole) params.set("role", clientRole);
+      const query = params.toString();
+      const url = query ? `${WS_BASE}${sep}${query}` : WS_BASE;
 
       try {
         const ws = new WebSocket(url);
         currentWs = ws;
         wsRef.current = ws;
         
-        // Log connection attempt with masked token for security
-        const maskedUrl = authValueRef.current 
-          ? url.replace(/token=([^&]+)/, 'token=***MASKED***')
-          : url;
-        console.log("WebSocket connecting to:", maskedUrl);
-
         ws.onopen = () => {
           if (cleanupRequested) {
             ws.close();
@@ -175,7 +177,7 @@ export const useWebSocket = (
           // that is still in CONNECTING state to prevent the browser warning.
         };
       } catch (error) {
-        console.error("Failed to create WebSocket connection", error);
+        safeConsoleError("Failed to create WebSocket connection", error);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
         reconnectTimeout = setTimeout(connect, delay);
@@ -199,7 +201,7 @@ export const useWebSocket = (
         }
       }
     };
-  }, [authValue, authParamName]); // Reconnect only when the actual auth value or auth param name changes
+  }, [qrCode, clientRole, enabled]); // Reconnect only when the non-secret connection context changes
 
   return isConnected;
 };

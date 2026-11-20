@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "build": "vite build && node scripts/check-client-secrets.cjs",
+    "build:dev": "vite build --mode development && node scripts/check-client-secrets.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

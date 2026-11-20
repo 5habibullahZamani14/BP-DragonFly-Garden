@@ -50,17 +50,20 @@ const RATING_KEYS: { key: RatingKey; labelKey: string }[] = [
 
 const STORAGE_KEY = (qr: string) => `dfg_feedback_refs_${qr}`;
 
-const loadRefs = (qr: string): { id: number; view_token: string }[] => {
+const loadRefs = (qr: string): { id: number; view_token?: string }[] => {
   try {
-    return JSON.parse(sessionStorage.getItem(STORAGE_KEY(qr)) || "[]");
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(STORAGE_KEY(qr)) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((ref) => ref && Number.isSafeInteger(Number(ref.id))) : [];
   } catch {
     return [];
   }
 };
 
-const saveRef = (qr: string, id: number, view_token: string) => {
-  const refs = loadRefs(qr).filter((r) => r.id !== id);
-  refs.unshift({ id, view_token });
+const saveRef = (qr: string, id: number) => {
+  const refs = loadRefs(qr)
+    .filter((r) => r.id !== id)
+    .map(({ id: feedbackId }) => ({ id: feedbackId }));
+  refs.unshift({ id });
   sessionStorage.setItem(STORAGE_KEY(qr), JSON.stringify(refs.slice(0, 20)));
 };
 
@@ -190,7 +193,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
     setSubmitting(true);
     try {
       const result = await submitFeedback(qrCode, fd);
-      saveRef(qrCode, result.id, result.view_token);
+      saveRef(qrCode, result.id);
       notify("success", t("customer.feedback.sent"));
       setComment("");
       setSelectedTags([]);

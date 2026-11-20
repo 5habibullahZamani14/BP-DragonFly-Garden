@@ -36,9 +36,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare, Bot, Image as ImageIcon } from "lucide-react";
+import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare, Image as ImageIcon } from "lucide-react";
 import { FeedbackTab } from "./management/FeedbackTab";
-import { AIChatbotTab } from "./management/AIChatbotTab";
 import { SettingsTab } from "./management/SettingsTab";
 import { MenuTab } from "./management/MenuTab";
 import { EmployeesTab } from "./management/EmployeesTab";
@@ -48,7 +47,7 @@ import { TablesTab } from "./management/TablesTab";
 import { FinanceTab } from "./management/FinanceTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { managerAuth, sendPasswordResetEmail, fetchInventory, checkSystemVersion } from "@/lib/api";
+import { managerAuth, logoutManager, getManagerSession, sendPasswordResetEmail, fetchInventory, checkSystemVersion } from "@/lib/api";
 import type { InventoryItem } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
@@ -60,7 +59,7 @@ interface ManagementViewProps {
   notify: (kind: "success" | "error", text: string) => void;
 }
 
-const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback", "ai-chatbot"] as const;
+const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
 type ManagerNotification = {
   id: string;
@@ -86,7 +85,7 @@ const acquireSessionLock = (key: string, session: Record<string, unknown>) => {
   const existing = readStoredSession<Record<string, unknown>>(key);
   const now = Date.now();
   if (existing?.expiry && typeof existing.expiry === "number" && existing.expiry > now) {
-    if (existing.token && session.token && existing.token === session.token) return true;
+    if (existing.id && session.id && existing.id === session.id) return true;
     return false;
   }
 
@@ -137,30 +136,26 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    const savedLogin = localStorage.getItem("managerLogin");
-    if (savedLogin) {
-      try {
-        const parsed = JSON.parse(savedLogin);
-        if (parsed.expiry && Date.now() < parsed.expiry) {
-          const sessionLockAcquired = acquireSessionLock(MANAGER_SESSION_LOCK_KEY, parsed);
-          if (!sessionLockAcquired) {
-            localStorage.removeItem("managerLogin");
-            releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
-            setIsLoggedIn(false);
-            notify("error", t("manager.sessionInUse"));
-          } else {
-            setIsLoggedIn(true);
-          }
-        } else {
-          localStorage.removeItem("managerLogin");
-          releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
-        }
-      } catch (e) {
-        localStorage.removeItem("managerLogin");
-        releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
+    let active = true;
+    getManagerSession().then(session => {
+      if (!active || !session.success) return;
+      const sessionMetadata = {
+        id: session.id,
+        name: session.name,
+        expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      };
+      if (!acquireSessionLock(MANAGER_SESSION_LOCK_KEY, sessionMetadata)) {
+        notify("error", t("manager.sessionInUse"));
+        return;
       }
-    }
-  }, []);
+      localStorage.setItem("managerLogin", JSON.stringify(sessionMetadata));
+      setIsLoggedIn(true);
+    }).catch(() => {
+      localStorage.removeItem("managerLogin");
+      releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
+    });
+    return () => { active = false; };
+  }, [notify, t]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -168,7 +163,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       if (!event.newValue) return;
       const incoming = readStoredSession<Record<string, unknown>>(MANAGER_SESSION_LOCK_KEY);
       const current = readStoredSession<Record<string, unknown>>("managerLogin");
-      if (incoming?.token && current?.token && incoming.token !== current.token) {
+      if (incoming?.id && current?.id && incoming.id !== current.id) {
         setIsLoggedIn(false);
         localStorage.removeItem("managerLogin");
         releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
@@ -226,15 +221,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   const isWebSocketConnected = useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
     if (isLoggedIn) loadNotifications();
-  }, () => {
-    const saved = localStorage.getItem("managerLogin");
-    try {
-      const parsed = JSON.parse(saved || "null");
-      return parsed?.token || null;
-    } catch {
-      return null;
-    }
-  });
+  }, undefined, "manager", isLoggedIn);
 
   const managerDisconnectTimer = useRef<number | null>(null);
   useEffect(() => {
@@ -280,8 +267,8 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       const result = await managerAuth(loginId.trim(), loginPassword.trim());
       if (result.success) {
         const sessionPayload = {
-          id: loginId.trim(),
-          token: result.token,
+          id: result.id || loginId.trim(),
+          name: result.name || "manager",
           expiry: Date.now() + 7 * 24 * 60 * 60 * 1000,
         };
         const lockAcquired = acquireSessionLock(MANAGER_SESSION_LOCK_KEY, sessionPayload);
@@ -318,6 +305,9 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   };
 
   const handleLogout = () => {
+    void logoutManager().catch(error => {
+      safeConsoleError("Manager logout request failed", error);
+    });
     setIsLoggedIn(false);
     setLoginId("");
     setLoginPassword("");
@@ -606,13 +596,6 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("ai-chatbot")}>
-              <CardContent className="pt-6">
-                <Bot className="h-10 w-10 text-emerald-500 mb-4" />
-                <CardTitle className="mb-2">DragonBot AI</CardTitle>
-                <CardDescription>Ask AI about any restaurant data — orders, menu, inventory, finance, and more.</CardDescription>
-              </CardContent>
-            </Card>
           </div>
         )}
 
@@ -624,8 +607,6 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab === "finance" && <FinanceTab />}
         {activeTab === "menu" && <MenuTab />}
         {activeTab === "feedback" && <FeedbackTab notify={notify} />}
-        {activeTab === "ai-chatbot" && <AIChatbotTab />}
-
       </div>
     </div>
   );

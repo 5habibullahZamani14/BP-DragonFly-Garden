@@ -31,7 +31,10 @@ Each printer profile includes:
 1. Connect the printer to your computer via USB
 2. Download the appropriate driver from the manufacturer's website
 3. Run the installer and select the connection type (USB for direct connection)
-4. Complete the installation and test the printer
+4. Confirm the printer appears in **Windows Settings → Bluetooth & devices → Printers & scanners**
+5. Complete the installation and test the printer from Windows
+
+The app submits Windows print jobs through the installed printer driver and Windows print queue. A successful app message means Windows accepted the job; it cannot confirm that paper physically came out. Check the Windows print queue and printer status if a queued job does not print.
 
 **Linux/Raspberry Pi:**
 1. Connect the printer to your Pi via USB
@@ -116,6 +119,7 @@ To switch between different printers:
 - Verify the printer is selected as active
 - Check printer connection and power
 - Ensure the printer driver is working
+- On Windows, check that the printer is online and that its Windows queue is not paused or reporting an error
 - Check system logs for error messages
 
 ### Receipt Formatting Issues

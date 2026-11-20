@@ -1,5 +1,12 @@
 (async () => {
   try {
+    if (process.env.CONFIRM_DISPOSABLE_DATABASE !== '1') {
+      throw new Error('Refusing to run against application data. Set CONFIRM_DISPOSABLE_DATABASE=1 only for a disposable database.');
+    }
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET must be set in the environment before running this smoke test.');
+    }
+
     const crypto = require('crypto');
     const jwt = require('jsonwebtoken');
     const db = require('../src/database/db');
@@ -24,9 +31,7 @@
     await run("INSERT INTO restaurant_settings (key, value) VALUES ('payment_counter_session', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(sessionPayload)]);
     console.log('[SCRIPT] payment_counter_session stored');
 
-    const secret = process.env.JWT_SECRET || 'testjwtsecret';
-    const token = jwt.sign({ role: 'payment_counter', id: empId, name, sessionId }, secret, { expiresIn: '7d' });
-    console.log('[SCRIPT] Generated token:', token);
+    const token = jwt.sign({ role: 'payment_counter', id: empId, name, sessionId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     // Create an order via HTTP
     const base = 'http://localhost:5000';

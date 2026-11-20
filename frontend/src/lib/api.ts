@@ -81,49 +81,41 @@ const getApiErrorMessage = (body: unknown): string | undefined => {
  * so calling code can display or log the failure without inspecting the raw
  * Response object.
  */
-const getSavedLogin = <T extends { token?: string; expiry?: number }>(storageKey: string): T | null => {
-  const savedLogin = localStorage.getItem(storageKey);
-  if (!savedLogin) return null;
-  try {
-    const parsed = JSON.parse(savedLogin) as T;
-    if (!parsed.token || typeof parsed.token !== "string") return null;
-    if (parsed.expiry && typeof parsed.expiry === "number" && Date.now() >= parsed.expiry) {
+const clearLegacyBrowserTokens = () => {
+  if (typeof window === "undefined") return;
+  for (const storageKey of [
+    "managerLogin",
+    "managerSessionLock",
+    "paymentCounterLogin",
+    "paymentCounterSessionLock",
+  ]) {
+    try {
+      const savedLogin = localStorage.getItem(storageKey);
+      if (!savedLogin) continue;
+      const parsed: unknown = JSON.parse(savedLogin);
+      if (parsed && typeof parsed === "object" && "token" in parsed) {
+        localStorage.removeItem(storageKey);
+      }
+    } catch {
       localStorage.removeItem(storageKey);
-      return null;
     }
-    return parsed;
-  } catch {
-    localStorage.removeItem(storageKey);
-    return null;
   }
 };
 
-const getStaffToken = (): string | null => {
-  const parsed = getSavedLogin<{ token?: string; expiry?: number }>("paymentCounterLogin");
-  return parsed?.token ?? null;
-};
+clearLegacyBrowserTokens();
 
 const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
-  // Management and table-management endpoints must use JWT-based auth;
-  // ignore any QR argument for these admin routes. The table lookup route
-  // /tables/qr/:qrCode is public and should remain accessible without JWT.
+  // Management and table-management endpoints must not use a QR argument for auth.
+  // Authentication is carried by role-scoped HttpOnly cookies, never JavaScript headers.
   const isAdminRoute = path.startsWith("/management") || (path.startsWith("/tables") && !path.startsWith("/tables/qr"));
   const url = isAdminRoute ? `${API_BASE}${path}` : apiUrl(path, qr);
 
   const headers = new Headers(init?.headers);
-  if (isAdminRoute) {
-    const parsed = getSavedLogin<{ token?: string; expiry?: number }>("managerLogin");
-    if (parsed?.token) {
-      headers.set("Authorization", `Bearer ${parsed.token}`);
-    }
-  } else {
-    const staffToken = getStaffToken();
-    if (staffToken) {
-      headers.set("Authorization", `Bearer ${staffToken}`);
-    }
-  }
-
-  const finalInit = { ...init, headers };
+  const finalInit: RequestInit = {
+    ...init,
+    headers,
+    credentials: init?.credentials ?? "include",
+  };
 
   const res = await fetch(url, finalInit);
   if (!res.ok) {
@@ -142,6 +134,11 @@ const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Prom
   }
   return (await res.json()) as T;
 };
+
+/*
+ * Old releases stored bearer credentials in localStorage. Remove those records
+ * once on upgrade; the replacement session cookie is HttpOnly and unreadable to JS.
+ */
 
 // ── Type definitions ──────────────────────────────────────────────────────────
 
@@ -872,7 +869,6 @@ export type FeedbackRatings = {
 
 export type CustomerFeedback = {
   id: number;
-  view_token?: string;
   table_id: number | null;
   table_number: string | null;
   order_id: number | null;
@@ -897,7 +893,6 @@ export type CustomerFeedback = {
 
 export type FeedbackSubmitResult = {
   id: number;
-  view_token: string;
   feedback: CustomerFeedback;
 };
 
@@ -937,7 +932,7 @@ export type FeedbackAnalysisResponse = {
 
 export const submitFeedback = async (qr: string, formData: FormData): Promise<FeedbackSubmitResult> => {
   const url = apiUrl("/orders/feedback", qr);
-  const res = await fetch(url, { method: "POST", body: formData });
+  const res = await fetch(url, { method: "POST", body: formData, credentials: "include" });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(data.message || `API Error: ${res.status}`) as Error & {
@@ -953,7 +948,8 @@ export const submitFeedback = async (qr: string, formData: FormData): Promise<Fe
 
 export const fetchMyFeedback = async (
   qr: string,
-  entries: { id: number; view_token: string }[],
+  // view_token is accepted only to migrate references saved by older releases.
+  entries: { id: number; view_token?: string }[],
 ): Promise<CustomerFeedback[]> =>
   safeFetch<CustomerFeedback[]>(
     "/orders/feedback/mine",
@@ -1019,13 +1015,6 @@ export const updateFeedbackFindingStatus = async (
 
 export const deleteFeedbackFinding = async (id: number): Promise<{ success: boolean }> =>
   safeFetch<{ success: boolean }>(`/management/feedback/analysis/findings/${id}`, { method: "DELETE" });
-
-export const aiChat = async (message: string): Promise<{ success: boolean; response?: string; error?: string }> =>
-  safeFetch("/management/feedback/ai-chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
 
 export const customerArchiveOrder = async (qr: string, orderId: number): Promise<Order> =>
   safeFetch<Order>(`/orders/${orderId}/customer-archive`, { method: "PATCH" }, qr);
@@ -1099,7 +1088,7 @@ export const fetchEmployees = async (includeArchived = false) =>
   safeFetch<EmployeeRecord[]>(`/management/employees?include_archived=${includeArchived}`);
 
 export const verifyEmployeeCredentials = async (employee_id: string, name: string) =>
-  safeFetch<{ success: boolean; employee: { id: string; name: string; department?: string; role?: string }; token?: string }>("/management/employees/verify", {
+  safeFetch<{ success: boolean; employee: { id: string; name: string; department?: string; role?: string } }>("/management/employees/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ employee_id, name })
@@ -1168,13 +1157,35 @@ export const deleteTable = async (id: number) =>
 
 // ── Manager auth & profile ────────────────────────────────────────────────────
 
-export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; name?: string; token?: string; message?: string }> => {
+export const managerAuth = async (id: string, password: string): Promise<{ success: boolean; id?: string; name?: string; message?: string }> => {
   const res = await fetch(`${API_BASE}/management/auth`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, password }),
+    credentials: "include",
   });
   return res.json();
+};
+
+export const getManagerSession = async (): Promise<
+  | { success: true; id: string; name: string }
+  | { success: false }
+> => safeFetch("/management/auth/session");
+
+export const getPaymentCounterSession = async (): Promise<{
+  success: boolean;
+  employee: { id: string; name: string; department?: string; role?: string };
+}> => safeFetch<{
+  success: boolean;
+  employee: { id: string; name: string; department?: string; role?: string };
+}>("/management/employees/session");
+
+export const logoutManager = async (): Promise<void> => {
+  await safeFetch("/management/auth/logout", { method: "POST" });
+};
+
+export const logoutPaymentCounter = async (): Promise<void> => {
+  await safeFetch("/management/employees/logout", { method: "POST" });
 };
 
 export const fetchManagerProfile = async (): Promise<{ id: string; name: string; email: string; phone: string }> =>
@@ -1207,22 +1218,6 @@ export interface BackupFile {
   created_at: string;
 }
 
-const buildAdminAuthHeaders = () => {
-  const headers = new Headers();
-  const savedLogin = localStorage.getItem("managerLogin");
-  if (savedLogin) {
-    try {
-      const parsed = JSON.parse(savedLogin);
-      if (parsed.token) {
-        headers.set("Authorization", `Bearer ${parsed.token}`);
-      }
-    } catch (e) {
-      /* ignore malformed stored login */
-    }
-  }
-  return headers;
-};
-
 export const fetchBackups = async (): Promise<BackupFile[]> =>
   safeFetch("/management/backups");
 
@@ -1251,12 +1246,11 @@ export const restoreCloudBackup = async (filename: string): Promise<{ success: b
   });
 
 export const restoreUploadedBackup = async (file: File): Promise<{ success: boolean; message: string }> => {
-  const headers = buildAdminAuthHeaders();
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/management/backups/restore/upload`, {
     method: "POST",
-    headers,
+    credentials: "include",
     body: formData,
   });
 
@@ -1291,10 +1285,9 @@ export const performDataReset = async (body: {
   });
 
 export const downloadBackup = async (filename: string): Promise<void> => {
-  const headers = buildAdminAuthHeaders();
   const res = await fetch(`${API_BASE}/management/backups/download?filename=${encodeURIComponent(filename)}`, {
     method: "GET",
-    headers,
+    credentials: "include",
   });
 
   if (!res.ok) {

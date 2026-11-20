@@ -192,7 +192,7 @@ const orderRoutes = (broadcast) => {
     asyncHandler(feedbackController.submitFeedback),
   );
   router.post("/feedback/mine", asyncHandler(feedbackController.fetchMyFeedback));
-  router.get("/feedback/:id", asyncHandler(feedbackController.getFeedbackByToken));
+  router.get("/feedback/:id", asyncHandler(feedbackController.getMyFeedbackById));
 
   router.patch("/call-waiter/:requestId/acknowledge", requirePaymentToken, asyncHandler(async (req, res) => {
     const requestId = Number(req.params.requestId);
@@ -235,13 +235,22 @@ const orderRoutes = (broadcast) => {
       
       // Print final receipt according to configured copy count
       for (let i = 0; i < finalReceiptCopies; i++) {
-        await printerService.printFinalReceipt(order, cashierName || "Cashier");
+        const printResult = await printerService.printFinalReceipt(order, cashierName || "Cashier");
+        if (!printResult || printResult.success !== true) {
+          throw new Error(printResult?.message || "The printer did not accept the receipt print job");
+        }
         if (i < finalReceiptCopies - 1) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
     } catch (err) {
-      console.error("Printer failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Receipt print failed after payment completed:", message);
+      return res.status(503).json({
+        success: false,
+        paymentCompleted: true,
+        message: `Payment completed, but receipt printing failed: ${message}`
+      });
     }
     
     res.json(order);
