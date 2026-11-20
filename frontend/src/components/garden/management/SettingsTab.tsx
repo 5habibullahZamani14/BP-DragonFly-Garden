@@ -4,7 +4,7 @@
  * The component centralizes restaurant-wide settings, including:
  *   • Working hours that trigger automatic employee logout.
  *   • Manager profile editing with password change support.
- *   • Backup, printer, and system-update controls.
+ *   • Backup and printer controls, plus a gated system-update card.
  *
  * The UI uses our design system's Card, Input, and Button components to present
  * a clean, accessible form. State is persisted through the backend API and
@@ -94,6 +94,9 @@ const getErrorStatus = (error: unknown) =>
 
 const isCardSize = (value: string): value is "normal" | "large" | "extra_large" =>
   value === "normal" || value === "large" || value === "extra_large";
+
+// Keep manager-facing update controls hidden until the updater has been verified.
+const SHOW_SYSTEM_UPDATE_CONTROLS = false;
 
 export const SettingsTab = () => {
   const { t } = useTranslation();
@@ -1055,69 +1058,70 @@ export const SettingsTab = () => {
   return (
     <>
     <div className="space-y-6 pb-6">
-      {/* ── System Update Card ─────────────────────────── */}
-      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-transparent">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
-          </div>
-          <CardDescription>Check and apply the latest application updates from GitHub</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {updateMsg && (
-            <div className={`p-3 rounded-lg text-sm font-medium ${
-              updateMsg.isError 
-                ? 'bg-red-100 text-red-800 border border-red-300' 
-                : 'bg-green-100 text-green-800 border border-green-300'
-            }`}>
-              {updateMsg.text}
+      {SHOW_SYSTEM_UPDATE_CONTROLS && (
+        <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-transparent">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
             </div>
-          )}
-
-          {versionInfo && !updateInProgress && (
-            <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
-              <div className="space-y-2">
-                <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
-                {versionInfo.needs_update && (
-                  <div className="text-orange-600 font-medium">Update available</div>
-                )}
+            <CardDescription>Check and apply the latest application updates from GitHub</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {updateMsg && (
+              <div className={`p-3 rounded-lg text-sm font-medium ${
+                updateMsg.isError
+                  ? 'bg-red-100 text-red-800 border border-red-300'
+                  : 'bg-green-100 text-green-800 border border-green-300'
+              }`}>
+                {updateMsg.text}
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={handleCheckForUpdates}
-              disabled={updateCheckLoading || updateInProgress}
-              variant="outline"
-              className="gap-2"
-            >
-              {updateCheckLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Check for Updates
-            </Button>
+            {versionInfo && !updateInProgress && (
+              <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
+                <div className="space-y-2">
+                  <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
+                  {versionInfo.needs_update && (
+                    <div className="text-orange-600 font-medium">Update available</div>
+                  )}
+                </div>
+              </div>
+            )}
 
-            {updateAvailable && !updateInProgress && (
+            <div className="flex flex-wrap gap-2">
               <Button
-                onClick={handlePerformUpdate}
+                onClick={handleCheckForUpdates}
                 disabled={updateCheckLoading || updateInProgress}
-                className="gap-2 bg-blue-600 hover:bg-blue-700"
+                variant="outline"
+                className="gap-2"
               >
-                {updateInProgress ? (
+                {updateCheckLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {updateInProgress ? "Updating..." : "Update Now"}
+                Check for Updates
               </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+
+              {updateAvailable && !updateInProgress && (
+                <Button
+                  onClick={handlePerformUpdate}
+                  disabled={updateCheckLoading || updateInProgress}
+                  className="gap-2 bg-blue-600 hover:bg-blue-700"
+                >
+                  {updateInProgress ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {updateInProgress ? "Updating..." : "Update Now"}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-2 border-amber-200 bg-amber-50/60">
         <CardHeader className="pb-3">

@@ -12,9 +12,10 @@ the production database and machine-specific `.env` separate from code updates.
 
 ## Important
 
-The dashboard's **Check for Updates** feature can check the remote version. Do not use
-**Update Now** on a production installation: the current updater uses `git reset --hard
-origin/main`, which can discard local changes, and does not reliably restart the backend.
+The manager dashboard's update controls are temporarily hidden while the updater is being
+verified. Do not use the server-side updater on a production installation: it uses
+`git reset --hard origin/main`, which can discard local changes, and does not reliably
+restart the backend.
 
 After an update, verify the health endpoint, manager login, saved data, and physical
 printer output. A successful build alone does not prove that the restaurant is ready for

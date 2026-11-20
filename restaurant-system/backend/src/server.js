@@ -415,10 +415,10 @@ app.use((req, res, next) => {
 /*
  * SPA fallback route. Any URL that does not match an API path gets served
  * the frontend's index.html so the React router can handle it client-side.
- * The regex below matches everything EXCEPT the five API prefixes.
+ * The regex below excludes API prefixes and explicit health/readiness endpoints.
  * If no frontend build is found, a simple JSON message is returned instead.
  */
-app.get(/^(?!\/(?:menu|orders|tables|payments|management|menu-images|feedback-images)\b).*/, (req, res) => {
+app.get(/^(?!\/(?:menu|orders|tables|payments|management|menu-images|feedback-images|health|ready)\b).*/, (req, res) => {
   if (fs.existsSync(frontendDistPath)) {
     res.sendFile(path.join(frontendDistPath, "index.html"));
   } else {
