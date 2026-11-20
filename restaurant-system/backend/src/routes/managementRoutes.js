@@ -49,6 +49,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const router = express.Router();
+let shutdownHandler = null;
+
+const setupShutdownHandler = (handler) => {
+  shutdownHandler = handler;
+};
 
 const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
@@ -431,6 +436,21 @@ router.post("/system/check-version", managementController.checkSystemVersion);
  */
 router.post("/system/update", managementController.performSystemUpdate);
 
+/*
+ * POST /management/system/shutdown
+ * Acknowledge the manager request before beginning graceful shutdown.
+ */
+router.post("/system/shutdown", (req, res) => {
+  if (!shutdownHandler) {
+    return res.status(503).json({ success: false, message: "Server shutdown is unavailable." });
+  }
+
+  res.once("finish", () => {
+    setTimeout(() => shutdownHandler(), 500);
+  });
+  return res.status(202).json({ success: true, message: "Server shutdown has been requested." });
+});
+
 // ── Promotion Templates ───────────────────────────────────────────────────────
 
 /* GET  /management/promotions                  — get all templates */
@@ -722,3 +742,4 @@ module.exports = router;
 module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;
 module.exports.setupMenuBroadcast = setupMenuBroadcast;
 module.exports.setupManagementBroadcast = setupManagementBroadcast;
+module.exports.setupShutdownHandler = setupShutdownHandler;

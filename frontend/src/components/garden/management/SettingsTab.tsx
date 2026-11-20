@@ -1,10 +1,10 @@
 /*
  * SettingsTab.tsx — Global configuration and manager profile UI.
  *
- * I created this component to centralize all restaurant-wide settings, including:
+ * The component centralizes restaurant-wide settings, including:
  *   • Working hours that trigger automatic employee logout.
  *   • Manager profile editing with password change support.
- *   • Password recovery via email using the RESEND service.
+ *   • Backup, printer, and system-update controls.
  *
  * The UI uses our design system's Card, Input, and Button components to present
  * a clean, accessible form. State is persisted through the backend API and
@@ -21,8 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, sendPasswordResetEmail, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Mail, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, FileText } from "lucide-react";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, requestSystemShutdown, VersionCheckResult } from "@/lib/api";
+import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, FileText, Power } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -109,10 +109,6 @@ export const SettingsTab = () => {
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState("");
 
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetSending, setResetSending] = useState(false);
-  const [resetMsg, setResetMsg] = useState("");
-
   const [backups, setBackups] = useState<BackupFile[]>([]);
   const [cloudBackups, setCloudBackups] = useState<BackupFile[]>([]);
   const [backupName, setBackupName] = useState("");
@@ -157,6 +153,8 @@ export const SettingsTab = () => {
   const [versionInfo, setVersionInfo] = useState<VersionCheckResult | null>(null);
   const [updateInProgress, setUpdateInProgress] = useState(false);
   const [updateMsg, setUpdateMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [shutdownRequested, setShutdownRequested] = useState(false);
+  const [shutdownError, setShutdownError] = useState<string | null>(null);
 
   // Printer management state
   const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
@@ -359,6 +357,26 @@ export const SettingsTab = () => {
           setUpdateMsg({ text: `❌ Update failed: ${getErrorMessage(err)}`, isError: true });
         } finally {
           setUpdateInProgress(false);
+        }
+      }
+    );
+  };
+
+  const handleRequestShutdown = () => {
+    showConfirmation(
+      "Stop DragonFly Garden?",
+      "Make sure no orders or payments are in progress. This will stop new requests, disconnect open browser sessions, and then wait for active background work before closing the database. The app will not be available again until the server is started using its normal startup method. Proceed?",
+      async () => {
+        setShutdownError(null);
+        try {
+          const result = await requestSystemShutdown();
+          if (!result.success) {
+            throw new Error(result.message || "The server did not accept the shutdown request.");
+          }
+          setShutdownRequested(true);
+        } catch (err: unknown) {
+          safeConsoleError("Server shutdown request failed", err);
+          setShutdownError(getErrorMessage(err));
         }
       }
     );
@@ -846,24 +864,6 @@ export const SettingsTab = () => {
     );
   };
 
-  const sendReset = async () => {
-    if (!resetEmail.trim()) return;
-    setResetSending(true);
-    setResetMsg("");
-    try {
-      const result = await sendPasswordResetEmail(resetEmail.trim());
-      if (result.success) {
-        setResetMsg("✅ " + result.message);
-      } else {
-        setResetMsg("⚠️ " + result.message);
-      }
-    } catch {
-      setResetMsg("⚠️ Could not connect to email service. Check backend .env configuration.");
-    } finally {
-      setResetSending(false);
-    }
-  };
-
   // Load printer settings on mount
   useEffect(() => {
     loadPrinterSettings();
@@ -1019,6 +1019,26 @@ export const SettingsTab = () => {
     setMarginBottom(profile.margin_bottom || 0);
   };
 
+  if (shutdownRequested) return (
+    <div className="p-6" role="status" aria-live="polite">
+      <Card className="mx-auto max-w-2xl border-2 border-amber-300 bg-amber-50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Power className="h-6 w-6 text-amber-700" />
+            <CardTitle className="text-xl text-amber-950">Server shutdown requested</CardTitle>
+          </div>
+          <CardDescription className="text-amber-900">
+            New requests are blocked and connected sessions are closing. The backend is finishing active background work before closing the database.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-amber-950">
+          <p>You can close this browser window. Closing the window alone does not stop the backend.</p>
+          <p>To start the app again, use the normal server startup method, such as a DragonFly Garden desktop shortcut on Windows.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   if (hoursLoading) return (
     <div className="space-y-6 p-6">
       <div className="space-y-2">
@@ -1096,6 +1116,34 @@ export const SettingsTab = () => {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-2 border-amber-200 bg-amber-50/60">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Power className="h-5 w-5 text-amber-700" />
+            <CardTitle className="text-lg text-amber-950">Server control</CardTitle>
+          </div>
+          <CardDescription>
+            Stop the backend safely when the restaurant is finished using the system. This affects every connected device.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {shutdownError && (
+            <div role="alert" className="rounded-lg border border-red-300 bg-red-100 p-3 text-sm text-red-800">
+              Could not stop the server: {shutdownError}
+            </div>
+          )}
+          <Button
+            onClick={handleRequestShutdown}
+            disabled={updateInProgress || shutdownRequested}
+            variant="destructive"
+            className="gap-2"
+          >
+            <Power className="h-4 w-4" />
+            Stop backend for everyone
+          </Button>
         </CardContent>
       </Card>
 
@@ -1913,34 +1961,6 @@ export const SettingsTab = () => {
                 : profileSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
                 : t("m.saveProfile")}
             </Button>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-
-      {/* ── Password Recovery ───────────────────────────────── */}
-      <AccordionItem value="recovery" className="border rounded-xl bg-card text-card-foreground shadow-sm">
-        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
-          <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.passwordRecovery")}</h3>
-            <p className="text-sm text-muted-foreground font-normal">{t("m.forgotDesc")}</p>
-          </div>
-        </AccordionTrigger>
-        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <Input
-                type="email"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                placeholder={t("m.resetEmailPlaceholder")}
-                className="flex-1"
-              />
-              <Button onClick={sendReset} disabled={resetSending} variant="outline" className="flex gap-2 shrink-0">
-                {resetSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                {t("m.send")}
-              </Button>
-            </div>
-            {resetMsg && <p className="text-sm text-foreground/70">{resetMsg}</p>}
           </div>
         </AccordionContent>
       </AccordionItem>

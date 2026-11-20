@@ -1347,6 +1347,12 @@ export const performSystemUpdate = async (impact: 'major' | 'minor' | 'patch' | 
     body: JSON.stringify({ impact }),
   });
 
+export const requestSystemShutdown = async (): Promise<{ success: boolean; message: string }> =>
+  safeFetch<{ success: boolean; message: string }>("/management/system/shutdown", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
 // ── Global Modifier Library ───────────────────────────────────────────────────
 
 export interface GlobalModifierOption {

@@ -149,6 +149,7 @@ const resolveCaptivePortalTarget = async (req) => {
  * WebSocket server (ws) needs to attach to the same underlying HTTP server
  * object — you cannot attach a WebSocket server to an Express app directly.
  */
+let isShuttingDown = false;
 const app = express();
 const server = http.createServer(app);
 
@@ -160,6 +161,11 @@ const wss = new WebSocketServer({ server });
  * query strings are rejected so they cannot leak through URLs or diagnostics.
  */
 wss.on("connection", async (ws, req) => {
+  if (isShuttingDown) {
+    ws.close(1012, "Server is shutting down");
+    return;
+  }
+
   try {
     const wsProtocol = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || (req.socket.encrypted ? "https" : "http");
     if (!isTrustedOrigin(req.headers.origin, req.headers.host, allowedOrigins, allowDevelopmentPort, wsProtocol)) {
@@ -316,6 +322,12 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  if (!isShuttingDown) return next();
+  res.setHeader("Connection", "close");
+  return res.status(503).json({ error: "The server is shutting down." });
+});
+
 /* Serve dynamic menu images directly from the backend to bypass Vite caching issues. */
 app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
 app.use("/feedback-images", express.static(path.resolve(__dirname, "../../../frontend/public/feedback-images")));
@@ -444,62 +456,94 @@ const scheduledTasks = {
   cloudBackupTimeout: null,
   cloudBackupInterval: null,
   salesReportInterval: null,
+  inFlight: new Set(),
+  shuttingDown: false,
+};
+
+const trackScheduledTask = (task) => {
+  if (scheduledTasks.shuttingDown) return;
+
+  const taskPromise = Promise.resolve().then(task);
+  scheduledTasks.inFlight.add(taskPromise);
+  taskPromise.then(
+    () => scheduledTasks.inFlight.delete(taskPromise),
+    (err) => {
+      scheduledTasks.inFlight.delete(taskPromise);
+      console.error("Scheduled background task failed:", err);
+    }
+  );
 };
 
 /*
  * Graceful shutdown handler - ensures proper cleanup of all resources
  * when the server receives termination signals (SIGINT, SIGTERM)
  */
+let shutdownPromise = null;
+let shutdownExitCode = 0;
 const gracefulShutdown = (signal) => {
+  if (signal === "UNCAUGHT_EXCEPTION" || signal === "UNHANDLED_REJECTION") {
+    shutdownExitCode = 1;
+  }
+  if (shutdownPromise) return shutdownPromise;
+
   console.log(`\n${signal} received. Starting graceful shutdown...`);
+  const forceShutdownTimer = setTimeout(() => {
+    console.error("Forced shutdown after 120 seconds.");
+    process.exit(1);
+  }, 120000);
+  forceShutdownTimer.unref();
 
-  // Clear all scheduled tasks
-  if (scheduledTasks.archiveTimeout) clearTimeout(scheduledTasks.archiveTimeout);
-  if (scheduledTasks.archiveInterval) clearInterval(scheduledTasks.archiveInterval);
-  if (scheduledTasks.cloudBackupTimeout) clearTimeout(scheduledTasks.cloudBackupTimeout);
-  if (scheduledTasks.cloudBackupInterval) clearInterval(scheduledTasks.cloudBackupInterval);
-  if (scheduledTasks.salesReportInterval) clearInterval(scheduledTasks.salesReportInterval);
-  console.log('All scheduled tasks cleared');
+  shutdownPromise = (async () => {
+    try {
+      scheduledTasks.shuttingDown = true;
+      isShuttingDown = true;
+      if (scheduledTasks.archiveTimeout) clearTimeout(scheduledTasks.archiveTimeout);
+      if (scheduledTasks.archiveInterval) clearInterval(scheduledTasks.archiveInterval);
+      if (scheduledTasks.cloudBackupTimeout) clearTimeout(scheduledTasks.cloudBackupTimeout);
+      if (scheduledTasks.cloudBackupInterval) clearInterval(scheduledTasks.cloudBackupInterval);
+      if (scheduledTasks.salesReportInterval) clearInterval(scheduledTasks.salesReportInterval);
+      console.log("Scheduled tasks stopped; rejecting new requests and closing WebSocket clients.");
 
-  // Close WebSocket server with proper client notification
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) { // OPEN state
-      try {
-        client.send(JSON.stringify({ type: 'SERVER_SHUTDOWN', message: 'Server is shutting down' }));
-        client.close(1000, 'Server shutdown');
-      } catch (e) {
-        console.warn('Error closing WebSocket client:', e.message);
-      }
-    }
-  });
-
-  wss.close(() => {
-    console.log('WebSocket server closed');
-
-    // Close HTTP server
-    server.close(() => {
-      console.log('HTTP server closed');
-
-      // Close database connection
-      db.close((err) => {
-        if (err) {
-          console.error('Error closing database:', err);
-          process.exit(1);
-        } else {
-          console.log('Database connection closed');
-          console.log('Graceful shutdown completed successfully');
-          process.exit(0);
+      wss.clients.forEach((client) => {
+        if (client.readyState === 1) {
+          try {
+            client.send(JSON.stringify({ type: "SERVER_SHUTDOWN", message: "Server is shutting down" }));
+            client.close(1000, "Server shutdown");
+          } catch (err) {
+            console.warn("Error closing WebSocket client:", err.message);
+          }
         }
       });
-    });
-  });
 
-  // Force shutdown after 15 seconds if graceful shutdown fails
-  setTimeout(() => {
-    console.error('Forced shutdown after timeout');
-    process.exit(1);
-  }, 15000);
+      await new Promise((resolve) => wss.close(resolve));
+      console.log("WebSocket server closed");
+
+      while (scheduledTasks.inFlight.size > 0) {
+        await Promise.allSettled(Array.from(scheduledTasks.inFlight));
+      }
+      console.log("Active background work finished");
+
+      await new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+      console.log("HTTP server closed");
+
+      await db.close();
+      console.log("Database connection closed");
+      console.log("Graceful shutdown completed successfully");
+      clearTimeout(forceShutdownTimer);
+      process.exit(shutdownExitCode);
+    } catch (err) {
+      console.error("Graceful shutdown failed:", err);
+      clearTimeout(forceShutdownTimer);
+      process.exit(1);
+    }
+  })();
+
+  return shutdownPromise;
 };
+
+managementRoutes.setupShutdownHandler(() => gracefulShutdown("MANAGER_REQUEST"));
 
 // Register signal handlers for graceful shutdown
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -578,8 +622,9 @@ const startServer = async () => {
 
         console.log(`Daily archive scheduled for ${nextRun.toLocaleString()}`);
         scheduledTasks.archiveTimeout = setTimeout(() => {
-          runArchive();
-          scheduledTasks.archiveInterval = setInterval(runArchive, 24 * 60 * 60 * 1000);
+          if (scheduledTasks.shuttingDown) return;
+          trackScheduledTask(runArchive);
+          scheduledTasks.archiveInterval = setInterval(() => trackScheduledTask(runArchive), 24 * 60 * 60 * 1000);
         }, delay);
       };
 
@@ -604,8 +649,9 @@ const startServer = async () => {
 
         console.log(`Cloud backup scheduled for ${nextRun.toLocaleString()}`);
         scheduledTasks.cloudBackupTimeout = setTimeout(() => {
-          runCloudBackup();
-          scheduledTasks.cloudBackupInterval = setInterval(runCloudBackup, 24 * 60 * 60 * 1000);
+          if (scheduledTasks.shuttingDown) return;
+          trackScheduledTask(runCloudBackup);
+          scheduledTasks.cloudBackupInterval = setInterval(() => trackScheduledTask(runCloudBackup), 24 * 60 * 60 * 1000);
         }, delay);
       };
 
@@ -696,8 +742,8 @@ const startServer = async () => {
         };
 
         // Run check immediately and then every 60 seconds
-        checkAndPrintSalesReport();
-        scheduledTasks.salesReportInterval = setInterval(checkAndPrintSalesReport, 60 * 1000);
+        trackScheduledTask(checkAndPrintSalesReport);
+        scheduledTasks.salesReportInterval = setInterval(() => trackScheduledTask(checkAndPrintSalesReport), 60 * 1000);
       };
 
       scheduleDailyArchive();
@@ -705,9 +751,9 @@ const startServer = async () => {
       scheduleDailySalesReport();
       
       // Execute a catch-up backup check immediately on startup
-      ensureCloudBackupUpToDate().catch(err => {
+      trackScheduledTask(() => ensureCloudBackupUpToDate().catch(err => {
         console.error("Startup catch-up cloud backup failed:", err);
-      });
+      }));
     });
   } catch (error) {
     console.error("Server startup failed:", error);

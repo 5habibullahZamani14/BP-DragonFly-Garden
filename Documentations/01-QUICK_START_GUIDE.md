@@ -22,9 +22,10 @@ assume a model, width, or cutter based on an example in an old guide.
 
 1. Start the server:
    - Raspberry Pi with systemd: `sudo systemctl start dragonfly-garden`
-   - Windows: run
+   - Windows: double-click a role desktop shortcut, or run
      [`START_DRAGONFLY_GARDEN.bat`](../Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat)
-     and keep its backend window open.
+     for the manager view. The backend starts in the background; no command window
+     needs to stay open.
 2. From the server, check `http://127.0.0.1:5000/health`.
 3. Connect a phone/computer to the same trusted network. Open the published app address
    in a browser; do not assume the device will open it automatically.

@@ -16,23 +16,27 @@ if ([string]::IsNullOrWhiteSpace($ShortcutDirectory)) {
 
 $ShortcutDirectory = [System.IO.Path]::GetFullPath($ShortcutDirectory)
 New-Item -ItemType Directory -Path $ShortcutDirectory -Force | Out-Null
+$powerShellPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
+    throw "Windows PowerShell was not found at $powerShellPath."
+}
 
 $applications = @(
     [pscustomobject]@{
         Name = 'Manager'
-        Launcher = 'Start the app in deployment form\Pc\START_MANAGEMENT_DEPLOY.bat'
+        Role = 'manager'
         Icon = 'ICONS\ICO\MANAGER.ico'
         Description = 'Open the manager application'
     }
     [pscustomobject]@{
         Name = 'Employee'
-        Launcher = 'Start the app in deployment form\Pc\START_PAYMENT_COUNTER_DEPLOY.bat'
+        Role = 'payment'
         Icon = 'ICONS\ICO\EMPLOYEE.ico'
         Description = 'Open the employee payment-counter application'
     }
     [pscustomobject]@{
         Name = 'Customer'
-        Launcher = 'Start the app in deployment form\Pc\START_TABLE1_DEPLOY.bat'
+        Role = 'customer'
         Icon = 'ICONS\ICO\CUSTOMER.ico'
         Description = 'Open the customer ordering application'
     }
@@ -54,7 +58,7 @@ foreach ($previousName in $previousShortcutNames) {
 $shell = New-Object -ComObject WScript.Shell
 try {
     foreach ($application in $applications) {
-        $launcherPath = Join-Path $repositoryRoot $application.Launcher
+        $launcherPath = Join-Path $repositoryRoot 'Start the app in deployment form\Pc\Start-DragonFlyGarden.ps1'
         $iconPath = Join-Path $repositoryRoot $application.Icon
 
         if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
@@ -67,11 +71,12 @@ try {
         $shortcutPath = Join-Path $ShortcutDirectory ($application.Name + '.lnk')
         $shortcut = $shell.CreateShortcut($shortcutPath)
         try {
-            $shortcut.TargetPath = $launcherPath
-            $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName($launcherPath)
+            $shortcut.TargetPath = $powerShellPath
+            $shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Role {1}' -f $launcherPath, $application.Role
+            $shortcut.WorkingDirectory = $repositoryRoot
             $shortcut.IconLocation = "$iconPath,0"
             $shortcut.Description = $application.Description
-            $shortcut.WindowStyle = 1
+            $shortcut.WindowStyle = 7
             $shortcut.Save()
         }
         finally {

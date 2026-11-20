@@ -141,24 +141,26 @@ non-loopback backend.
 
 ## Deployment on a Windows PC or laptop
 
-Install Node.js 20 or newer, create a machine-specific backend `.env` file, then
-double-click
+Install Node.js 20 or newer and create a machine-specific backend `.env` file. Use
+the Manager, Employee, or Customer desktop shortcut for a no-console launch; the
+manager batch launcher is also available at
 [`START_DRAGONFLY_GARDEN.bat`](./Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
-The launcher opens the manager view by default. The other role-specific launchers
-open the table 1 customer view or payment-counter view. Each launcher checks the
-backend health endpoint first and reuses a healthy server instead of starting a
-duplicate. If the server is not running, it installs missing dependencies,
-builds the frontend, and starts the backend. In production the backend serves
-the frontend on the same port (5000); there is no separate frontend server on
-port 3000. The launchers work from the repository's current folder and do not
-depend on a fixed `C:\` path.
+The desktop shortcuts start the backend without a visible command window and open
+the selected role in a browser. Each launcher checks the readiness endpoint and
+reuses a healthy server. If
+the server is not running, it installs missing dependencies, builds the frontend,
+starts the backend in the background, and waits for `/ready` before opening the
+browser. In production the backend serves the frontend on port 5000; there is no
+separate frontend server on port 3000. The launchers work from the repository's
+current folder and do not depend on a fixed `C:\` path.
 
 To create Manager, Employee, and Customer desktop icons, double-click
 [`CREATE_APP_SHORTCUTS.bat`](./CREATE_APP_SHORTCUTS.bat) in the repository root.
 It runs `Create-App-Shortcuts.ps1`, uses the icons in `ICONS\ICO`, and creates
-shortcuts to the existing deployment launchers. After cloning the repository on
-another PC, double-click the batch file there to create shortcuts with paths
-for that PC.
+shortcuts that launch the hidden PowerShell startup script directly. After cloning
+the repository on another PC,
+double-click the batch file there to create shortcuts with paths and icons for
+that PC.
 
 The server listens on all network interfaces. For other devices to connect,
 allow inbound TCP port 5000 through Windows Firewall and use the PC's LAN
@@ -171,11 +173,14 @@ For a manually configured hotspot, set `CAPTIVE_PORTAL_TARGET` in the backend
 leave it unset to use the detected LAN address. Open the manager UI through
 that same address when generating customer QR codes.
 
-The launcher's command window can be closed without stopping the server. To
-stop a server that the launcher started, press Ctrl+C in the **DragonFly Garden
-Backend** window and wait for its graceful shutdown message; it closes active
-WebSocket connections, the HTTP server, and the database. If the launcher found
-an already-running server, it does not own or stop that server.
+Closing a browser only closes that browser window; the backend continues running
+for other staff and customer devices. To stop the backend for everyone, sign in
+as manager and use **Settings → Server control → Stop backend for everyone**.
+The server rejects new requests, stops scheduled jobs, closes WebSocket sessions,
+waits for active background jobs and in-flight HTTP requests, closes SQLite, and
+then exits. To use the app again, open any role shortcut; it starts a new backend
+if one is not already healthy. Startup and server output are saved under
+`restaurant-system\backend\logs`.
 
 The app cannot reliably enable a Wi-Fi hotspot automatically on every laptop:
 hotspot support, Wi-Fi adapter capabilities, OS permissions, and upstream

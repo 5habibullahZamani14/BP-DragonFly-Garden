@@ -17,7 +17,7 @@ accept orders at a time; see [05.3-SYNC_BETWEEN_DEVICES.md](05.3-SYNC_BETWEEN_DE
    database or overwrite the laptop's `.env` blindly.
 5. Start the app with
    [`START_DRAGONFLY_GARDEN.bat`](../Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
-   Keep the backend console open while the app is in use.
+   The backend runs in the background; no command window needs to stay open.
 
 Open `http://localhost:5000` on the laptop. Other devices on the same trusted network
 need the laptop's current LAN IP, not `localhost`; Windows Firewall may need a narrowly
@@ -29,3 +29,7 @@ The database is stored at
 the frontend build and should not be used as the data backup.
 
 Continue with [03.1-SOFTWARE_INSTALLATION.md](03.1-SOFTWARE_INSTALLATION.md).
+
+Closing a browser does not stop the backend. To stop it for all devices, sign in as
+manager and choose **Settings → Server control → Stop backend for everyone**. Start it
+again by opening a role shortcut or running the launcher.
