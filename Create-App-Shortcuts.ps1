@@ -19,24 +19,37 @@ New-Item -ItemType Directory -Path $ShortcutDirectory -Force | Out-Null
 
 $applications = @(
     [pscustomobject]@{
-        Name = 'DragonFly Garden - Manager'
+        Name = 'Manager'
         Launcher = 'Start the app in deployment form\Pc\START_MANAGEMENT_DEPLOY.bat'
         Icon = 'ICONS\ICO\MANAGER.ico'
         Description = 'Open the manager application'
     }
     [pscustomobject]@{
-        Name = 'DragonFly Garden - Employee'
+        Name = 'Employee'
         Launcher = 'Start the app in deployment form\Pc\START_PAYMENT_COUNTER_DEPLOY.bat'
         Icon = 'ICONS\ICO\EMPLOYEE.ico'
         Description = 'Open the employee payment-counter application'
     }
     [pscustomobject]@{
-        Name = 'DragonFly Garden - Customer'
+        Name = 'Customer'
         Launcher = 'Start the app in deployment form\Pc\START_TABLE1_DEPLOY.bat'
         Icon = 'ICONS\ICO\CUSTOMER.ico'
         Description = 'Open the customer ordering application'
     }
 )
+
+$previousShortcutNames = @(
+    'DragonFly Garden - Manager.lnk'
+    'DragonFly Garden - Employee.lnk'
+    'DragonFly Garden - Customer.lnk'
+)
+
+foreach ($previousName in $previousShortcutNames) {
+    $previousPath = Join-Path $ShortcutDirectory $previousName
+    if (Test-Path -LiteralPath $previousPath -PathType Leaf) {
+        Remove-Item -LiteralPath $previousPath -Force
+    }
+}
 
 $shell = New-Object -ComObject WScript.Shell
 try {
