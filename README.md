@@ -153,6 +153,12 @@ the frontend on the same port (5000); there is no separate frontend server on
 port 3000. The launchers work from the repository's current folder and do not
 depend on a fixed `C:\` path.
 
+To create Manager, Employee, and Customer desktop icons, run
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\Create-App-Shortcuts.ps1`
+from the repository root. The script uses the icons in `ICONS\ICO` and creates
+shortcuts to the existing deployment launchers. After cloning the repository on
+another PC, run the script there to create shortcuts with paths for that PC.
+
 The server listens on all network interfaces. For other devices to connect,
 allow inbound TCP port 5000 through Windows Firewall and use the PC's LAN
 address. The production frontend and its API/WebSocket connections use the
