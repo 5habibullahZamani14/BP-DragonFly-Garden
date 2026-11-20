@@ -463,7 +463,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   };
 
-  const isWebSocketConnected = useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
+  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
     if (event.type === "CALL_WAITER") {
       const request = event.payload as StaffAssistanceRequest;
       setAssistanceRequests((current) => {
@@ -485,39 +485,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       loadData();
     }
   }, undefined, "payment_counter", Boolean(loggedInEmployee));
-
-  const serverDisconnectTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!loggedInEmployee) {
-      if (serverDisconnectTimer.current) {
-        clearTimeout(serverDisconnectTimer.current);
-        serverDisconnectTimer.current = null;
-      }
-      return;
-    }
-
-    if (isWebSocketConnected) {
-      if (serverDisconnectTimer.current) {
-        clearTimeout(serverDisconnectTimer.current);
-        serverDisconnectTimer.current = null;
-      }
-      return;
-    }
-
-    if (!serverDisconnectTimer.current) {
-      serverDisconnectTimer.current = window.setTimeout(() => {
-        notify("error", t("payment.serverDisconnected", "Server connection lost. You have been logged out."));
-        handleLogout();
-      }, 8000);
-    }
-
-    return () => {
-      if (serverDisconnectTimer.current) {
-        clearTimeout(serverDisconnectTimer.current);
-        serverDisconnectTimer.current = null;
-      }
-    };
-  }, [isWebSocketConnected, loggedInEmployee, notify, t]);
 
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {

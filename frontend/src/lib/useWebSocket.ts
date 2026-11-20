@@ -13,6 +13,10 @@
  *   important for real-time updates — staff should not miss an incoming order
  *   because of a temporary connection loss.
  *
+ *   Shared connection status: The hook also publishes active and connected
+ *   socket counts so the app shell can distinguish a live-update interruption
+ *   from the backend itself being unavailable.
+ *
  *   Stable refs for callback and eventTypes: I use useRef to store the latest
  *   versions of the callback and eventTypes array. This means the WebSocket
  *   effect only runs once on mount (its dependency array is empty), but the
@@ -31,7 +35,7 @@
  *   on an unmounted component.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { safeConsoleError, safeConsoleWarn } from "@/lib/safeConsole";
 import { API_BASE } from "@/lib/api";
 
@@ -48,6 +52,60 @@ const getWsBase = () => {
 };
 
 const WS_BASE = getWsBase();
+
+export interface WebSocketConnectionSnapshot {
+  activeConnections: number;
+  connectedConnections: number;
+}
+
+let nextConnectionId = 0;
+const connectionStates = new Map<number, boolean>();
+const connectionStatusListeners = new Set<() => void>();
+let connectionSnapshot: WebSocketConnectionSnapshot = {
+  activeConnections: 0,
+  connectedConnections: 0,
+};
+
+const publishConnectionStatus = () => {
+  const activeConnections = connectionStates.size;
+  const connectedConnections = Array.from(connectionStates.values()).filter(Boolean).length;
+  if (
+    connectionSnapshot.activeConnections === activeConnections &&
+    connectionSnapshot.connectedConnections === connectedConnections
+  ) {
+    return;
+  }
+
+  connectionSnapshot = { activeConnections, connectedConnections };
+  connectionStatusListeners.forEach((listener) => listener());
+};
+
+const registerConnection = () => {
+  const connectionId = nextConnectionId++;
+  connectionStates.set(connectionId, false);
+  publishConnectionStatus();
+
+  return {
+    setConnected(connected: boolean) {
+      if (!connectionStates.has(connectionId) || connectionStates.get(connectionId) === connected) return;
+      connectionStates.set(connectionId, connected);
+      publishConnectionStatus();
+    },
+    unregister() {
+      if (connectionStates.delete(connectionId)) publishConnectionStatus();
+    },
+  };
+};
+
+const subscribeToConnectionStatus = (listener: () => void) => {
+  connectionStatusListeners.add(listener);
+  return () => connectionStatusListeners.delete(listener);
+};
+
+const getConnectionSnapshot = () => connectionSnapshot;
+
+export const useWebSocketConnectionStatus = () =>
+  useSyncExternalStore(subscribeToConnectionStatus, getConnectionSnapshot, getConnectionSnapshot);
 
 /* The event types the backend can push over WebSocket. */
 export type WSEventType = 
@@ -119,9 +177,11 @@ export const useWebSocket = (
     let reconnectAttempts = 0;
     let cleanupRequested = false;
     let currentWs: WebSocket | null = null;
+    const connection = registerConnection();
 
     const connect = () => {
       if (qrCodeGetterRef.current && !qrCode) {
+        connection.setConnected(false);
         setIsConnected(false);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
@@ -146,6 +206,7 @@ export const useWebSocket = (
             ws.close();
             return;
           }
+          connection.setConnected(true);
           setIsConnected(true);
           reconnectAttempts = 0; // Reset attempts on successful connection
         };
@@ -163,6 +224,7 @@ export const useWebSocket = (
 
         ws.onclose = () => {
           if (cleanupRequested || currentWs !== ws) return;
+          connection.setConnected(false);
           setIsConnected(false);
           const base = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
           const jitter = Math.floor(Math.random() * 3000);
@@ -177,6 +239,7 @@ export const useWebSocket = (
           // that is still in CONNECTING state to prevent the browser warning.
         };
       } catch (error) {
+        connection.setConnected(false);
         safeConsoleError("Failed to create WebSocket connection", error);
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
         reconnectAttempts++;
@@ -190,6 +253,7 @@ export const useWebSocket = (
     return () => {
       cleanupRequested = true;
       clearTimeout(reconnectTimeout);
+      connection.unregister();
       if (currentWs && currentWs.readyState !== WebSocket.CLOSED) {
         currentWs.onclose = null;
         currentWs.onerror = null;

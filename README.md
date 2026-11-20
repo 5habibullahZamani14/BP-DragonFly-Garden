@@ -150,9 +150,20 @@ the selected role in a browser. Each launcher checks the readiness endpoint and
 reuses a healthy server. If
 the server is not running, it installs missing dependencies, builds the frontend,
 starts the backend in the background, and waits for `/ready` before opening the
-browser. In production the backend serves the frontend on port 5000; there is no
+selected app screen. A local startup page opens first and shows progress while
+installation, the frontend build, and server readiness are in progress. It then
+opens the selected role automatically. If the server is already ready, the app
+opens directly. Startup failures are shown in the page with a log location. In
+production the backend serves the frontend on port 5000; there is no
 separate frontend server on port 3000. The launchers work from the repository's
 current folder and do not depend on a fixed `C:\` path.
+
+While the app is open, every role checks the server connection and shows a
+reconnecting or unavailable notice if service is interrupted. Live-update
+reconnection is reported separately from the server being unavailable. Keep the
+page open during an outage; do not refresh it or repeat an order or payment
+until the connection returns and you have confirmed whether the first attempt
+succeeded.
 
 To create Manager, Employee, and Customer desktop icons, double-click
 [`CREATE_APP_SHORTCUTS.bat`](./CREATE_APP_SHORTCUTS.bat) in the repository root.

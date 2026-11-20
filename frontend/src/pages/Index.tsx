@@ -20,6 +20,8 @@ import { LandingView } from "@/components/garden/LandingView";
 import { CustomerView } from "@/components/garden/CustomerView";
 import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
 import { ManagementView } from "@/components/garden/ManagementView";
+import { ServerConnectionNotice } from "@/components/ServerConnectionNotice";
+import { useServerConnectionNotice } from "@/lib/useServerConnectionNotice";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 const TABLE_QR_PATTERN = /^table-[a-z0-9_-]+$/i;
@@ -67,6 +69,7 @@ const Index = () => {
    * animation) even if two consecutive toasts have the same message.
    */
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string; key: number } | null>(null);
+  const connectionNotice = useServerConnectionNotice();
 
   const notify = useCallback((kind: "success" | "error", text: string) => {
     setToast({ kind, text, key: Date.now() });
@@ -83,7 +86,9 @@ const Index = () => {
   const qr = initial.qrCode;
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden">
+    <main className="relative min-h-screen overflow-x-clip">
+      <ServerConnectionNotice kind={connectionNotice} />
+
       {/*
        * GardenAtmosphere renders the floating leaf and flower particles in the
        * background. It is disabled for the staff views (payment and manager)
@@ -96,7 +101,9 @@ const Index = () => {
         <div
           key={toast.key}
           role="status"
-          className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 animate-slide-down"
+          className={`fixed left-1/2 z-[60] -translate-x-1/2 animate-slide-down ${
+            connectionNotice ? "top-40" : "top-4"
+          }`}
         >
           <div className={`flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-[var(--shadow-deep)] backdrop-blur ${
             toast.kind === "success"

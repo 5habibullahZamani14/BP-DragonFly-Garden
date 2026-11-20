@@ -1,7 +1,7 @@
 /*
  * vite.config.ts — Vite configuration for the BP Dragonfly Garden frontend.
  *
- * I created this file to set up the development server, proxy API endpoints,
+ * I created this file to set up the development server, proxy health and API endpoints,
  * and enable the componentTagger plugin for automatic component documentation.
  * The configuration uses a dynamic host (`::`) for IPv6 compatibility and runs on
  * port 3000. Proxies forward UI requests to the backend server (port 5000) for
@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => ({
       '/tables': 'http://127.0.0.1:5000',
       '/payments': 'http://127.0.0.1:5000',
       '/management': 'http://127.0.0.1:5000',
+      '/health': 'http://127.0.0.1:5000',
       '/menu-images': 'http://127.0.0.1:5000'
     }
   },

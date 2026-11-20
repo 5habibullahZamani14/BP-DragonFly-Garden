@@ -1,5 +1,13 @@
 export default {
   translation: {
+    "connection.retryingTitle": "Sambungan terganggu — sedang menyemak semula",
+    "connection.retryingBody": "Halaman ini akan kekal terbuka sementara kami menyemak pelayan.",
+    "connection.offlineTitle": "Pelayan restoran tidak tersedia. Sambungan semula sedang dicuba secara automatik.",
+    "connection.offlineBody": "Kekalkan halaman ini terbuka. Jangan muat semula atau hantar semula pesanan atau bayaran sehingga sambungan pulih dan statusnya dapat disahkan.",
+    "connection.liveUpdatesTitle": "Pelayan sudah dalam talian, tetapi kemas kini langsung sedang disambungkan semula.",
+    "connection.liveUpdatesBody": "Anda boleh teruskan, tetapi sesetengah kemas kini pesanan atau status mungkin lewat. Kemas kini langsung akan dipulihkan secara automatik.",
+    "connection.restoredTitle": "Sambungan ke pelayan telah pulih.",
+    "connection.restoredBody": "Kemas kini langsung mungkin masih disambungkan semula. Sahkan status pesanan atau bayaran terkini sebelum mencuba lagi.",
     "customer.browseMenu": "Lihat menu",
     "customer.onceYouSend": "Setelah anda membuat pesanan, anda boleh melihat perkembangannya di sini secara langsung.",
     "customer.followPlates": "Jejaki setiap hidangan dari dapur terus ke meja anda.",

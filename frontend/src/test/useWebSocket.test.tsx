@@ -1,7 +1,7 @@
 import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useCallback } from "react";
-import { useWebSocket } from "@/lib/useWebSocket";
+import { useWebSocket, useWebSocketConnectionStatus } from "@/lib/useWebSocket";
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -41,6 +41,11 @@ const TestWrapper = ({ qrCode }: TestWrapperProps) => {
 const ManagerWrapper = ({ enabled }: { enabled: boolean }) => {
   const connected = useWebSocket(["MENU_UPDATE"], () => {}, undefined, "manager", enabled);
   return <div data-testid="connected">{connected ? "true" : "false"}</div>;
+};
+
+const ConnectionStatusWrapper = () => {
+  const { activeConnections, connectedConnections } = useWebSocketConnectionStatus();
+  return <div data-testid="connection-status">{`${activeConnections}:${connectedConnections}`}</div>;
 };
 
 describe("useWebSocket", () => {
@@ -127,5 +132,41 @@ describe("useWebSocket", () => {
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(MockWebSocket.instances[0].url).toContain("role=manager");
     expect(MockWebSocket.instances[0].url).not.toContain("token=");
+  });
+
+  it("publishes active and connected socket counts for the shared connection notice", async () => {
+    const { rerender } = render(
+      <>
+        <ManagerWrapper enabled />
+        <ConnectionStatusWrapper />
+      </>
+    );
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(screen.getByTestId("connection-status").textContent).toBe("1:0");
+    const socket = MockWebSocket.instances[0];
+
+    await act(async () => {
+      socket.onopen?.();
+    });
+    expect(screen.getByTestId("connection-status").textContent).toBe("1:1");
+
+    await act(async () => {
+      socket.onclose?.();
+    });
+    expect(screen.getByTestId("connection-status").textContent).toBe("1:0");
+
+    await act(async () => {
+      rerender(
+        <>
+          <ManagerWrapper enabled={false} />
+          <ConnectionStatusWrapper />
+        </>
+      );
+    });
+    expect(screen.getByTestId("connection-status").textContent).toBe("0:0");
   });
 });

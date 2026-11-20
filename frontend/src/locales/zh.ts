@@ -1,5 +1,13 @@
 export default {
   translation: {
+    "connection.retryingTitle": "连接中断，正在重新检查",
+    "connection.retryingBody": "我们会保持此页面打开并再次检查服务器连接。",
+    "connection.offlineTitle": "餐厅服务器暂时不可用，正在自动尝试重新连接。",
+    "connection.offlineBody": "请保持此页面打开。连接恢复并确认状态前，请勿刷新页面或重复提交订单或付款。",
+    "connection.liveUpdatesTitle": "服务器已在线，但实时更新正在重新连接。",
+    "connection.liveUpdatesBody": "您可以继续操作，但部分订单或状态更新可能会延迟。系统会自动恢复实时更新。",
+    "connection.restoredTitle": "服务器连接已恢复。",
+    "connection.restoredBody": "实时更新可能仍在重新连接。重试前请先确认最新的订单或付款状态。",
     "customer.browseMenu": "浏览菜单",
     "customer.onceYouSend": "当您向厨房发送订单后，可以在这里实时查看进度。",
     "customer.followPlates": "从厨房到餐桌，全程追踪您的菜品。",

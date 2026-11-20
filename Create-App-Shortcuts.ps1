@@ -20,6 +20,11 @@ $powerShellPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\pow
 if (-not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
     throw "Windows PowerShell was not found at $powerShellPath."
 }
+$launcherScript = Join-Path $repositoryRoot 'Start the app in deployment form\Pc\Start-DragonFlyGarden.ps1'
+$statusServerScript = Join-Path $repositoryRoot 'Start the app in deployment form\Pc\Startup-Status-Server.cjs'
+if (-not (Test-Path -LiteralPath $statusServerScript -PathType Leaf)) {
+    throw "Startup status helper not found: $statusServerScript"
+}
 
 $applications = @(
     [pscustomobject]@{
@@ -58,7 +63,7 @@ foreach ($previousName in $previousShortcutNames) {
 $shell = New-Object -ComObject WScript.Shell
 try {
     foreach ($application in $applications) {
-        $launcherPath = Join-Path $repositoryRoot 'Start the app in deployment form\Pc\Start-DragonFlyGarden.ps1'
+        $launcherPath = $launcherScript
         $iconPath = Join-Path $repositoryRoot $application.Icon
 
         if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {

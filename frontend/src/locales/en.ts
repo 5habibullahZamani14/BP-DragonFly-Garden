@@ -1,5 +1,13 @@
 export default {
   translation: {
+    "connection.retryingTitle": "Connection interrupted — checking again",
+    "connection.retryingBody": "Your page is staying open while we check the server.",
+    "connection.offlineTitle": "The restaurant server is unavailable. Reconnecting automatically.",
+    "connection.offlineBody": "Keep this page open. Avoid refreshing or repeating an order or payment until the connection returns and you can confirm its status.",
+    "connection.liveUpdatesTitle": "The server is online, but live updates are reconnecting.",
+    "connection.liveUpdatesBody": "You can continue, but some order or status updates may be delayed. We will restore live updates automatically.",
+    "connection.restoredTitle": "The server connection is back.",
+    "connection.restoredBody": "Live updates may still be reconnecting. Confirm the latest order or payment status before retrying.",
     "customer.browseMenu": "Browse the menu",
     "customer.onceYouSend": "Once you send something to the kitchen, you'll see it growing here in real time.",
     "customer.followPlates": "Follow each plate from the kitchen all the way to your table.",

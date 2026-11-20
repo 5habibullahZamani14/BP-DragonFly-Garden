@@ -219,42 +219,9 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, [isLoggedIn]);
 
-  const isWebSocketConnected = useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
+  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
     if (isLoggedIn) loadNotifications();
   }, undefined, "manager", isLoggedIn);
-
-  const managerDisconnectTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!isLoggedIn) {
-      if (managerDisconnectTimer.current) {
-        clearTimeout(managerDisconnectTimer.current);
-        managerDisconnectTimer.current = null;
-      }
-      return;
-    }
-
-    if (isWebSocketConnected) {
-      if (managerDisconnectTimer.current) {
-        clearTimeout(managerDisconnectTimer.current);
-        managerDisconnectTimer.current = null;
-      }
-      return;
-    }
-
-    if (!managerDisconnectTimer.current) {
-      managerDisconnectTimer.current = window.setTimeout(() => {
-        notify("error", t("manager.serverDisconnected", "Server connection lost. You have been logged out."));
-        handleLogout();
-      }, 8000);
-    }
-
-    return () => {
-      if (managerDisconnectTimer.current) {
-        clearTimeout(managerDisconnectTimer.current);
-        managerDisconnectTimer.current = null;
-      }
-    };
-  }, [isLoggedIn, isWebSocketConnected, notify, t]);
 
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {

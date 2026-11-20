@@ -1,5 +1,13 @@
 export default {
   translation: {
+    "connection.retryingTitle": "انقطع الاتصال مؤقتًا — جارٍ التحقق مرة أخرى",
+    "connection.retryingBody": "سنُبقي هذه الصفحة مفتوحة أثناء فحص الخادم.",
+    "connection.offlineTitle": "خادم المطعم غير متاح. نحاول إعادة الاتصال تلقائيًا.",
+    "connection.offlineBody": "أبقِ هذه الصفحة مفتوحة. تجنّب تحديثها أو تكرار طلب أو دفعة حتى يعود الاتصال وتتحقق من حالتها.",
+    "connection.liveUpdatesTitle": "الخادم متصل، لكننا نعيد الاتصال بالتحديثات المباشرة.",
+    "connection.liveUpdatesBody": "يمكنك المتابعة، لكن قد تتأخر بعض تحديثات الطلبات أو الحالة. سنعيد التحديثات المباشرة تلقائيًا.",
+    "connection.restoredTitle": "عاد الاتصال بالخادم.",
+    "connection.restoredBody": "قد تظل التحديثات المباشرة قيد إعادة الاتصال. تحقّق من أحدث حالة للطلب أو الدفع قبل إعادة المحاولة.",
     "customer.browseMenu": "تصفح القائمة",
     "customer.onceYouSend": "بمجرد إرسال طلبك إلى المطبخ، ستراه يتقدم هنا في الوقت الفعلي.",
     "customer.followPlates": "تتبع كل طبق من المطبخ حتى يصل إلى طاولتك.",
