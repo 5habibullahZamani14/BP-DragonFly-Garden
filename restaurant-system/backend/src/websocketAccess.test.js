@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { clientShouldReceive } = require("./websocketAccess");
+const { clientShouldReceive, sanitizeCustomerRealtimeEvent } = require("./websocketAccess");
 
 const customer = (tableId = 7) => ({
   readyState: 1,
@@ -17,8 +17,36 @@ test("customers receive public data changes and only their own table events", ()
   assert.equal(clientShouldReceive(client, { type: "TABLE_UPDATE", payload: { id: 7 } }), true);
   assert.equal(clientShouldReceive(client, { type: "NEW_ORDER", payload: { table_id: 7 } }), true);
   assert.equal(clientShouldReceive(client, { type: "NEW_ORDER", payload: { table_id: 8 } }), false);
+  assert.equal(clientShouldReceive(client, { type: "ORDER_STATUS_UPDATE", payload: { table_id: 7 } }), true);
   assert.equal(clientShouldReceive(client, { type: "FEEDBACK_RESPONSE", payload: { table_id: 7 } }), true);
   assert.equal(clientShouldReceive(client, { type: "FEEDBACK_RESPONSE", payload: { table_id: 8 } }), false);
+  assert.equal(clientShouldReceive(client, { type: "NEW_PAYMENT", payload: { table_id: 7, payments: [{ amount_paid: 20 }] } }), false);
+  assert.equal(clientShouldReceive(client, { type: "MANAGER_SECRET_EVENT", payload: { table_id: 7 } }), false);
+});
+
+test("customer realtime order payloads exclude private fields and feedback details", () => {
+  const orderEvent = sanitizeCustomerRealtimeEvent({
+    type: "NEW_ORDER",
+    payload: {
+      id: 12,
+      table_id: 7,
+      customer_name: "Guest",
+      customer_phone: "555-0100",
+      qr_code: "table-secret",
+      items: [{ item_name: "Tea", notes: "private note" }],
+    },
+  });
+  assert.deepEqual(orderEvent.payload, {
+    id: 12,
+    table_id: 7,
+    items: [{ item_name: "Tea" }],
+  });
+
+  const feedbackEvent = sanitizeCustomerRealtimeEvent({
+    type: "FEEDBACK_RESPONSE",
+    payload: { table_id: 7, sender_name: "Guest", comment: "private feedback" },
+  });
+  assert.deepEqual(feedbackEvent.payload, { table_id: 7 });
 });
 
 test("payment counters receive workflow and public data updates, not manager-only events", () => {

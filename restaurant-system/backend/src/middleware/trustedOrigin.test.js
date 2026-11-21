@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { isTrustedOrigin } = require("./trustedOrigin");
+const { isTrustedOrigin, isMicrosoftConnectivityOrigin } = require("./trustedOrigin");
 
 test("trusted origin accepts the same host and explicitly configured frontends", () => {
   assert.equal(isTrustedOrigin("http://localhost:5000", "localhost:5000"), true);
@@ -13,4 +13,11 @@ test("development mode permits a Vite port on the same host only", () => {
   assert.equal(isTrustedOrigin("http://localhost:5173", "localhost:5000", [], true, "http"), true);
   assert.equal(isTrustedOrigin("http://attacker.local:5173", "localhost:5000", [], true, "http"), false);
   assert.equal(isTrustedOrigin("null", "localhost:5000", [], true, "http"), false);
+});
+
+test("Microsoft connectivity CORS exception matches only the exact service host", () => {
+  assert.equal(isMicrosoftConnectivityOrigin("http://www.msftconnecttest.com"), true);
+  assert.equal(isMicrosoftConnectivityOrigin("https://msftconnecttest.com"), true);
+  assert.equal(isMicrosoftConnectivityOrigin("https://msftconnecttest.com.attacker.test"), false);
+  assert.equal(isMicrosoftConnectivityOrigin("https://attacker-msftconnecttest.com"), false);
 });

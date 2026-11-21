@@ -10,6 +10,7 @@ const express = require("express");
 const { getMenu, getCategories, recomputePopular, getRecommendations, getItemOptions, getPatterns } = require("../controllers/menuController");
 
 const { asyncHandler } = require("../middleware/validation");
+const { requireManagerToken } = require("../middleware/jwt-auth");
 
 const router = express.Router();
 
@@ -35,10 +36,9 @@ router.get("/patterns", asyncHandler(getPatterns));
  * lookback period and marks them as popular in the database. This updates
  * the spotlight card shown at the top of the customer menu.
  * Body params: lookback_days (default 7), top (default 1, max 5).
- * This endpoint can be called on a schedule from any HTTP client — for example
- * a cron job on the Raspberry Pi running once per week.
+ * This changes menu state and is restricted to authenticated managers.
  */
-router.post("/popular/recompute", asyncHandler(recomputePopular));
+router.post("/popular/recompute", requireManagerToken, asyncHandler(recomputePopular));
 
 /*
  * GET /menu/recommendations

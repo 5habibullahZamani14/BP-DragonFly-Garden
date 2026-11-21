@@ -35,18 +35,83 @@ const { clearAuthCookie } = require("../middleware/authCookies");
 const { revokeStoredSession } = require("../services/sessionRevocation");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { randomUUID } = require("node:crypto");
+const { createHttpError } = require("../middleware/validation");
+const {
+  InvalidUploadedImageError,
+  sanitizeUploadedImage,
+} = require("../utils/imageSanitizer");
 
+const uploadTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-manager-upload-"));
+const menuImagesDir = path.join(__dirname, "../../../../frontend/public/menu-images");
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, "../../../../frontend/public/menu-images"));
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'menu-' + uniqueSuffix + path.extname(file.originalname));
-  }
+  destination: (_req, _file, cb) => cb(null, uploadTempDir),
+  filename: (_req, _file, cb) => cb(null, randomUUID()),
 });
-const upload = multer({ storage: storage });
+const imageUpload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)) cb(null, true);
+    else cb(createHttpError(400, "Only JPEG, PNG, WebP, or GIF images are allowed."));
+  },
+});
+const backupUpload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024 * 1024, files: 1 },
+});
+
+const removeUploadedFiles = async (filePaths) => {
+  await Promise.all(filePaths.map(async (filePath) => {
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.error("Could not remove a temporary management upload:", error.message);
+      }
+    }
+  }));
+};
+
+const sanitizeMenuImageUpload = async (req, res, next) => {
+  if (!req.file) return next();
+  const temporaryPath = req.file.path;
+  const sanitizedPaths = [];
+  res.on("finish", () => {
+    const cleanupPaths = [temporaryPath];
+    if (res.statusCode >= 400) cleanupPaths.push(...sanitizedPaths);
+    void removeUploadedFiles(cleanupPaths);
+  });
+
+  try {
+    const sanitized = await sanitizeUploadedImage(temporaryPath, menuImagesDir);
+    sanitizedPaths.push(sanitized.path);
+    req.file.filename = sanitized.filename;
+    req.file.path = sanitized.path;
+    req.file.destination = menuImagesDir;
+    req.file.mimetype = "image/webp";
+    req.file.size = (await fs.promises.stat(sanitized.path)).size;
+    await fs.promises.unlink(temporaryPath);
+  } catch (error) {
+    await removeUploadedFiles([temporaryPath, ...sanitizedPaths]);
+    if (error instanceof InvalidUploadedImageError) {
+      return next(createHttpError(400, "The uploaded file must be a valid JPEG, PNG, WebP, or GIF image."));
+    }
+    return next(error);
+  }
+
+  return next();
+};
+
+const cleanupBackupUpload = (req, res, next) => {
+  if (req.file?.path) {
+    res.on("finish", () => void removeUploadedFiles([req.file.path]));
+  }
+  next();
+};
 
 const router = express.Router();
 let managementBroadcast = null;
@@ -59,7 +124,7 @@ const setupShutdownHandler = (handler) => {
 const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 5, // limit each IP to 5 requests per windowMs
-  message: "Too many login attempts from this IP, please try again after 5 minutes"
+  message: "Too many authentication or password reset attempts from this IP. Please try again after 5 minutes."
 });
 
 const verifyToken = (req, res, next) => {
@@ -147,8 +212,8 @@ router.post("/employees/logout", requirePaymentToken, async (req, res) => {
  * Sends a password reset email to the manager's registered email address.
  * Requires the Resend API key to be configured in the backend .env file.
  */
-router.post("/send-reset-email", managementController.sendResetEmail);
-router.post("/manager-profile/reset", managementController.managerResetPassword);
+router.post("/send-reset-email", authLimiter, managementController.sendResetEmail);
+router.post("/manager-profile/reset", authLimiter, managementController.managerResetPassword);
 
 // ── Manager profile ───────────────────────────────────────────────────────────
 
@@ -181,14 +246,14 @@ router.get("/logs", managementController.getLogs);
 router.post("/menu", menuController.createMenuItem);
 router.put("/menu/:id", menuController.updateMenuItem);
 router.delete("/menu/:id", menuController.deleteMenuItem);
-router.post("/menu/:id/image", upload.single("image"), menuController.uploadMenuItemImage);
-router.post("/menu/:id/pattern", upload.single("image"), menuController.uploadMenuItemPatternImage);
+router.post("/menu/:id/image", imageUpload.single("image"), sanitizeMenuImageUpload, menuController.uploadMenuItemImage);
+router.post("/menu/:id/pattern", imageUpload.single("image"), sanitizeMenuImageUpload, menuController.uploadMenuItemPatternImage);
 router.put("/menu/:id/pattern", menuController.updateMenuItemPattern);
 router.post("/menu/apply-default-card-size", menuController.applyDefaultCardSize);
 
 // ── Pattern Assets Management ───────────────────────────────────────────────
 router.get("/patterns", menuController.getPatterns);
-router.post("/patterns", upload.single("image"), menuController.createPattern);
+router.post("/patterns", imageUpload.single("image"), sanitizeMenuImageUpload, menuController.createPattern);
 router.put("/patterns/:id", menuController.updatePattern);
 router.delete("/patterns/:id", menuController.deletePattern);
 
@@ -204,7 +269,7 @@ router.get("/repo-sections", menuController.getRepoSections);
 router.post("/repo-sections", menuController.createRepoSection);
 router.put("/repo-sections/:id", menuController.updateRepoSection);
 router.delete("/repo-sections/:id", menuController.deleteRepoSection);
-router.post("/repo-sections/:id/images", upload.single("image"), menuController.uploadRepoImage);
+router.post("/repo-sections/:id/images", imageUpload.single("image"), sanitizeMenuImageUpload, menuController.uploadRepoImage);
 router.delete("/repo-images/:id", menuController.deleteRepoImage);
 router.put("/menu/:id/repo-image", menuController.assignMenuItemRepoImage);
 
@@ -358,7 +423,12 @@ router.post("/backups/restore/cloud", managementController.restoreCloudBackup);
  * POST /management/backups/restore/upload
  * Restores the system from an uploaded backup file.
  */
-router.post("/backups/restore/upload", upload.single("file"), managementController.restoreUploadedBackup);
+router.post(
+  "/backups/restore/upload",
+  backupUpload.single("file"),
+  cleanupBackupUpload,
+  managementController.restoreUploadedBackup
+);
 
 // ── Customer feedback (manager only) ─────────────────────────────────────────
 
@@ -431,16 +501,14 @@ router.put("/menu-items/:itemId/modifiers/:groupId/default", setDefaultOption);
 
 /*
  * POST /management/system/check-version
- * Checks if a newer version of the app is available from GitHub.
- * Returns: { current_version, latest_version, is_up_to_date, needs_update }
+ * Checks the configured Git remote branch and reports update eligibility.
  */
 router.post("/system/check-version", managementController.checkSystemVersion);
 
 /*
  * POST /management/system/update
- * Performs a system update by pulling from GitHub, reinstalling dependencies,
- * rebuilding frontend, and restarting the service.
- * Returns: { success, message, logs? }
+ * Applies the exact reviewed fast-forward after staged tests and a frontend build.
+ * The backend process must be restarted separately after a successful update.
  */
 router.post("/system/update", managementController.performSystemUpdate);
 

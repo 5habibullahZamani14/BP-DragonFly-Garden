@@ -1,6 +1,5 @@
 import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useCallback } from "react";
 import { useWebSocket, useWebSocketConnectionStatus } from "@/lib/useWebSocket";
 
 class MockWebSocket {
@@ -28,18 +27,8 @@ class MockWebSocket {
   }
 }
 
-type TestWrapperProps = {
-  qrCode: string | null;
-};
-
-const TestWrapper = ({ qrCode }: TestWrapperProps) => {
-  const qrCodeGetter = useCallback(() => qrCode, [qrCode]);
-  const connected = useWebSocket(["MENU_UPDATE"], () => {}, qrCodeGetter);
-  return <div data-testid="connected">{connected ? "true" : "false"}</div>;
-};
-
 const ManagerWrapper = ({ enabled }: { enabled: boolean }) => {
-  const connected = useWebSocket(["MENU_UPDATE"], () => {}, undefined, "manager", enabled);
+  const connected = useWebSocket(["MENU_UPDATE"], () => {}, "manager", enabled);
   return <div data-testid="connected">{connected ? "true" : "false"}</div>;
 };
 
@@ -51,14 +40,14 @@ const ConnectionStatusWrapper = () => {
 const ReconnectWrapper = ({ onReconnect }: { onReconnect: () => void }) => {
   useWebSocket(["CONNECTION_RESTORED"], (event) => {
     if (event.type === "CONNECTION_RESTORED") onReconnect();
-  }, undefined, "manager");
+  }, "manager");
   return null;
 };
 
 const DataRefreshWrapper = ({ onRefresh }: { onRefresh: () => void }) => {
   useWebSocket(["DATA_REFRESH"], (event) => {
     if (event.type === "DATA_REFRESH") onRefresh();
-  }, undefined, "manager");
+  }, "manager");
   return null;
 };
 
@@ -76,60 +65,20 @@ describe("useWebSocket", () => {
     vi.clearAllMocks();
   });
 
-  it("waits for the customer QR code before connecting", async () => {
-    const { rerender } = render(<TestWrapper qrCode={null} />);
-
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(screen.getByTestId("connected").textContent).toBe("false");
-
-    await act(async () => {
-      vi.runOnlyPendingTimers();
-    });
-
-    expect(MockWebSocket.instances).toHaveLength(0);
-
-    await act(async () => {
-      rerender(<TestWrapper qrCode="table-1" />);
-      vi.runOnlyPendingTimers();
-    });
-
-    expect(MockWebSocket.instances).toHaveLength(1);
-    const instance = MockWebSocket.instances[0];
-    expect(instance.url).toContain("qr=table-1");
-
-    await act(async () => {
-      instance.onopen?.();
-    });
-
-    expect(screen.getByTestId("connected").textContent).toBe("true");
-  });
-
-  it("opens WebSocket immediately when a QR code is already available", async () => {
-    render(<TestWrapper qrCode="table-2" />);
+  it("uses a non-secret role hint for customer sockets without sending a QR credential", async () => {
+    const CustomerWrapper = () => {
+      const connected = useWebSocket(["MENU_UPDATE"], () => {}, "customer_waiter");
+      return <div data-testid="connected">{connected ? "true" : "false"}</div>;
+    };
+    render(<CustomerWrapper />);
 
     await act(async () => {
       vi.runOnlyPendingTimers();
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toContain("qr=table-2");
-  });
-
-  it("does not recreate the socket when the QR getter identity changes but the code stays the same", async () => {
-    const { rerender } = render(<TestWrapper qrCode="table-3" />);
-
-    await act(async () => {
-      vi.runOnlyPendingTimers();
-    });
-
-    expect(MockWebSocket.instances).toHaveLength(1);
-
-    await act(async () => {
-      rerender(<TestWrapper qrCode="table-3" />);
-      vi.runOnlyPendingTimers();
-    });
-
-    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toContain("role=customer_waiter");
+    expect(MockWebSocket.instances[0].url).not.toContain("qr=");
   });
 
   it("uses a non-secret role hint for cookie-authenticated sockets and waits until enabled", async () => {

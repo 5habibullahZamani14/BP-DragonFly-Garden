@@ -8,9 +8,12 @@
  */
 
 const QRCode = require("qrcode");
+const jwt = require("jsonwebtoken");
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
-const { pickPreferredLocalIp } = require("../utils/networkAddress");
+const { setAuthCookie, CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS } = require("../middleware/authCookies");
+const { getValidatedRequestBaseUrl, pickPreferredLocalIp } = require("../utils/networkAddress");
+const { generateTableQrCode, normalizeTableQrCode, hashTableQrCode } = require("../utils/tableQrCode");
 const { all, run, get: dbGet } = require("../utils/dbUtils");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
@@ -25,26 +28,9 @@ const normalizeUrl = (value) => {
  
 const normalizeBaseUrl = (value) => normalizeUrl(value).replace(/\/$/, "");
 
-const isLocalHostHeader = (host) =>
-  typeof host === "string" && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i.test(host);
-
 const getLocalNetworkAddress = () => pickPreferredLocalIp();
 
-const getServerBaseUrlFromRequest = (req) => {
-  const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
-  const hostHeader = req.get("host");
-  if (hostHeader && !isLocalHostHeader(hostHeader)) {
-    return `${proto}://${hostHeader}`;
-  }
-
-  const localIp = getLocalNetworkAddress();
-  const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
-  if (localIp) {
-    return `http://${localIp}:${port}`;
-  }
-
-  return null;
-};
+const getServerBaseUrlFromRequest = (req) => getValidatedRequestBaseUrl(req);
 
 const getRestaurantSetting = (key) =>
   new Promise((resolve, reject) => {
@@ -184,32 +170,46 @@ const getTables = async (req, res) => {
   return res.json(payload);
 };
 
-/*
- * getTableByQrCode is called by the frontend on startup when it detects
- * a table QR code in the URL, resolving the QR string to a DB table ID.
- */
-const getTableByQrCode = async (req, res) => {
+const createCustomerTableSession = async (req, res) => {
+  const qrCode = normalizeTableQrCode(req.body?.qr_code);
+  if (!qrCode) throw createHttpError(401, "Invalid table QR code. Please scan the code on your table.");
+
   const table = await get(
     `SELECT id, table_number, qr_code FROM tables WHERE qr_code = ?`,
-    [req.params.qrCode]
+    [qrCode]
   );
-  if (!table) throw createHttpError(404, "Table not found");
-  return res.json(await withQrCode(req, table));
+  if (!table || table.id === 999) throw createHttpError(404, "This table QR code is no longer valid.");
+  if (!process.env.JWT_SECRET) throw createHttpError(500, "Server misconfiguration: missing JWT secret");
+
+  const token = jwt.sign({
+    role: "customer_waiter",
+    action: "customer_table_session",
+    tableId: table.id,
+    qrHash: hashTableQrCode(table.qr_code),
+  }, process.env.JWT_SECRET, { expiresIn: CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS });
+  setAuthCookie(res, req, "customer_table", token, CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS);
+  return res.json({ id: table.id, table_number: table.table_number });
+};
+
+const getCurrentCustomerTable = async (req, res) => {
+  const table = await get("SELECT id, table_number FROM tables WHERE id = ?", [req.customerTableId]);
+  if (!table) throw createHttpError(404, "This table is no longer available.");
+  return res.json(table);
 };
 
 const createTable = async (req, res) => {
-  const { table_number, qr_code } = req.body;
-  if (!table_number || !qr_code) throw createHttpError(400, "Table number and QR code are required");
+  const { table_number } = req.body;
+  if (typeof table_number !== "string" || !table_number.trim()) {
+    throw createHttpError(400, "A table number is required");
+  }
 
-  const existing = await get("SELECT id FROM tables WHERE qr_code = ?", [qr_code]);
-  if (existing) throw createHttpError(400, "A table with this QR code already exists");
-
-  const result = await run(`INSERT INTO tables (table_number, qr_code) VALUES (?, ?)`, [table_number, qr_code]);
+  const qrCode = generateTableQrCode();
+  const result = await run(`INSERT INTO tables (table_number, qr_code) VALUES (?, ?)`, [table_number.trim(), qrCode]);
   const table = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [result.lastID]);
 
   await run(
     `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name) VALUES (?, ?, ?, ?, ?)`,
-    ["SYSTEM", "CREATE_TABLE", "Manager", result.lastID.toString(), table_number]
+    ["SYSTEM", "CREATE_TABLE", "Manager", result.lastID.toString(), table_number.trim()]
   );
 
   // Emit WebSocket event for table update
@@ -223,18 +223,20 @@ const createTable = async (req, res) => {
 
 const updateTable = async (req, res) => {
   const { id } = req.params;
-  const { table_number, qr_code } = req.body;
-  if (!table_number || !qr_code) throw createHttpError(400, "Table number and QR code are required");
+  const { table_number } = req.body;
+  if (typeof table_number !== "string" || !table_number.trim()) {
+    throw createHttpError(400, "A table number is required");
+  }
 
-  const existing = await get("SELECT id FROM tables WHERE qr_code = ? AND id != ?", [qr_code, id]);
-  if (existing) throw createHttpError(400, "A table with this QR code already exists");
-
-  await run(`UPDATE tables SET table_number = ?, qr_code = ? WHERE id = ?`, [table_number, qr_code, id]);
+  const existingTable = await get("SELECT id, qr_code FROM tables WHERE id = ?", [id]);
+  if (!existingTable || Number(id) === 999) throw createHttpError(404, "Table not found");
+  const qrCode = normalizeTableQrCode(existingTable.qr_code) || generateTableQrCode();
+  await run(`UPDATE tables SET table_number = ?, qr_code = ? WHERE id = ?`, [table_number.trim(), qrCode, id]);
   const table = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [id]);
 
   await run(
     `INSERT INTO grand_archive_logs (category, action, actor_name, target_id, target_name) VALUES (?, ?, ?, ?, ?)`,
-    ["SYSTEM", "UPDATE_TABLE", "Manager", id.toString(), table_number]
+    ["SYSTEM", "UPDATE_TABLE", "Manager", id.toString(), table_number.trim()]
   );
 
   // Emit WebSocket event for table update
@@ -266,4 +268,12 @@ const deleteTable = async (req, res) => {
   return res.json({ success: true, message: "Table deleted successfully" });
 };
 
-module.exports = { getTables, getTableByQrCode, createTable, updateTable, deleteTable, setBroadcast };
+module.exports = {
+  getTables,
+  createCustomerTableSession,
+  getCurrentCustomerTable,
+  createTable,
+  updateTable,
+  deleteTable,
+  setBroadcast,
+};

@@ -517,7 +517,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     if (loggedInEmployee) {
       loadData();
     }
-  }, undefined, "payment_counter", Boolean(loggedInEmployee));
+  }, "payment_counter", Boolean(loggedInEmployee));
 
   const handleProcessPayment = async () => {
     if (!selectedOrder || !paymentAmount || !selectedPaymentMethod || !loggedInEmployee) {

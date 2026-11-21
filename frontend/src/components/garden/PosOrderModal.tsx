@@ -75,7 +75,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
 
   useWebSocket(["TABLE_UPDATE", "DATA_REFRESH"], () => {
     void loadTables();
-  }, undefined, "payment_counter", isOpen);
+  }, "payment_counter", isOpen);
 
   useEffect(() => {
     if (isOpen) {
@@ -121,10 +121,18 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
 
   const confirmOptions = () => {
     if (!configuringItem) return;
-    
+    const groups = configuringItem.option_groups || [];
+    const missing = groups.filter(
+      group => group.is_required && !(selectedGroupOptions[group.id]?.length)
+    );
+    if (missing.length > 0) {
+      notify("error", `Please choose: ${missing.map(group => group.name).join(", ")}`);
+      return;
+    }
+
     const options: SelectedOption[] = [];
     Object.entries(selectedGroupOptions).forEach(([groupIdStr, opts]) => {
-      const group = (configuringItem.option_groups || []).find(g => g.id === parseInt(groupIdStr));
+      const group = groups.find(g => g.id === parseInt(groupIdStr));
       if (group) {
         opts.forEach(o => {
           options.push({

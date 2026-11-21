@@ -8,6 +8,7 @@
  */
 
 const { createHttpError } = require("./validation");
+const { TABLE_QR_PATTERN, normalizeTableQrCode } = require("../utils/tableQrCode");
 
 /*
  * Role constants. Using a plain object instead of a string enum keeps the
@@ -24,7 +25,7 @@ const ROLES = {
  * staff or manager authentication are explicitly rejected.
  */
 const QR_PATTERNS = {
-  TABLE_QR: /^table-\d+$/,
+  TABLE_QR: TABLE_QR_PATTERN,
   LEGACY_PRIVILEGED_QR: /^(payment-counter|manager)-[\w:]+$/
 };
 
@@ -33,11 +34,12 @@ const getRoleFromQRCode = (qrCode) => {
     return null;
   }
 
-  if (QR_PATTERNS.LEGACY_PRIVILEGED_QR.test(qrCode)) {
+  const normalizedQr = normalizeTableQrCode(qrCode);
+  if (!normalizedQr && QR_PATTERNS.LEGACY_PRIVILEGED_QR.test(qrCode)) {
     return null;
   }
 
-  if (QR_PATTERNS.TABLE_QR.test(qrCode)) {
+  if (normalizedQr) {
     return ROLES.CUSTOMER_WAITER;
   }
 
@@ -45,44 +47,23 @@ const getRoleFromQRCode = (qrCode) => {
 };
 
 /*
- * getTableNumberFromQR extracts the numeric table number from a table QR code.
- * For example, "table-3" returns 3. Returns null for any non-table QR code.
- * Controllers use this to know which table an order or request belongs to.
+ * Random QR credentials do not encode a table ID. Table ownership is resolved
+ * only after the backend validates the HttpOnly table-session cookie.
  */
-const getTableNumberFromQR = (qrCode) => {
-  if (!QR_PATTERNS.TABLE_QR.test(qrCode)) {
-    return null;
-  }
-
-  const match = qrCode.match(/table-(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
+const getTableNumberFromQR = (_qrCode) => {
+  return null;
 };
 
 /*
  * attachRoleMiddleware runs on every request before any route handler.
- * It reads the qr_code query parameter (sent by the frontend on every API
- * call), resolves the role, and stores both the role and the QR code string
- * on the request object. For table requests it also extracts and stores the
- * table number. Requests without a recognisable QR code get no role attached —
- * route-level guards then decide whether to reject or allow those requests.
+ * QR credentials may only bootstrap a table session; their presence in a
+ * query string never authenticates the request or grants a role.
  */
 const attachRoleMiddleware = (req, res, next) => {
   const qrCode = req.query.qr_code || req.session?.qr_code;
 
   if (qrCode) {
-    const role = getRoleFromQRCode(qrCode);
-
-    if (role) {
-      req.userRole = role;
-      req.qrCode = qrCode;
-
-      if (role === ROLES.CUSTOMER_WAITER) {
-        const tableNumber = getTableNumberFromQR(qrCode);
-        if (tableNumber) {
-          req.tableNumber = tableNumber;
-        }
-      }
-    }
+    req.qrCode = normalizeTableQrCode(qrCode);
   }
 
   next();
@@ -119,8 +100,8 @@ const requirePaymentCounter = requireRole(ROLES.PAYMENT_COUNTER);
  * descriptive for this specific case.
  */
 const requireCustomerOrWaiter = (req, res, next) => {
-  if (!req.userRole) {
-    return next(createHttpError(401, "User role not identified. Please scan a valid QR code."));
+  if (!Number.isSafeInteger(req.customerTableId)) {
+    return next(createHttpError(401, "Please scan the table QR code to continue."));
   }
 
   if (req.userRole !== ROLES.CUSTOMER_WAITER) {

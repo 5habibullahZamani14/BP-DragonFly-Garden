@@ -22,12 +22,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTables, createTable, updateTable, deleteTable, fetchSettings } from "@/lib/api";
 import type { TableRecord } from "@/lib/api";
 import { buildWifiQrValue } from "@/lib/hotspotQr";
-import { Grid3X3, Plus, QrCode, Edit2, Trash2, Printer, Download } from "lucide-react";
+import { Grid3X3, Plus, Edit2, Trash2, Printer, Download } from "lucide-react";
 import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
+
+const QR_QUIET_ZONE = 10;
+const QR_CODE_SIZE = 256;
 
 export const TablesTab = () => {
   const { t } = useTranslation();
@@ -36,15 +39,13 @@ export const TablesTab = () => {
   const hasLoadedTablesRef = useRef(false);
   const [isAdding, setIsAdding] = useState(false);
   const [addMode, setAddMode] = useState<"manual" | "auto" | null>(null); // "manual" or "auto"
-  const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });
-  const [autoTableToCreate, setAutoTableToCreate] = useState<{ table_number: string; qr_code: string } | null>(null);
+  const [newTable, setNewTable] = useState({ table_number: "" });
+  const [autoTableToCreate, setAutoTableToCreate] = useState<{ table_number: string } | null>(null);
   const [showAutoConfirm, setShowAutoConfirm] = useState(false);
   const [viewQRCodeTable, setViewQRCodeTable] = useState<TableRecord | null>(null);
   const [showHotspotQR, setShowHotspotQR] = useState(false);
   const [sortBy, setSortBy] = useState<"number" | "creation_order">("number");
   const qrPrintAreaRef = useRef<HTMLDivElement | null>(null);
-  const qrFrameRef = useRef<HTMLDivElement | null>(null);
-  const [qrSize, setQrSize] = useState(180);
 
   const handleDownloadQR = async () => {
     const element = qrPrintAreaRef.current;
@@ -69,7 +70,7 @@ export const TablesTab = () => {
   };
 
   // Function to find the next available table number, filling gaps from lowest
-  const getNextTableNumber = (): { number: number; name: string; qrCode: string } => {
+  const getNextTableNumber = (): { number: number; name: string } => {
     // Extract numeric table numbers from existing tables
     const existingNumbers = tables
       .filter(t => !/(takeaway|counter|to[- ]?go)/i.test(t.table_number))
@@ -91,15 +92,13 @@ export const TablesTab = () => {
     }
 
     const tableName = `Table ${nextNum}`;
-    const qrCode = `table-${nextNum}`;
-    return { number: nextNum, name: tableName, qrCode };
+    return { number: nextNum, name: tableName };
   };
 
   const handleAutoTableCreate = () => {
     const nextTable = getNextTableNumber();
     setAutoTableToCreate({
       table_number: nextTable.name,
-      qr_code: nextTable.qrCode,
     });
     setShowAutoConfirm(true);
   };
@@ -118,27 +117,6 @@ export const TablesTab = () => {
     }
   };
 
-  useEffect(() => {
-    const node = qrFrameRef.current;
-    if (!node) return;
-
-    const updateQrSize = (entry: ResizeObserverEntry) => {
-      const width = entry.contentRect.width - 24;
-      const height = entry.contentRect.height - 24;
-      const size = Math.max(120, Math.min(280, width, height));
-      setQrSize(Math.floor(size));
-    };
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        updateQrSize(entry);
-      }
-    });
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, [viewQRCodeTable, showHotspotQR]);
-
   const getSortedTables = (tablesToSort: TableRecord[]) => {
     const filtered = tablesToSort.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number));
 
@@ -153,7 +131,7 @@ export const TablesTab = () => {
   };
   
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
-  const [editTable, setEditTable] = useState({ table_number: "", qr_code: "" });
+  const [editTable, setEditTable] = useState({ table_number: "" });
   const [hotspotSsid, setHotspotSsid] = useState("");
   const [hotspotPassword, setHotspotPassword] = useState("");
   const [hotspotSecurity, setHotspotSecurity] = useState<"WPA" | "WEP" | "nopass">("WPA");
@@ -217,12 +195,12 @@ export const TablesTab = () => {
   };
 
   const handleCreate = async () => {
-    if (!newTable.table_number || !newTable.qr_code) return;
+    if (!newTable.table_number.trim()) return;
     try {
       await createTable(newTable);
       setIsAdding(false);
       setAddMode(null);
-      setNewTable({ table_number: "", qr_code: "" });
+      setNewTable({ table_number: "" });
       loadTables();
     } catch (e) {
       safeConsoleError("Table request failed", e);
@@ -230,7 +208,7 @@ export const TablesTab = () => {
   };
 
   const handleUpdate = async () => {
-    if (!editingTableId || !editTable.table_number || !editTable.qr_code) return;
+    if (!editingTableId || !editTable.table_number.trim()) return;
     try {
       await updateTable(editingTableId, editTable);
       setEditingTableId(null);
@@ -306,7 +284,7 @@ export const TablesTab = () => {
               </Button>
             </>
           ) : (
-            <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "", qr_code: "" }); }} variant="outline">
+            <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "" }); }} variant="outline">
               Close
             </Button>
           )}
@@ -319,19 +297,15 @@ export const TablesTab = () => {
             <CardTitle>Add Table Manually</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>{t("m.tableName")}</Label>
                 <Input value={newTable.table_number} onChange={(e) => setNewTable({...newTable, table_number: e.target.value})} placeholder="e.g. Table 12 or VIP Lounge" />
               </div>
-              <div className="space-y-2">
-                <Label>{t("m.qrId")}</Label>
-                <Input value={newTable.qr_code} onChange={(e) => setNewTable({...newTable, qr_code: e.target.value})} placeholder="e.g. table-12" />
-              </div>
             </div>
             <div className="flex gap-2 pt-4">
               <Button onClick={handleCreate} className="bg-green-600 hover:bg-green-700 text-white flex-1">{t("m.saveTable")}</Button>
-              <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "", qr_code: "" }); }} variant="outline" className="flex-1">{t("m.cancel")}</Button>
+              <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "" }); }} variant="outline" className="flex-1">{t("m.cancel")}</Button>
             </div>
           </CardContent>
         </Card>
@@ -343,14 +317,10 @@ export const TablesTab = () => {
             <CardTitle>{t("m.editTable")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>{t("m.tableName")}</Label>
                 <Input value={editTable.table_number} onChange={(e) => setEditTable({...editTable, table_number: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("m.qrId")}</Label>
-                <Input value={editTable.qr_code} onChange={(e) => setEditTable({...editTable, qr_code: e.target.value})} />
               </div>
             </div>
             <div className="flex gap-2 pt-4">
@@ -373,7 +343,7 @@ export const TablesTab = () => {
                   title={`Edit ${table.table_number}`}
                   onClick={() => {
                     setEditingTableId(table.id);
-                    setEditTable({ table_number: table.table_number, qr_code: table.qr_code });
+                    setEditTable({ table_number: table.table_number });
                   }}
                   className="p-1 text-blue-500 hover:bg-blue-50 rounded"
                 >
@@ -392,9 +362,6 @@ export const TablesTab = () => {
               )}
               <Grid3X3 className="h-8 w-8 text-green-200 mx-auto mb-2" />
               <div className="font-bold text-lg text-gray-800">{table.table_number}</div>
-              <div className="text-xs text-gray-500 mt-2 flex items-center justify-center gap-1">
-                <QrCode className="h-3 w-3" /> {table.qr_code}
-              </div>
             </CardContent>
           </Card>
         ))}
@@ -424,10 +391,7 @@ export const TablesTab = () => {
                     <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Table Name</p>
                     <p className="text-lg font-bold text-gray-900 mt-1">{autoTableToCreate.table_number}</p>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">QR Code ID</p>
-                    <p className="text-sm text-gray-800 mt-1 font-mono">{autoTableToCreate.qr_code}</p>
-                  </div>
+                  <p className="text-sm text-gray-700">A secure QR credential will be generated automatically when you create this table.</p>
                 </div>
               </div>
               <div className="flex gap-2 pt-4">
@@ -462,7 +426,7 @@ export const TablesTab = () => {
           setShowHotspotQR(false); // Reset to the customer ordering QR when closing
         }
       }}>
-        <DialogContent className="sm:max-w-[420px] w-full max-h-[calc(100vh-4rem)] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
+        <DialogContent className="sm:max-w-[420px] w-full !h-[80.5vh] !max-h-[80.5vh] border-none shadow-2xl overflow-hidden p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:bg-white [&>button]:rounded-full [&>button]:p-1 [&>button]:shadow-sm">
           {viewQRCodeTable && (
             <div className="max-h-[calc(100vh-4rem)] overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 p-4 flex flex-col items-center justify-start">
               <DialogHeader className="w-full text-center mb-3">
@@ -486,15 +450,17 @@ export const TablesTab = () => {
                       <h3 className="text-base font-bold text-gray-900">🌐 WiFi Network</h3>
                       <p className="text-xs text-gray-600 mt-0.5">{hotspotSsid}</p>
                     </div>
-                    <div ref={qrFrameRef} className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex flex-col items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
+                    <div className="relative min-w-0 overflow-hidden border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
                       <QRCode
                         value={hotspotQrValue}
-                        size={qrSize}
+                        size={QR_CODE_SIZE}
+                        quietZone={QR_QUIET_ZONE}
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"
                         qrStyle="dots"
                         eyeRadius={10}
+                        style={{ display: "block", maxWidth: "100%", height: "auto" }}
                       />
                       <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                         <div className="bg-white px-2 py-1 flex flex-col items-center justify-center border-none rounded-lg shadow-[0_0_8px_rgba(255,255,255,0.8)]">
@@ -510,15 +476,17 @@ export const TablesTab = () => {
                       <h3 className="text-base font-bold text-gray-900">🛒 Ordering Portal</h3>
                       <p className="text-xs text-gray-600 mt-0.5">Direct access to menu</p>
                     </div>
-                    <div ref={qrFrameRef} className="relative border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
-                      <QRCode 
-                        value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`} 
-                        size={qrSize} 
+                    <div className="relative min-w-0 overflow-hidden border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
+                      <QRCode
+                        value={viewQRCodeTable.ordering_url || `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/?qr=${viewQRCodeTable.qr_code}`}
+                        size={QR_CODE_SIZE}
+                        quietZone={QR_QUIET_ZONE}
                         ecLevel="H"
                         fgColor="#444444"
                         bgColor="#ffffff"
                         qrStyle="dots"
                         eyeRadius={10}
+                        style={{ display: "block", maxWidth: "100%", height: "auto" }}
                       />
                       
                       {/* The SCAN ME Center Badge */}
@@ -536,20 +504,22 @@ export const TablesTab = () => {
               </div>
 
               {/* Footer with Toggle and Download Buttons */}
-              <div className="w-full max-w-xs space-y-2">
+              <div className={`grid w-full max-w-xs gap-2 ${hotspotSsid && !hotspotLoading ? "grid-cols-2" : "grid-cols-1"}`}>
                 {hotspotSsid && !hotspotLoading && (
                   <Button 
                     onClick={() => setShowHotspotQR(!showHotspotQR)}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold py-1.5 text-sm"
+                    aria-label={showHotspotQR ? "Show ordering QR" : "Show Wi-Fi QR"}
+                    className="w-full min-w-0 whitespace-normal bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold px-1 py-1.5 text-xs leading-tight"
                   >
-                    {showHotspotQR ? "🛒 Show Ordering QR" : "🌐 Show Wi-Fi QR"}
+                    {showHotspotQR ? "🛒 Ordering QR" : "🌐 Wi-Fi QR"}
                   </Button>
                 )}
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold py-1.5 text-sm"
+                  aria-label={`Download ${showHotspotQR ? "Wi-Fi" : "ordering"} QR`}
+                  className="w-full min-w-0 whitespace-normal bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold px-1 py-1.5 text-xs leading-tight"
                   onClick={handleDownloadQR}
                 >
-                  <Download className="w-4 h-4 mr-2" /> Download {showHotspotQR ? "WiFi" : "Ordering"} QR
+                  <Download className="h-3.5 w-3.5 shrink-0 mr-1" /> Download QR
                 </Button>
               </div>
             </div>

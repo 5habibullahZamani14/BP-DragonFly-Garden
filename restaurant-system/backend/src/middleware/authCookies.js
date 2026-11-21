@@ -1,11 +1,13 @@
 const COOKIE_NAMES = Object.freeze({
   manager: "dfg_manager_session",
   payment_counter: "dfg_payment_session",
-  feedback: "dfg_feedback_session"
+  feedback: "dfg_feedback_session",
+  customer_table: "dfg_customer_table_session"
 });
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const FEEDBACK_SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
+const CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
 const isSecureRequest = req =>
   req.secure === true || req.headers?.["x-forwarded-proto"]?.split(",")[0]?.trim() === "https";
@@ -62,6 +64,7 @@ module.exports = {
   COOKIE_NAMES,
   SESSION_MAX_AGE_SECONDS,
   FEEDBACK_SESSION_MAX_AGE_SECONDS,
+  CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS,
   getAuthCookieValue,
   setAuthCookie,
   clearAuthCookie

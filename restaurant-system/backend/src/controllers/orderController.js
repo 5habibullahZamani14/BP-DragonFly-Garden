@@ -20,6 +20,7 @@
  */
 
 const db = require("../database/db");
+const { createHttpError } = require("../middleware/validation");
 
 /* Standard Promise wrappers for the three SQLite operations used in this file. */
 const all = (sql, params = []) =>
@@ -68,7 +69,6 @@ const fetchOrderById = async (orderId) => {
         o.id,
         o.table_id,
         t.table_number,
-        t.qr_code,
         o.status,
         o.customer_archived_at,
         o.total_price,
@@ -146,10 +146,10 @@ const createOrder = async (orderData) => {
     parent_order_id = null,
     order_remarks = null
   } = orderData;
-  const table = await get(`SELECT id, table_number, qr_code FROM tables WHERE id = ?`, [tableId]);
+  const table = await get(`SELECT id, table_number FROM tables WHERE id = ?`, [tableId]);
 
   if (!table) {
-    throw new Error("Table not found");
+    throw createHttpError(404, "Table not found");
   }
 
   // Smart Detection: if the table name implies takeaway, automatically set order_type
@@ -180,12 +180,75 @@ const createOrder = async (orderData) => {
     const menuItem = menuItemMap.get(item.menu_item_id);
 
     if (!menuItem) {
-      throw new Error(`Menu item ${item.menu_item_id} not found`);
+      throw createHttpError(404, "Menu item not found");
     }
 
     if (!menuItem.is_available) {
-      throw new Error(`${menuItem.name} is currently unavailable`);
+      throw createHttpError(409, `${menuItem.name} is currently unavailable`);
     }
+  }
+
+  const modifierAssignments = await all(
+    `SELECT ima.menu_item_id, ima.modifier_group_id, mg.name, mg.is_required, mg.is_multi_select
+     FROM item_modifier_assignments ima
+     JOIN modifier_groups mg ON mg.id = ima.modifier_group_id
+     WHERE ima.menu_item_id IN (${placeholders})`,
+    uniqueMenuItemIds
+  );
+  const assignmentsByItem = new Map();
+  const assignedGroupIds = [...new Set(modifierAssignments.map((row) => row.modifier_group_id))];
+  for (const assignment of modifierAssignments) {
+    const groups = assignmentsByItem.get(assignment.menu_item_id) || new Map();
+    groups.set(assignment.modifier_group_id, assignment);
+    assignmentsByItem.set(assignment.menu_item_id, groups);
+  }
+
+  const modifierOptions = assignedGroupIds.length
+    ? await all(
+        `SELECT id, group_id, label, price_delta FROM modifier_options
+         WHERE group_id IN (${assignedGroupIds.map(() => "?").join(",")})`,
+        assignedGroupIds
+      )
+    : [];
+  const modifierOptionsById = new Map(modifierOptions.map((option) => [option.id, option]));
+
+  for (const item of items) {
+    const menuItem = menuItemMap.get(item.menu_item_id);
+    const groups = assignmentsByItem.get(item.menu_item_id) || new Map();
+    const selectionsByGroup = new Map();
+    const canonicalOptions = [];
+
+    for (const selection of item.options || []) {
+      const group = groups.get(selection.groupId);
+      if (!group) {
+        throw createHttpError(400, `Selected modifier group is not available for ${menuItem.name}.`);
+      }
+
+      const option = modifierOptionsById.get(selection.optionId);
+      if (!option || option.group_id !== selection.groupId) {
+        throw createHttpError(400, `Selected modifier option is not valid for ${menuItem.name}.`);
+      }
+
+      const selectedCount = selectionsByGroup.get(selection.groupId) || 0;
+      if (!Number(group.is_multi_select) && selectedCount > 0) {
+        throw createHttpError(400, `${group.name} allows only one option.`);
+      }
+      selectionsByGroup.set(selection.groupId, selectedCount + 1);
+      canonicalOptions.push({
+        groupId: selection.groupId,
+        groupName: group.name,
+        optionId: option.id,
+        optionLabel: option.label,
+        priceDelta: Number(option.price_delta)
+      });
+    }
+
+    for (const group of groups.values()) {
+      if (group.is_required && !selectionsByGroup.has(group.modifier_group_id)) {
+        throw createHttpError(400, `Please select an option for ${group.name}.`);
+      }
+    }
+    item.options = canonicalOptions;
   }
 
   await run("BEGIN TRANSACTION");
@@ -386,7 +449,7 @@ const getOrder = async (orderId) => {
   const order = await fetchOrderById(orderId);
 
   if (!order) {
-    throw new Error("Order not found");
+    throw createHttpError(404, "Order not found");
   }
 
   return order;

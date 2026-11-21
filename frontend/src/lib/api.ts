@@ -54,19 +54,6 @@ export const API_BASE = (() => {
   }
 })();
 
-/*
- * apiUrl builds the full request URL. When a qrCode is provided it appends
- * ?qr_code=... so the backend's role detection middleware can identify the
- * caller's role. It handles both URLs that already have query parameters
- * (uses & separator) and clean URLs (uses ? separator).
- */
-const apiUrl = (path: string, qrCode?: string) => {
-  const base = `${API_BASE}${path}`;
-  if (!qrCode) return base;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${base}${sep}qr_code=${encodeURIComponent(qrCode)}`;
-};
-
 const getApiErrorMessage = (body: unknown): string | undefined => {
   if (typeof body === "string") return body;
   if (!body || typeof body !== "object") return undefined;
@@ -104,11 +91,8 @@ const clearLegacyBrowserTokens = () => {
 
 clearLegacyBrowserTokens();
 
-const safeFetch = async <T>(path: string, init?: RequestInit, qr?: string): Promise<T> => {
-  // Management and table-management endpoints must not use a QR argument for auth.
-  // Authentication is carried by role-scoped HttpOnly cookies, never JavaScript headers.
-  const isAdminRoute = path.startsWith("/management") || (path.startsWith("/tables") && !path.startsWith("/tables/qr"));
-  const url = isAdminRoute ? `${API_BASE}${path}` : apiUrl(path, qr);
+const safeFetch = async <T>(path: string, init?: RequestInit, _qr?: string): Promise<T> => {
+  const url = `${API_BASE}${path}`;
 
   const headers = new Headers(init?.headers);
   const finalInit: RequestInit = {
@@ -207,7 +191,7 @@ type CounterOrderPayload = {
     menu_item_id: number; 
     quantity: number; 
     notes?: string;
-    options?: { groupName: string; optionLabel: string; priceDelta: number }[];
+    options?: SelectedOption[];
   }[];
   silent?: boolean;
 };
@@ -307,7 +291,6 @@ export type TableRecord = {
 
 export type TablePayload = {
   table_number: string;
-  qr_code: string;
 };
 
 export type ManagerProfile = {
@@ -703,16 +686,16 @@ export type SelectedOption = {
 };
 
 
-/*
- * fetchTable looks up a table by QR code. If the server returns nothing
- * (unlikely in normal operation), it falls back to parsing the table number
- * from the QR code string directly so the UI always has a table reference.
- */
+/* Exchange the printed table QR credential for a session, or read the current session. */
 export const fetchTable = async (qr: string) => {
-  const data = await safeFetch<{ id: number; table_number: string }>(`/tables/qr/${encodeURIComponent(qr)}`);
-  if (data) return data;
-  const m = qr.match(/table-(\d+)/i);
-  return { id: m ? Number(m[1]) : 1, table_number: m ? `Table ${m[1]}` : "Table 1" };
+  if (/^table-[a-f0-9]{64}$/i.test(qr)) {
+    return safeFetch<{ id: number; table_number: string }>("/tables/qr/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qr_code: qr }),
+    });
+  }
+  return safeFetch<{ id: number; table_number: string }>("/tables/current");
 };
 
 // ── Payment counter ───────────────────────────────────────────────────────────
@@ -825,7 +808,10 @@ export const createCounterOrder = async (
 
 export const placeOrder = async (
   qr: string,
-  body: { table_id: number; items: { menu_item_id: number; quantity: number; notes?: string }[] }
+  body: {
+    table_id: number;
+    items: { menu_item_id: number; quantity: number; notes?: string; options?: SelectedOption[] }[];
+  }
 ): Promise<Order> => {
   return await safeFetch<Order>("/orders", {
     method: "POST",
@@ -930,8 +916,8 @@ export type FeedbackAnalysisResponse = {
   analysis_method?: string;
 };
 
-export const submitFeedback = async (qr: string, formData: FormData): Promise<FeedbackSubmitResult> => {
-  const url = apiUrl("/orders/feedback", qr);
+export const submitFeedback = async (_qr: string, formData: FormData): Promise<FeedbackSubmitResult> => {
+  const url = `${API_BASE}/orders/feedback`;
   const res = await fetch(url, { method: "POST", body: formData, credentials: "include" });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -1374,6 +1360,9 @@ export const downloadBackup = async (filename: string): Promise<void> => {
 
 export interface VersionCheckResult {
   version: string;
+  branch: string;
+  current_commit: string;
+  latest_commit: string;
   version_details: {
     major: number;
     minor: number;
@@ -1382,13 +1371,20 @@ export interface VersionCheckResult {
     beta: boolean;
   };
   needs_update: boolean;
+  can_update: boolean;
+  working_tree_clean: boolean;
+  environment_files_unchanged: boolean;
+  trusted_commit_signature: boolean;
+  reason: string;
 }
 
 export interface UpdateResult {
   success: boolean;
   message: string;
-  version?: string;
-  logs?: string;
+  commit?: string;
+  restart_required?: boolean;
+  restart_instructions?: string;
+  logs?: string[];
 }
 
 export const checkSystemVersion = async (): Promise<VersionCheckResult> =>
@@ -1397,11 +1393,11 @@ export const checkSystemVersion = async (): Promise<VersionCheckResult> =>
     headers: { "Content-Type": "application/json" },
   });
 
-export const performSystemUpdate = async (impact: 'major' | 'minor' | 'patch' | 'build' = 'build'): Promise<UpdateResult> =>
+export const performSystemUpdate = async (targetCommit: string): Promise<UpdateResult> =>
   safeFetch<UpdateResult>("/management/system/update", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ impact }),
+    body: JSON.stringify({ targetCommit }),
   });
 
 export const requestSystemShutdown = async (): Promise<{ success: boolean; message: string }> =>

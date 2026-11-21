@@ -247,7 +247,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         : `Printer submission${orderLabel} could not be started. Check Printer Management before trying again.`;
       notify("error", notification);
     }
-  }, undefined, "manager", isLoggedIn);
+  }, "manager", isLoggedIn);
 
   const handleLogin = async () => {
     if (!loginId.trim() || !loginPassword.trim()) {

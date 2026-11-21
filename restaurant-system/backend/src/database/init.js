@@ -39,6 +39,7 @@
  * constant named "db" so it can be used throughout this file.
  */
 const db = require("./db");
+const { generateTableQrCode, normalizeTableQrCode } = require("../utils/tableQrCode");
 let printerJobsReconciled = false;
 
 /*
@@ -52,9 +53,9 @@ let printerJobsReconciled = false;
  * callbacks. It resolves with the SQLite statement context (which has
  * lastID and changes) on success, or rejects with the error on failure.
  */
-const run = (sql) =>
+const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
-    db.run(sql, (err) => {
+    db.run(sql, params, (err) => {
       if (err) {
         reject(err);
         return;
@@ -698,12 +699,24 @@ const initializeDatabase = async () => {
     `);
   }
 
-  /* Make sure every table row has a valid QR code. */
-  await run(`
-    UPDATE tables
-    SET qr_code = 'table-' || id
-    WHERE qr_code IS NULL OR TRIM(qr_code) = ''
-  `);
+  /* Replace predictable/legacy table QR values with random credentials. */
+  const physicalTables = await all("SELECT id, qr_code FROM tables WHERE id != 999");
+  let rotatedTableQrCount = 0;
+  for (const table of physicalTables) {
+    if (normalizeTableQrCode(table.qr_code)) continue;
+    await run("UPDATE tables SET qr_code = ? WHERE id = ?", [generateTableQrCode(), table.id]);
+    rotatedTableQrCount += 1;
+  }
+  if (rotatedTableQrCount > 0) {
+    await run(
+      `INSERT INTO restaurant_settings (key, value) VALUES ('table_qr_migration_notice', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [JSON.stringify({ rotatedCount: rotatedTableQrCount, migratedAt: new Date().toISOString() })]
+    );
+    console.warn(
+      `Replaced ${rotatedTableQrCount} legacy table QR code(s). Reprint the QR stickers before accepting customer orders.`
+    );
+  }
 
   /* Ensure the virtual 'Counter Orders' table exists for POS takeaway/pickup/delivery. */
   await run(`

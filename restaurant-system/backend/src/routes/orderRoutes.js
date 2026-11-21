@@ -17,6 +17,8 @@ const express = require("express");
 const path = require("path");
 const multer = require("multer");
 const fs = require("fs");
+const os = require("os");
+const { randomUUID } = require("node:crypto");
 const db = require("../database/db");
 const feedbackController = require("../controllers/feedbackController");
 const {
@@ -36,11 +38,20 @@ const {
   validateOrderQuery,
   validatePaymentCreation,
 } = require("../middleware/validation");
-const { requirePaymentCounter, ROLES } = require("../middleware/role-based-access");
-const { verifyJwtToken, requirePaymentToken } = require("../middleware/jwt-auth");
+const {
+  requirePaymentToken,
+  requireStaffToken,
+  requireCustomerTableToken,
+  requireCustomerOrPaymentToken,
+} = require("../middleware/jwt-auth");
 const { createHttpError } = require("../middleware/validation");
+const { removeCustomerPrivateFields } = require("../websocketAccess");
 const printerService = require("../services/printerService");
 const { printCopies } = require("../services/receiptCopies");
+const {
+  InvalidUploadedImageError,
+  sanitizeUploadedImage,
+} = require("../utils/imageSanitizer");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -74,30 +85,86 @@ const logArchive = async (action, targetId, targetName, details = {}, actor = {}
   );
 };
 
+const customerVisibleOrder = (order) => {
+  if (!order) return order;
+  return removeCustomerPrivateFields(order);
+};
+
+const customerVisibleOrders = (orders) =>
+  Array.isArray(orders) ? orders.map(customerVisibleOrder) : orders;
+
+const ensureCustomerOwnsOrder = async (req, orderId) => {
+  if (!req.customerTableId) return;
+  const order = await get("SELECT table_id FROM orders WHERE id = ?", [orderId]);
+  if (!order || Number(order.table_id) !== req.customerTableId) {
+    throw createHttpError(404, "Order not found");
+  }
+};
+
 /*
  * orderRoutes is a factory function rather than a plain router export.
  * This pattern lets me close over the broadcast function so every route
  * handler in this file can call it without needing to import it separately.
  */
 const feedbackImagesDir = path.join(__dirname, "../../../../frontend/public/feedback-images");
+const feedbackTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-feedback-upload-"));
 if (!fs.existsSync(feedbackImagesDir)) {
   fs.mkdirSync(feedbackImagesDir, { recursive: true });
 }
 
 const feedbackUpload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, feedbackImagesDir),
-    filename: (_req, file, cb) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `fb-${unique}${path.extname(file.originalname)}`);
-    },
+    destination: (_req, _file, cb) => cb(null, feedbackTempDir),
+    filename: (_req, _file, cb) => cb(null, randomUUID()),
   }),
   limits: { fileSize: 5 * 1024 * 1024, files: 5 },
   fileFilter: (_req, file, cb) => {
     if (/^image\/(jpeg|jpg|png|webp|gif)$/i.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Only JPEG, PNG, WebP, or GIF images are allowed."));
+    else cb(createHttpError(400, "Only JPEG, PNG, WebP, or GIF images are allowed."));
   },
 });
+
+const removeUploadedFiles = async (filePaths) => {
+  await Promise.all(filePaths.map(async (filePath) => {
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        console.error("Could not remove a feedback upload:", error.message);
+      }
+    }
+  }));
+};
+
+const sanitizeFeedbackUploads = async (req, res, next) => {
+  const uploads = req.files || [];
+  const temporaryPaths = uploads.map((file) => file.path);
+  const sanitizedPaths = [];
+  res.on("finish", () => {
+    if (res.statusCode >= 400) void removeUploadedFiles(sanitizedPaths);
+  });
+
+  try {
+    for (const [index, file] of uploads.entries()) {
+      const sanitized = await sanitizeUploadedImage(file.path, feedbackImagesDir);
+      sanitizedPaths.push(sanitized.path);
+      file.filename = sanitized.filename;
+      file.path = sanitized.path;
+      file.destination = feedbackImagesDir;
+      file.mimetype = "image/webp";
+      file.size = (await fs.promises.stat(sanitized.path)).size;
+      await fs.promises.unlink(temporaryPaths[index]);
+    }
+  } catch (error) {
+    await removeUploadedFiles([...temporaryPaths, ...sanitizedPaths]);
+    if (error instanceof InvalidUploadedImageError) {
+      return next(createHttpError(400, "Each feedback attachment must be a valid JPEG, PNG, WebP, or GIF image."));
+    }
+    return next(error);
+  }
+
+  next();
+};
 
 const orderRoutes = (broadcast) => {
   const router = express.Router();
@@ -109,9 +176,18 @@ const orderRoutes = (broadcast) => {
    * NEW_ORDER event is broadcast over WebSocket so the relevant front-end
    * views update in real time without polling.
    */
-  router.post("/", validateOrderCreation, asyncHandler(async (req, res) => {
-    if (req.userRole !== ROLES.CUSTOMER_WAITER) {
-      await verifyJwtToken(req, [ROLES.PAYMENT_COUNTER]);
+  router.post("/", requireCustomerOrPaymentToken, validateOrderCreation, asyncHandler(async (req, res) => {
+    if (req.customerTableId) {
+      if (Number(req.body.table_id) !== req.customerTableId) {
+        throw createHttpError(403, "Orders can only be placed for the table whose QR code was scanned.");
+      }
+      if (req.body.parent_order_id) {
+        const parent = await get(
+          "SELECT id FROM orders WHERE id = ? AND table_id = ? AND payment_status = 'unpaid'",
+          [req.body.parent_order_id, req.customerTableId]
+        );
+        if (!parent) throw createHttpError(404, "The order to add to was not found for this table.");
+      }
     }
 
     const { order, isAddOn, newItems } = await createOrder(req.body);
@@ -154,15 +230,15 @@ const orderRoutes = (broadcast) => {
       })();
     }
 
-    res.status(201).json(order);
+    res.status(201).json(req.customerTableId ? customerVisibleOrder(order) : order);
   }));
 
   /*
    * POST /orders/call-waiter
    * Customer presses "Call Staff" button. Broadcasts CALL_WAITER event to staff.
    */
-  router.post("/call-waiter", asyncHandler(async (req, res) => {
-    const { table_id } = req.body;
+  router.post("/call-waiter", requireCustomerTableToken, asyncHandler(async (req, res) => {
+    const table_id = req.customerTableId;
     const table = await get("SELECT id, table_number FROM tables WHERE id = ?", [table_id]);
     const tableNumber = table?.table_number || `Table ${table_id}`;
     const result = await run(
@@ -194,8 +270,22 @@ const orderRoutes = (broadcast) => {
 
   router.post(
     "/feedback",
+    requireCustomerOrPaymentToken,
     feedbackUpload.array("images", 5),
-    asyncHandler(feedbackController.submitFeedback),
+    sanitizeFeedbackUploads,
+    asyncHandler(async (req, res, next) => {
+      if (!req.customerTableId) return feedbackController.submitFeedback(req, res, next);
+      const requestedOrderId = req.body?.order_id;
+      if (requestedOrderId) {
+        const order = await get("SELECT table_id FROM orders WHERE id = ?", [requestedOrderId]);
+        if (!order || Number(order.table_id) !== req.customerTableId) {
+          await Promise.all((req.files || []).map((file) => fs.promises.unlink(file.path)));
+          throw createHttpError(404, "Order not found for this table.");
+        }
+      }
+      req.body.table_id = String(req.customerTableId);
+      return feedbackController.submitFeedback(req, res, next);
+    }),
   );
   router.post("/feedback/mine", asyncHandler(feedbackController.fetchMyFeedback));
   router.get("/feedback/:id", asyncHandler(feedbackController.getMyFeedbackById));
@@ -283,7 +373,7 @@ const orderRoutes = (broadcast) => {
    * Returns orders filtered by optional query parameters: table_id and status.
    * Used by the management dashboard to inspect active orders.
    */
-  router.get("/", validateOrderQuery, asyncHandler(async (req, res) => {
+  router.get("/", requireStaffToken, validateOrderQuery, asyncHandler(async (req, res) => {
     res.json(await getOrders(req.query));
   }));
 
@@ -293,8 +383,12 @@ const orderRoutes = (broadcast) => {
    * The customer view calls this on load to restore any orders that were placed
    * earlier in the same visit, so the customer can continue tracking them.
    */
-  router.get("/by-table/:tableId", asyncHandler(async (req, res) => {
-    res.json(await getActiveTableOrders(req.params.tableId));
+  router.get("/by-table/:tableId", requireCustomerOrPaymentToken, asyncHandler(async (req, res) => {
+    if (req.customerTableId && Number(req.params.tableId) !== req.customerTableId) {
+      throw createHttpError(404, "Table not found");
+    }
+    const orders = await getActiveTableOrders(req.params.tableId);
+    res.json(req.customerTableId ? customerVisibleOrders(orders) : orders);
   }));
 
   /*
@@ -303,8 +397,11 @@ const orderRoutes = (broadcast) => {
    * These are stored separately so the customer can optionally view their
    * order history for the current visit.
    */
-  router.get("/customer-archived/:tableId", asyncHandler(async (req, res) => {
-    res.json(await getCustomerArchivedOrdersForTable(req.params.tableId));
+  router.get("/customer-archived/:tableId", requireCustomerTableToken, asyncHandler(async (req, res) => {
+    if (Number(req.params.tableId) !== req.customerTableId) {
+      throw createHttpError(404, "Table not found");
+    }
+    res.json(customerVisibleOrders(await getCustomerArchivedOrdersForTable(req.params.tableId)));
   }));
 
   /*
@@ -312,8 +409,11 @@ const orderRoutes = (broadcast) => {
    * Returns a single order by its ID with all its items and current status.
    * The customer view calls this periodically to refresh their order's status.
    */
-  router.get("/:id", validateOrderIdParam, asyncHandler(async (req, res) => {
-    res.json(await getOrder(req.params.id));
+  router.get("/:id", requireCustomerOrPaymentToken, validateOrderIdParam, asyncHandler(async (req, res) => {
+    await ensureCustomerOwnsOrder(req, req.params.id);
+    const order = await getOrder(req.params.id);
+    if (!order) throw createHttpError(404, "Order not found");
+    res.json(req.customerTableId ? customerVisibleOrder(order) : order);
   }));
 
   /*
@@ -322,10 +422,11 @@ const orderRoutes = (broadcast) => {
    * for the kitchen and payment counter but no longer appears in the customer's
    * active order tracker.
    */
-  router.patch("/:id/customer-archive", asyncHandler(async (req, res) => {
+  router.patch("/:id/customer-archive", requireCustomerTableToken, validateOrderIdParam, asyncHandler(async (req, res) => {
+    await ensureCustomerOwnsOrder(req, req.params.id);
     const archivedOrder = await customerArchiveOrder(req.params.id);
     if (archivedOrder) broadcast({ type: "ORDER_STATUS_UPDATE", payload: archivedOrder });
-    res.json(archivedOrder);
+    res.json(customerVisibleOrder(archivedOrder));
   }));
 
   /*

@@ -24,9 +24,10 @@ const { redactSensitiveData, redactText } = require("./secretRedaction");
 const MAX_ORDER_ITEMS = 25;
 const MAX_ITEM_QUANTITY = 99;
 const MAX_NOTES_LENGTH = 250;
+const MAX_SELECTED_OPTIONS_PER_ITEM = 50;
+const ORDER_TYPES = ["DINE_IN", "TAKEAWAY", "PICKUP", "DELIVERY", "COUNTER"];
+const { normalizeTableQrCode } = require("../utils/tableQrCode");
 
-/* Pattern used by validateQrCodeParam to verify table QR codes in URL params. */
-const QR_CODE_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /*
  * createHttpError builds an Error object with a statusCode property.
@@ -88,7 +89,7 @@ const sanitizeNotes = (notes) => {
 const toPositiveInteger = (value) => {
   const numericValue = Number(value);
 
-  if (!Number.isInteger(numericValue) || numericValue <= 0) {
+  if (!Number.isSafeInteger(numericValue) || numericValue <= 0) {
     return null;
   }
 
@@ -104,10 +105,17 @@ const toPositiveInteger = (value) => {
  */
 const validateOrderCreation = (req, res, next) => {
   const tableId = toPositiveInteger(req.body?.table_id);
+  const rawParentOrderId = req.body?.parent_order_id;
+  const hasParentOrderId = rawParentOrderId !== undefined && rawParentOrderId !== null && rawParentOrderId !== "";
+  const parentOrderId = hasParentOrderId ? toPositiveInteger(rawParentOrderId) : null;
   const items = req.body?.items;
 
   if (!tableId) {
     return next(createHttpError(400, "Invalid table_id. Must be a positive integer."));
+  }
+
+  if (hasParentOrderId && !parentOrderId) {
+    return next(createHttpError(400, "Invalid parent_order_id. Must be a positive integer."));
   }
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -145,17 +153,25 @@ const validateOrderCreation = (req, res, next) => {
  
       const notes = sanitizeNotes(item?.notes);
       
-      const options = Array.isArray(item?.options)
-        ? item.options
-            .map(o => ({
-              groupId: toPositiveInteger(o?.groupId),
-              groupName: String(o?.groupName || "").trim(),
-              optionId: toPositiveInteger(o?.optionId),
-              optionLabel: String(o?.optionLabel || "").trim(),
-              priceDelta: Number(o?.priceDelta || 0)
-            }))
-            .filter(o => o.groupId && o.optionId)
-        : [];
+      if (item?.options !== undefined && !Array.isArray(item.options)) {
+        throw createHttpError(400, `Item ${index + 1}: options must be an array.`);
+      }
+      const rawOptions = item?.options || [];
+      if (rawOptions.length > MAX_SELECTED_OPTIONS_PER_ITEM) {
+        throw createHttpError(400, `Item ${index + 1}: too many selected options.`);
+      }
+      const options = rawOptions.map((option, optionIndex) => {
+        const groupId = toPositiveInteger(option?.groupId);
+        const optionId = toPositiveInteger(option?.optionId);
+        if (!groupId || !optionId) {
+          throw createHttpError(400, `Item ${index + 1}, option ${optionIndex + 1}: valid groupId and optionId are required.`);
+        }
+        return { groupId, optionId };
+      });
+      const optionIds = new Set(options.map((option) => `${option.groupId}:${option.optionId}`));
+      if (optionIds.size !== options.length) {
+        throw createHttpError(400, `Item ${index + 1}: duplicate options are not allowed.`);
+      }
       
       const optionsKey = options
         .map(o => `${o.groupId}_${o.optionId}`)
@@ -192,14 +208,18 @@ const validateOrderCreation = (req, res, next) => {
     }
  
     /* Replace the raw request body with the cleaned, validated version. */
+    const orderType = String(req.body?.order_type || "DINE_IN").trim().toUpperCase();
+    if (!ORDER_TYPES.includes(orderType)) {
+      throw createHttpError(400, `order_type must be one of: ${ORDER_TYPES.join(", ")}.`);
+    }
     req.body = {
       table_id: tableId,
-      order_type: req.body?.order_type || 'DINE_IN',
+      order_type: orderType,
       customer_name: req.body?.customer_name || null,
       customer_phone: req.body?.customer_phone || null,
       collection_time: req.body?.collection_time || null,
       delivery_address: req.body?.delivery_address || null,
-      parent_order_id: req.body?.parent_order_id ? toPositiveInteger(req.body.parent_order_id) : null,
+      parent_order_id: parentOrderId,
       items: [...aggregatedItems.values()]
     };
 
@@ -292,14 +312,12 @@ const validateOrderQuery = (req, res, next) => {
 };
 
 /*
- * validateQrCodeParam validates the :qrCode URL parameter used on the
- * GET /tables/qr/:qrCode route. It only accepts the table-N format because
- * that is the only QR code type that maps to a physical table lookup.
+ * validateQrCodeParam accepts only random table QR credentials. Customer
+ * sessions are currently bootstrapped with POST /tables/qr/session instead.
  */
 const validateQrCodeParam = (req, res, next) => {
-  const qrCode = typeof req.params?.qrCode === "string" ? req.params.qrCode.trim().toLowerCase() : "";
-
-  if (!QR_CODE_PATTERN.test(qrCode)) {
+  const qrCode = normalizeTableQrCode(req.params?.qrCode);
+  if (!qrCode) {
     return next(createHttpError(400, "Invalid QR code format."));
   }
 

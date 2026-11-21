@@ -92,7 +92,31 @@ type CustomerTab = typeof TABS[number];
 
 type Notify = (kind: "success" | "error", text: string) => void;
 
-interface Props { qrCode: string; notify: Notify; }
+interface Props { qrCode: string; tableStorageKey: string; notify: Notify; }
+
+const migrateCustomerStorage = (fromKey: string, toKey: string) => {
+  if (!fromKey || fromKey === toKey) return;
+  for (const prefix of [
+    "dfg_cart_",
+    "dfg_history_",
+    "dfg_celebrated_",
+    "dfg_tab_",
+    "dfg_archived_",
+    "dfg_show_archived_",
+    "dfg_feedback_refs_",
+  ]) {
+    const from = `${prefix}${fromKey}`;
+    const to = `${prefix}${toKey}`;
+    if (sessionStorage.getItem(from) !== null && sessionStorage.getItem(to) === null) {
+      sessionStorage.setItem(to, sessionStorage.getItem(from) || "");
+    }
+  }
+  const from = `dfg_seen_feedback_replies_${fromKey}`;
+  const to = `dfg_seen_feedback_replies_${toKey}`;
+  if (localStorage.getItem(from) !== null && localStorage.getItem(to) === null) {
+    localStorage.setItem(to, localStorage.getItem(from) || "");
+  }
+};
 
 type SelectedOption = { groupId: number; groupName: string; optionId: number; optionLabel: string; priceDelta: number; };
 type CartLine = {
@@ -132,14 +156,15 @@ const CAT_ICON: Record<string, typeof Soup> = {
   Beverages: Coffee,
 };
 
-export const CustomerView = ({ qrCode, notify }: Props) => {
+export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
   const { t, i18n } = useTranslation();
+  const [customerStorageKey, setCustomerStorageKey] = useState(tableStorageKey || qrCode);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>(() => {
-    try { return JSON.parse(sessionStorage.getItem(`dfg_cart_${qrCode}`) || '[]'); }
+    try { return JSON.parse(sessionStorage.getItem(`dfg_cart_${customerStorageKey}`) || '[]'); }
     catch { return []; }
   });
   const [tableInfo, setTableInfo] = useState<{ id: number; table_number: string } | null>(null);
@@ -150,20 +175,20 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [orders, setOrders] = useState<Order[]>([]);
   // Compact history of completed orders the user has acknowledged
   const [history, setHistory] = useState<Order[]>(() => {
-    try { return JSON.parse(sessionStorage.getItem(`dfg_history_${qrCode}`) || '[]'); }
+    try { return JSON.parse(sessionStorage.getItem(`dfg_history_${customerStorageKey}`) || '[]'); }
     catch { return []; }
   });
   // Per-order: which stage was last "live" — used to trigger stage-confirm pop
   const prevStageRef = useRef<Record<number, string>>({});
   // Per-order: has the user already seen the celebration for the ready state?
   const [celebratedIds, setCelebratedIds] = useState<Set<number>>(() => {
-    try { return new Set<number>(JSON.parse(sessionStorage.getItem(`dfg_celebrated_${qrCode}`) || '[]')); }
+    try { return new Set<number>(JSON.parse(sessionStorage.getItem(`dfg_celebrated_${customerStorageKey}`) || '[]')); }
     catch { return new Set(); }
   });
   const [cartOpen, setCartOpen] = useState(false);
   const [tab, setTab] = useState<CustomerTab>(() => {
     try {
-      const s = sessionStorage.getItem(`dfg_tab_${qrCode}`);
+      const s = sessionStorage.getItem(`dfg_tab_${customerStorageKey}`);
       return TABS.includes(s as CustomerTab) ? s as CustomerTab : "home";
     } catch { return "home"; }
   });
@@ -195,11 +220,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [archiveCountdowns, setArchiveCountdowns] = useState<Record<number, number>>({});
   const [keptOrderIds, setKeptOrderIds] = useState<Set<number>>(new Set());
   const [archivedOrders, setArchivedOrders] = useState<Order[]>(() => {
-    try { return JSON.parse(sessionStorage.getItem(`dfg_archived_${qrCode}`) || '[]'); }
+    try { return JSON.parse(sessionStorage.getItem(`dfg_archived_${customerStorageKey}`) || '[]'); }
     catch { return []; }
   });
   const [showArchived, setShowArchived] = useState(() => {
-    try { return sessionStorage.getItem(`dfg_show_archived_${qrCode}`) === 'true'; }
+    try { return sessionStorage.getItem(`dfg_show_archived_${customerStorageKey}`) === 'true'; }
     catch { return false; }
   });
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
@@ -222,7 +247,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const [loadingFeedback, setLoadingFeedback] = useState(true);
   const [seenFeedbackReplies, setSeenFeedbackReplies] = useState<number[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem(`dfg_seen_feedback_replies_${qrCode}`) || "[]");
+      return JSON.parse(localStorage.getItem(`dfg_seen_feedback_replies_${customerStorageKey}`) || "[]");
     } catch {
       return [];
     }
@@ -230,7 +255,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
   const loadFeedbackList = useCallback(async () => {
     try {
-      const refsStr = sessionStorage.getItem(`dfg_feedback_refs_${qrCode}`);
+      const refsStr = sessionStorage.getItem(`dfg_feedback_refs_${customerStorageKey}`);
       const refs = refsStr ? JSON.parse(refsStr) : [];
       if (!refs.length) {
         setFeedbackList([]);
@@ -239,7 +264,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
       const list = await fetchMyFeedback(qrCode, refs);
       sessionStorage.setItem(
-        `dfg_feedback_refs_${qrCode}`,
+        `dfg_feedback_refs_${customerStorageKey}`,
         JSON.stringify(refs.map((ref: { id: number }) => ({ id: ref.id }))),
       );
       setFeedbackList(list);
@@ -249,7 +274,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     } finally {
       setLoadingFeedback(false);
     }
-  }, [qrCode]);
+  }, [qrCode, customerStorageKey]);
 
   const hasUnseenFeedbackResponse = useMemo(() => {
     return feedbackList.some(
@@ -258,11 +283,11 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   }, [feedbackList, seenFeedbackReplies]);
 
   useEffect(() => {
-    sessionStorage.setItem(`dfg_archived_${qrCode}`, JSON.stringify(archivedOrders));
-  }, [archivedOrders, qrCode]);
+    sessionStorage.setItem(`dfg_archived_${customerStorageKey}`, JSON.stringify(archivedOrders));
+  }, [archivedOrders, customerStorageKey]);
   useEffect(() => {
-    sessionStorage.setItem(`dfg_show_archived_${qrCode}`, String(showArchived));
-  }, [showArchived, qrCode]);
+    sessionStorage.setItem(`dfg_show_archived_${customerStorageKey}`, String(showArchived));
+  }, [showArchived, customerStorageKey]);
 
   // Dismiss search when tapping outside the search bar / results (not on scroll — that cleared the query while typing)
   useEffect(() => {
@@ -310,10 +335,10 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       if (newSeenIds.length > 0) {
         const updated = [...seenFeedbackReplies, ...newSeenIds];
         setSeenFeedbackReplies(updated);
-        localStorage.setItem(`dfg_seen_feedback_replies_${qrCode}`, JSON.stringify(updated));
+        localStorage.setItem(`dfg_seen_feedback_replies_${customerStorageKey}`, JSON.stringify(updated));
       }
     }
-  }, [tab, feedbackList, qrCode, seenFeedbackReplies]);
+  }, [tab, feedbackList, customerStorageKey, seenFeedbackReplies]);
 
   // Load menu + table + tax settings + categories + patterns, then restore any active orders from the DB
   useEffect(() => {
@@ -323,6 +348,19 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       try {
         const [m, table, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchPublicSettings(), fetchCategories(), fetchPublicPatterns()]);
         if (!alive) return;
+        const stableStorageKey = `table-${table.id}`;
+        if (customerStorageKey !== stableStorageKey) {
+          migrateCustomerStorage(customerStorageKey, stableStorageKey);
+          setCustomerStorageKey(stableStorageKey);
+        }
+        const currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.has("qr") || currentUrl.searchParams.has("qr_code")) {
+          currentUrl.searchParams.delete("qr");
+          currentUrl.searchParams.delete("qr_code");
+          currentUrl.searchParams.set("view", "customer");
+          currentUrl.searchParams.set("table", String(table.id));
+          window.history.replaceState(window.history.state, "", `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+        }
         setMenu(m);
         setTableInfo(table);
         setCategoriesFromApi(cats.sort((a, b) => a.display_order - b.display_order));
@@ -350,12 +388,12 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
     })();
     return () => { alive = false; };
-  }, [notify, qrCode, connectionRefreshVersion]);
+  }, [notify, qrCode, customerStorageKey, connectionRefreshVersion]);
 
   // Persist cart / history / celebratedIds to sessionStorage
-  useEffect(() => { sessionStorage.setItem(`dfg_cart_${qrCode}`, JSON.stringify(cart)); }, [cart, qrCode]);
-  useEffect(() => { sessionStorage.setItem(`dfg_history_${qrCode}`, JSON.stringify(history)); }, [history, qrCode]);
-  useEffect(() => { sessionStorage.setItem(`dfg_celebrated_${qrCode}`, JSON.stringify([...celebratedIds])); }, [celebratedIds, qrCode]);
+  useEffect(() => { sessionStorage.setItem(`dfg_cart_${customerStorageKey}`, JSON.stringify(cart)); }, [cart, customerStorageKey]);
+  useEffect(() => { sessionStorage.setItem(`dfg_history_${customerStorageKey}`, JSON.stringify(history)); }, [history, customerStorageKey]);
+  useEffect(() => { sessionStorage.setItem(`dfg_celebrated_${customerStorageKey}`, JSON.stringify([...celebratedIds])); }, [celebratedIds, customerStorageKey]);
 
   // Real-time WebSocket listener for order updates
   // ITEM_STATUS_UPDATE fires when kitchen advances an individual item (queue→preparing→ready)
@@ -443,7 +481,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
       return cur;
     });
-  }, () => qrCode);
+  }, "customer_waiter");
 
   const switchTab = (next: CustomerTab, animate = true) => {
     const prev = tabRef.current;
@@ -452,7 +490,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     setTabDir(dir);
     setTab(next);
     tabRef.current = next;
-    sessionStorage.setItem(`dfg_tab_${qrCode}`, next);
+    sessionStorage.setItem(`dfg_tab_${customerStorageKey}`, next);
     if (animate) {
       setSwoosh(dir);
       window.setTimeout(() => setSwoosh(null), 450);
@@ -482,7 +520,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
     scrollEl.addEventListener("scroll", syncTabFromScroll, { passive: true });
     syncTabFromScroll();
     return () => scrollEl.removeEventListener("scroll", syncTabFromScroll);
-  }, [qrCode, tab]);
+  }, [customerStorageKey, tab]);
 
   // Subtle parallax on hero — translate only, never fade out (full opacity always)
   useEffect(() => {
@@ -2021,7 +2059,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
 
       {tab === "feedback" && (
         <CustomerFeedbackPanel
-          qrCode={qrCode}
+          qrCode={customerStorageKey}
           tableId={tableInfo?.id ?? null}
           orders={orders}
           notify={notify}

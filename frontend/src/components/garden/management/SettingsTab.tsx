@@ -112,9 +112,6 @@ const getErrorStatus = (error: unknown) =>
 const isCardSize = (value: string): value is "normal" | "large" | "extra_large" =>
   value === "normal" || value === "large" || value === "extra_large";
 
-// Keep manager-facing update controls hidden until the updater has been verified.
-const SHOW_SYSTEM_UPDATE_CONTROLS = false;
-
 export const SettingsTab = () => {
   const { t } = useTranslation();
   const [hours, setHours] = useState({ start: "09:00", end: "22:00" });
@@ -369,13 +366,20 @@ export const SettingsTab = () => {
   // System update functions
   const handleCheckForUpdates = async () => {
     setUpdateCheckLoading(true);
+    setUpdateAvailable(false);
+    setVersionInfo(null);
     setUpdateMsg(null);
     try {
       const result = await checkSystemVersion();
       setVersionInfo(result);
-      setUpdateAvailable(result.needs_update);
+      setUpdateAvailable(result.needs_update && result.can_update);
       if (!result.needs_update) {
         setUpdateMsg({ text: "✅ App is already up to date.", isError: false });
+      } else if (!result.can_update) {
+        setUpdateMsg({
+          text: `⚠️ An update is available, but it cannot be applied automatically. ${result.reason || "Use the documented maintenance update procedure."}`,
+          isError: true,
+        });
       }
     } catch (err: unknown) {
       safeConsoleError("Version check failed", err);
@@ -386,17 +390,28 @@ export const SettingsTab = () => {
   };
 
   const handlePerformUpdate = async () => {
+    const reviewedCommit = versionInfo?.latest_commit;
+    if (!reviewedCommit || !versionInfo?.can_update) {
+      setUpdateMsg({ text: "Check for updates again before applying an update.", isError: true });
+      return;
+    }
     showConfirmation(
       "Confirm System Update",
-      "This will update the application to the latest version from GitHub. Frontend and backend dependencies will be reinstalled and rebuilt. This may take a few minutes. Proceed?",
+      `DragonFly Garden will validate commit ${reviewedCommit.slice(0, 12)} in a separate temporary worktree, run backend tests, build the frontend, then fast-forward this installation. It will not change restaurant data or .env files. Make sure a current backup is verified and no orders or payments are in progress. The backend must be restarted afterward. Continue?`,
       async () => {
         setUpdateInProgress(true);
-        setUpdateMsg(null);
+        setUpdateMsg({ text: "Validating the update in a temporary workspace. This may take several minutes...", isError: false });
         try {
-          const result = await performSystemUpdate();
+          const result = await performSystemUpdate(reviewedCommit);
           if (result.success) {
-            setUpdateMsg({ text: "✅ System updated successfully! Reloading in 3 seconds...", isError: false });
-            setTimeout(() => window.location.reload(), 3000);
+            setUpdateAvailable(false);
+            setVersionInfo((current) => current
+              ? { ...current, current_commit: result.commit || reviewedCommit, needs_update: false, can_update: false }
+              : current);
+            setUpdateMsg({
+              text: `✅ ${result.message} ${result.restart_instructions || "Restart the backend before using the updated system."} The displayed version refreshes after restart.`,
+              isError: false,
+            });
           } else {
             setUpdateMsg({ text: `⚠️ ${result.message}`, isError: true });
           }
@@ -953,7 +968,7 @@ export const SettingsTab = () => {
           setProfileSaved(true);
           setTimeout(() => setProfileSaved(false), 2500);
         } catch (e) {
-          setProfileError(t("m.profileSaveFailed"));
+          setProfileError(e instanceof Error ? e.message : t("m.profileSaveFailed"));
         } finally {
           setProfileSaving(false);
         }
@@ -1130,70 +1145,82 @@ export const SettingsTab = () => {
   return (
     <>
     <div className="space-y-6 pb-6">
-      {SHOW_SYSTEM_UPDATE_CONTROLS && (
-        <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-transparent">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 text-blue-600" />
-              <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-transparent">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
+          </div>
+          <CardDescription>Apply only clean, fast-forward updates whose commits are signed by a trusted key</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {updateMsg && (
+            <div className={`p-3 rounded-lg text-sm font-medium ${
+              updateMsg.isError
+                ? 'bg-red-100 text-red-800 border border-red-300'
+                : 'bg-green-100 text-green-800 border border-green-300'
+            }`}>
+              {updateMsg.text}
             </div>
-            <CardDescription>Check and apply the latest application updates from GitHub</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {updateMsg && (
-              <div className={`p-3 rounded-lg text-sm font-medium ${
-                updateMsg.isError
-                  ? 'bg-red-100 text-red-800 border border-red-300'
-                  : 'bg-green-100 text-green-800 border border-green-300'
-              }`}>
-                {updateMsg.text}
-              </div>
-            )}
+          )}
 
-            {versionInfo && !updateInProgress && (
-              <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
-                <div className="space-y-2">
-                  <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
-                  {versionInfo.needs_update && (
-                    <div className="text-orange-600 font-medium">Update available</div>
-                  )}
-                </div>
+          {versionInfo && !updateInProgress && (
+            <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
+              <div className="space-y-2">
+                <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
+                <div><span className="font-semibold">Update branch:</span> {versionInfo.branch}</div>
+                <div><span className="font-semibold">Installed commit:</span> {versionInfo.current_commit.slice(0, 12)}</div>
+                {versionInfo.needs_update && (
+                  <div><span className="font-semibold">Available commit:</span> {versionInfo.latest_commit.slice(0, 12)}</div>
+                )}
+                {versionInfo.needs_update && (
+                  <div>
+                    <span className="font-semibold">Trusted commit signature:</span>{" "}
+                    {versionInfo.trusted_commit_signature ? "Verified" : "Not verified"}
+                  </div>
+                )}
+                {versionInfo.needs_update && (
+                  <div className={versionInfo.can_update ? "text-orange-600 font-medium" : "text-red-700 font-medium"}>
+                    {versionInfo.can_update ? "Update available and ready to validate" : "Automatic update is blocked"}
+                  </div>
+                )}
+                {versionInfo.reason && <p className="text-amber-900">{versionInfo.reason}</p>}
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={handleCheckForUpdates}
+              disabled={updateCheckLoading || updateInProgress}
+              variant="outline"
+              className="gap-2"
+            >
+              {updateCheckLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Check for Updates
+            </Button>
+
+            {updateAvailable && versionInfo?.can_update && (
               <Button
-                onClick={handleCheckForUpdates}
+                onClick={handlePerformUpdate}
                 disabled={updateCheckLoading || updateInProgress}
-                variant="outline"
-                className="gap-2"
+                className="gap-2 bg-blue-600 hover:bg-blue-700"
               >
-                {updateCheckLoading ? (
+                {updateInProgress ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                Check for Updates
+                {updateInProgress ? "Updating..." : "Update Now"}
               </Button>
-
-              {updateAvailable && !updateInProgress && (
-                <Button
-                  onClick={handlePerformUpdate}
-                  disabled={updateCheckLoading || updateInProgress}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700"
-                >
-                  {updateInProgress ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  {updateInProgress ? "Updating..." : "Update Now"}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-2 border-amber-200 bg-amber-50/60">
         <CardHeader className="pb-3">

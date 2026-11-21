@@ -6,7 +6,8 @@
  * screens that require username/password verification and a server-issued JWT.
  *
  * Role detection rules:
- *   - ?qr=table-<n> → customer view
+ *   - ?qr=table-<random secret> → customer session bootstrap
+ *   - ?view=customer&table=<id> → existing HttpOnly table session
  *   - ?view=payment → payment counter login screen
  *   - ?view=manager → manager login screen
  *
@@ -27,31 +28,37 @@ import {
 } from "@/lib/useServerConnectionNotice";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
-const TABLE_QR_PATTERN = /^table-[a-z0-9_-]+$/i;
+const TABLE_QR_PATTERN = /^table-[a-f0-9]{64}$/i;
 const LEGACY_PRIVILEGED_QR_PATTERN = /^(payment-counter|manager)-[a-z0-9_-]+$/i;
 
 type Role = "landing" | "customer" | "payment" | "manager";
 
-const detectRole = (): { role: Role; qrCode: string } => {
+const detectRole = (): { role: Role; qrCode: string; tableStorageKey: string } => {
   const params = new URLSearchParams(window.location.search);
   const view = (params.get("view") || "").trim().toLowerCase();
   const qr = (params.get("qr") || "").trim().toLowerCase();
+  const tableId = Number(params.get("table"));
+  const tableStorageKey = Number.isSafeInteger(tableId) && tableId > 0 ? `table-${tableId}` : "";
 
-  if (view === "manager") return { role: "manager", qrCode: "" };
-  if (view === "payment") return { role: "payment", qrCode: "" };
+  if (view === "manager") return { role: "manager", qrCode: "", tableStorageKey: "" };
+  if (view === "payment") return { role: "payment", qrCode: "", tableStorageKey: "" };
+  if (view === "customer" && tableStorageKey) {
+    return { role: "customer", qrCode: tableStorageKey, tableStorageKey };
+  }
 
   if (LEGACY_PRIVILEGED_QR_PATTERN.test(qr)) {
-    return { role: "landing", qrCode: "" };
+    return { role: "landing", qrCode: "", tableStorageKey: "" };
   }
 
-  if (TABLE_QR_PATTERN.test(qr)) return { role: "customer", qrCode: qr };
+  if (TABLE_QR_PATTERN.test(qr)) {
+    return { role: "customer", qrCode: qr, tableStorageKey: tableStorageKey || qr };
+  }
 
   if (!qr && !view) {
-    if (import.meta.env.DEV) return { role: "customer", qrCode: "table-1" };
-    return { role: "landing", qrCode: "" };
+    return { role: "landing", qrCode: "", tableStorageKey: "" };
   }
 
-  return { role: "landing", qrCode: "" };
+  return { role: "landing", qrCode: "", tableStorageKey: "" };
 };
 
 const Index = () => {
@@ -87,6 +94,7 @@ const Index = () => {
 
   const role: Role = initial.role;
   const qr = initial.qrCode;
+  const tableStorageKey = initial.tableStorageKey;
 
   if (isServerConnectionOutage(connectionNotice)) {
     return (
@@ -130,7 +138,7 @@ const Index = () => {
       {/* Render exactly one view based on the detected role. */}
       {role === "manager" && <ManagementView qrCode={qr} notify={notify} />}
       {role === "payment" && <PaymentCounterView qrCode={qr} notify={notify} />}
-      {role === "customer" && <CustomerView qrCode={qr} notify={notify} />}
+      {role === "customer" && <CustomerView qrCode={qr} tableStorageKey={tableStorageKey} notify={notify} />}
       {role === "landing" && <LandingView />}
     </main>
   );

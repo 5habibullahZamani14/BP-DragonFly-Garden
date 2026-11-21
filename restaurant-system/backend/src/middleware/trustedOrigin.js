@@ -18,6 +18,16 @@ const isTrustedOrigin = (origin, requestHost, allowedOrigins = [], allowDevelopm
   return false;
 };
 
+const isMicrosoftConnectivityOrigin = (origin) => {
+  if (typeof origin !== "string" || origin === "null") return false;
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return hostname === "msftconnecttest.com" || hostname === "www.msftconnecttest.com";
+  } catch {
+    return false;
+  }
+};
+
 const createTrustedOriginMiddleware = (allowedOrigins = [], allowDevelopmentPort = false, getRequestProtocol = req => req.protocol) =>
   (req, res, next) => {
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
@@ -27,4 +37,4 @@ const createTrustedOriginMiddleware = (allowedOrigins = [], allowDevelopmentPort
     return res.status(403).json({ error: "Request origin is not allowed" });
   };
 
-module.exports = { isTrustedOrigin, createTrustedOriginMiddleware };
+module.exports = { isTrustedOrigin, isMicrosoftConnectivityOrigin, createTrustedOriginMiddleware };

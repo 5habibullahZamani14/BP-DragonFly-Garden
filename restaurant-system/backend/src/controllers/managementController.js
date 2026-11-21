@@ -27,15 +27,21 @@
 const db = require("../database/db");
 const { createHttpError } = require("../middleware/validation");
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { promisify } = require("util");
-const { exec: execCb } = require("child_process");
-const exec = promisify(execCb);
 const { setAuthCookie } = require("../middleware/authCookies");
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
+const { redactText } = require("../middleware/secretRedaction");
+const { createSystemUpdateService } = require("../services/systemUpdateService");
+const {
+  validateManagerPassword,
+  hashManagerPassword,
+  verifyManagerCredentials,
+} = require("../utils/managerPassword");
+
+const redactUpdateError = (value) => redactText(value)
+  .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/gi, "$1[REDACTED]@");
 const {
   RESET_CONFIRMATION_SENTENCE,
   getResetCategoryOptions,
@@ -45,10 +51,16 @@ const {
 const backupsDir = path.join(__dirname, "../../full-manual-backup");
 const backendRoot = path.resolve(__dirname, "../../..");
 const repoRoot = path.resolve(__dirname, "../../../..");
-const frontendDir = path.join(repoRoot, "frontend");
 const updateBranch = process.env.UPDATE_BRANCH || "main";
 const tmpDir = path.join(__dirname, "../../tmp");
 const versionFile = path.join(__dirname, "../../version.json");
+let systemUpdateService = null;
+const getSystemUpdateService = () => {
+  if (!systemUpdateService) {
+    systemUpdateService = createSystemUpdateService({ repoRoot, branch: updateBranch });
+  }
+  return systemUpdateService;
+};
 if (!fs.existsSync(backupsDir)) {
   fs.mkdirSync(backupsDir, { recursive: true });
 }
@@ -480,11 +492,19 @@ const performDataReset = async (req, res, next) => {
         return next(createHttpError(400, "Enter the manager password to reset all data."));
       }
       const managerProfile = await getManagerProfile();
-      const passwordMatches = managerProfile.password?.startsWith("$2")
-        ? await bcrypt.compare(managerPassword, managerProfile.password)
-        : managerPassword === managerProfile.password;
-      if (!passwordMatches) {
+      const credentials = await verifyManagerCredentials(managerProfile.id, managerPassword, managerProfile);
+      if (!credentials.matches) {
         return next(createHttpError(403, "The manager password is incorrect."));
+      }
+      if (credentials.needsHash) {
+        const migratedProfile = {
+          ...managerProfile,
+          password: await hashManagerPassword(managerPassword),
+        };
+        await run(
+          "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          [JSON.stringify(migratedProfile)]
+        );
       }
     } else {
       if (String(confirmationText || "").trim() !== category.label) {
@@ -1018,25 +1038,22 @@ const managerAuth = async (req, res, next) => {
     const profile = await getManagerProfile();
 
     // Support migration from plaintext stored password -> bcrypt-hashed password.
-    let passwordMatches = false;
-    if (profile.password && profile.password.startsWith("$2")) {
-      passwordMatches = await bcrypt.compare(password, profile.password);
-    } else {
-      // legacy plaintext match; if it matches, migrate to bcrypt
-      passwordMatches = id === profile.id && password === profile.password;
-      if (passwordMatches) {
-        try {
-          const hashed = await bcrypt.hash(password, 10);
-          const migrated = { ...profile, password: hashed };
-          await run(
-            "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [JSON.stringify(migrated)]
-          );
-          // update local profile variable so token issuance uses migrated data
-          profile.password = hashed;
-        } catch (mErr) {
-          console.error("Failed to migrate manager password to hashed form:", mErr);
-        }
+    const credentials = await verifyManagerCredentials(id, password, profile);
+    const passwordMatches = credentials.matches;
+    if (
+      passwordMatches
+      && credentials.needsHash
+    ) {
+      try {
+        const hashed = await hashManagerPassword(password);
+        const migrated = { ...profile, password: hashed };
+        await run(
+          "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          [JSON.stringify(migrated)]
+        );
+        profile.password = hashed;
+      } catch (mErr) {
+        console.error("Failed to migrate manager password to hashed form:", mErr);
       }
     }
 
@@ -1083,8 +1100,9 @@ const managerResetPassword = async (req, res, next) => {
     if (!payload || payload.action !== 'reset_manager_password') return res.status(400).json({ success: false, message: "Invalid reset token" });
     const profile = await getManagerProfile();
     if (payload.id !== profile.id) return res.status(400).json({ success: false, message: "Invalid reset token" });
-    if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const passwordError = validateManagerPassword(newPassword);
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
+    const hashed = await hashManagerPassword(newPassword);
     const updated = { ...profile, password: hashed };
     await run(
       "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1116,11 +1134,15 @@ const updateManagerProfile = async (req, res, next) => {
   try {
     const { name, id, password, email, phone } = req.body;
     const current = await getManagerProfile();
+    const passwordError = password !== undefined && password !== ""
+      ? validateManagerPassword(password)
+      : null;
+    if (passwordError) throw createHttpError(400, passwordError);
     const updated = {
       ...current,
       ...(name !== undefined && { name }),
       ...(id !== undefined && { id }),
-      ...(password !== undefined && password !== "" && { password }),
+      ...(password !== undefined && password !== "" && { password: await hashManagerPassword(password) }),
       ...(email !== undefined && { email }),
       ...(phone !== undefined && { phone }),
     };
@@ -1558,203 +1580,78 @@ const downloadBackup = async (req, res, next) => {
  * Read version from version.json file
  */
 const readVersion = () => {
-  try {
-    if (fs.existsSync(versionFile)) {
-      const data = fs.readFileSync(versionFile, "utf8");
-      return JSON.parse(data);
-    }
-    // Return default version if file doesn't exist
-    return { major: 1, minor: 0, patch: 0, build: 0, beta: true };
-  } catch (error) {
-    console.error("Error reading version file:", error);
-    return { major: 1, minor: 0, patch: 0, build: 0, beta: true };
+  const version = JSON.parse(fs.readFileSync(versionFile, "utf8"));
+  const numericFields = ["major", "minor", "patch", "build"];
+  if (
+    !version
+    || numericFields.some((field) => !Number.isSafeInteger(version[field]) || version[field] < 0)
+    || typeof version.beta !== "boolean"
+  ) {
+    throw new Error("The application's version.json is invalid.");
   }
+  return version;
 };
 
-/**
- * Write version to version.json file
- */
-const writeVersion = (version) => {
-  try {
-    fs.writeFileSync(versionFile, JSON.stringify(version, null, 2));
-  } catch (error) {
-    console.error("Error writing version file:", error);
-    throw error;
-  }
-};
-
-/**
- * Format version object to string (e.g., "v1.2.3.4 Beta")
- */
 const formatVersion = (version) => {
   const versionStr = `v${version.major}.${version.minor}.${version.patch}.${version.build}`;
   return version.beta ? `${versionStr} Beta` : versionStr;
 };
 
-/**
- * Increment version based on update impact
- * impact: 'major' | 'minor' | 'patch' | 'build'
- */
-const incrementVersion = (impact = 'build') => {
-  const version = readVersion();
-  switch (impact) {
-    case 'major':
-      version.major++;
-      version.minor = 0;
-      version.patch = 0;
-      version.build = 0;
-      break;
-    case 'minor':
-      version.minor++;
-      version.patch = 0;
-      version.build = 0;
-      break;
-    case 'patch':
-      version.patch++;
-      version.build = 0;
-      break;
-    case 'build':
-    default:
-      version.build++;
-      break;
-  }
-  writeVersion(version);
-  return version;
-};
-
-/**
- * GET current version from version.json
- * Returns formatted version string and update status
- */
-const checkSystemVersion = async (req, res, next) => {
+const checkSystemVersion = async (_req, res) => {
   try {
-    const version = readVersion();
-    const formattedVersion = formatVersion(version);
-
-    // Fetch latest from remote to check if update is available
-    let needs_update = false;
-    try {
-      await exec("git fetch origin", { cwd: repoRoot });
-
-      // Get current HEAD
-      const { stdout: currentOutput } = await exec("git rev-parse HEAD", { cwd: repoRoot });
-      const current_commit = currentOutput.toString().trim();
-
-      // Get latest from origin/main
-      const { stdout: latestOutput } = await exec("git rev-parse origin/main", { cwd: repoRoot });
-      const latest_commit = latestOutput.toString().trim();
-
-      needs_update = current_commit !== latest_commit;
-    } catch (e) {
-      // Git operations failed, but we can still return current version
-      console.error("Git check failed:", e);
-    }
-
-    // Log the check
-    await createLog("SYSTEM", "VERSION_CHECK", "admin", "manager", null, null, {
-      version: formattedVersion,
-      needs_update,
-    });
-
+    const [status, version] = await Promise.all([
+      getSystemUpdateService().getUpdateStatus(),
+      Promise.resolve(readVersion()),
+    ]);
     res.json({
-      version: formattedVersion,
+      ...status,
+      version: formatVersion(version),
       version_details: version,
-      needs_update,
     });
   } catch (error) {
-    next(error);
+    if (error.status) {
+      return res.status(error.status).json({ message: redactUpdateError(error.message) });
+    }
+    console.error("System update check failed:", redactUpdateError(error.message));
+    return res.status(503).json({
+      message: "Could not check for updates. Verify the server's internet connection, configured Git origin, and update branch.",
+    });
   }
 };
 
-/**
- * Perform system update:
- * 1. Pull latest from GitHub
- * 2. Install/update backend dependencies
- * 3. Build frontend
- * 4. Increment version
- * 5. Optionally restart services
- */
-const performSystemUpdate = async (req, res, next) => {
+const performSystemUpdate = async (req, res) => {
   try {
-    const logs = [];
-    const logFn = (msg) => {
-      logs.push(msg);
-      console.log(`[UPDATE] ${msg}`);
-    };
-
+    const service = getSystemUpdateService();
+    const result = await service.applyUpdate(req.body?.targetCommit);
     try {
-      // Get update impact from request body (default to 'build')
-      const { impact = 'build' } = req.body;
-
-      // Step 1: Fetch and pull
-      logFn("Fetching latest from GitHub...");
-      await exec("git fetch origin", { cwd: repoRoot });
-
-      logFn("Resetting to latest main...");
-      await exec("git reset --hard origin/main", { cwd: repoRoot });
-
-      // Step 2: Install backend deps
-      logFn("Installing backend dependencies...");
-      const backendPackageJson = path.join(repoRoot, "restaurant-system/backend/package.json");
-      if (fs.existsSync(backendPackageJson)) {
-        await exec("npm install", { cwd: path.join(repoRoot, "restaurant-system/backend"), timeout: 300000 });
-      }
-
-      // Step 3: Build frontend
-      logFn("Installing frontend dependencies...");
-      const frontendPackageJson = path.join(repoRoot, "frontend/package.json");
-      if (fs.existsSync(frontendPackageJson)) {
-        await exec("npm install", { cwd: frontendDir, timeout: 300000 });
-
-        logFn("Building frontend...");
-        const buildResult = await exec("npx vite build", { cwd: frontendDir, timeout: 600000 });
-
-        // Check if build succeeded
-        if (buildResult.stderr && buildResult.stderr.includes("error")) {
-          throw new Error(`Frontend build had errors: ${buildResult.stderr}`);
-        }
-      }
-
-      // Step 4: Increment version
-      logFn("Incrementing version...");
-      const newVersion = incrementVersion(impact);
-      const formattedVersion = formatVersion(newVersion);
-      logFn(`New version: ${formattedVersion}`);
-
-      logFn("Update completed successfully!");
-
-      // Log the successful update
       await createLog("SYSTEM", "UPDATE_SUCCESS", "admin", "manager", null, null, {
-        version: formattedVersion,
-        impact,
-        logs: logs.join("\n"),
+        commit: result.commit,
+        logs: result.logs.join("\n"),
         timestamp: new Date().toISOString(),
       });
-
-      res.json({
-        success: true,
-        message: "System updated successfully! Please reload the page.",
-        version: formattedVersion,
-        logs: logs.join("\n"),
-      });
-    } catch (error) {
-      logFn(`ERROR: ${error.message}`);
-
-      // Log the failed update
-      await createLog("SYSTEM", "UPDATE_FAILED", "admin", "manager", null, null, {
-        error: error.message,
-        logs: logs.join("\n"),
-        timestamp: new Date().toISOString(),
-      });
-
-      res.status(500).json({
-        success: false,
-        message: `Update failed: ${error.message}`,
-        logs: logs.join("\n"),
-      });
+    } catch (auditError) {
+      console.error("System update completed but its audit log could not be saved:", redactUpdateError(auditError.message));
     }
+    return res.json(result);
   } catch (error) {
-    next(error);
+    const safeMessage = redactUpdateError(String(error.stderr || error.message || "Unknown update error")).slice(-3000);
+    const logs = Array.isArray(error.updateLogs)
+      ? error.updateLogs.map((entry) => redactUpdateError(entry))
+      : [];
+    try {
+      await createLog("SYSTEM", "UPDATE_FAILED", "admin", "manager", null, null, {
+        error: safeMessage,
+        logs: logs.join("\n"),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (auditError) {
+      console.error("Failed to save the system update failure audit log:", redactUpdateError(auditError.message));
+    }
+    return res.status(error.status || 500).json({
+      success: false,
+      message: `Update failed: ${safeMessage}`,
+      logs,
+    });
   }
 };
 

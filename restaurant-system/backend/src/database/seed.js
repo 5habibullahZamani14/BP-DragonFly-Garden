@@ -6,6 +6,7 @@
  */
 
 const db = require("./db");
+const { generateTableQrCode } = require("../utils/tableQrCode");
 
 /*
  * Promise wrappers for the three SQLite operations used in this file.
@@ -122,14 +123,11 @@ const MENU_ITEMS = [
 ];
 
 /*
- * Five tables to match the physical layout of the restaurant.
- * Each table's qr_code must match the code printed on the QR sticker placed
- * on that table. The format "table-N" is what the role detection middleware
- * expects to see in the URL query string.
+ * Five tables to match the physical layout of the restaurant. QR credentials
+ * are generated randomly when a new table is inserted.
  */
 const TABLES = Array.from({ length: 5 }, (_, index) => ({
-  table_number: `Table ${index + 1}`,
-  qr_code: `table-${index + 1}`
+  table_number: `Table ${index + 1}`
 }));
 
 /*
@@ -267,9 +265,9 @@ const seedDatabase = async () => {
       `
         SELECT id
         FROM tables
-        WHERE qr_code = ?
+        WHERE table_number = ?
       `,
-      [table.qr_code]
+      [table.table_number]
     );
 
     if (existingTable) {
@@ -289,7 +287,7 @@ const seedDatabase = async () => {
         INSERT INTO tables (table_number, qr_code)
         VALUES (?, ?)
       `,
-      [table.table_number, table.qr_code]
+        [table.table_number, generateTableQrCode()]
     );
   }
 

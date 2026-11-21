@@ -29,7 +29,7 @@ vi.mock("@/lib/useServerConnectionNotice", async (importOriginal) => {
 });
 
 const outageViews = [
-  { query: "?qr=table-1", view: "customer-view" },
+  { query: `?table=5&qr=table-${"a".repeat(64)}`, view: "customer-view" },
   { query: "?view=payment", view: "payment-view" },
   { query: "?view=manager", view: "manager-view" },
 ];

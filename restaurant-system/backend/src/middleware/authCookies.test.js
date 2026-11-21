@@ -54,3 +54,20 @@ test("feedback access uses a long-lived HttpOnly cookie without overwriting othe
   assert.match(headers["Set-Cookie"][1], /HttpOnly/);
   assert.match(headers["Set-Cookie"][1], /SameSite=Strict/);
 });
+
+test("customer table sessions use an HttpOnly, short-lived, role-scoped cookie", () => {
+  const headers = {};
+  setAuthCookie(
+    { setHeader: (name, value) => { headers[name] = value; } },
+    { secure: false },
+    "customer_table",
+    "table-session",
+    8 * 60 * 60
+  );
+
+  assert.match(headers["Set-Cookie"], /^dfg_customer_table_session=table-session;/);
+  assert.match(headers["Set-Cookie"], /Max-Age=28800/);
+  assert.match(headers["Set-Cookie"], /HttpOnly/);
+  assert.equal(getAuthCookieValue(headers["Set-Cookie"], "customer_table"), "table-session");
+  assert.equal(getAuthCookieValue(headers["Set-Cookie"], "manager"), null);
+});

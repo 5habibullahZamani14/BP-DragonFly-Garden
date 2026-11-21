@@ -150,8 +150,7 @@ type EventCallback = (event: WSEvent) => void;
 export const useWebSocket = (
   eventTypes: WSEventType[],
   callback: EventCallback,
-  qrCodeGetter?: () => string | null,
-  clientRole?: "manager" | "payment_counter",
+  clientRole?: "manager" | "payment_counter" | "customer_waiter",
   enabled = true
 ) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -160,8 +159,6 @@ export const useWebSocket = (
   /* Store the latest callback and eventTypes in refs so the effect stays stable. */
   const callbackRef = useRef(callback);
   const eventTypesRef = useRef(eventTypes);
-  const qrCodeGetterRef = useRef(qrCodeGetter);
-  const qrCode = qrCodeGetter ? qrCodeGetter() : null;
 
   useEffect(() => {
     callbackRef.current = callback;
@@ -170,10 +167,6 @@ export const useWebSocket = (
   useEffect(() => {
     eventTypesRef.current = eventTypes;
   }, [eventTypes]);
-
-  useEffect(() => {
-    qrCodeGetterRef.current = qrCodeGetter;
-  }, [qrCodeGetter]);
 
   useEffect(() => {
     if (!enabled) {
@@ -197,16 +190,8 @@ export const useWebSocket = (
     };
 
     const connect = () => {
-      if (qrCodeGetterRef.current && !qrCode) {
-        connection.setConnected(false);
-        setIsConnected(false);
-        scheduleReconnect();
-        return;
-      }
-
       const sep = WS_BASE.includes("?") ? "&" : "?";
       const params = new URLSearchParams();
-      if (qrCode) params.set("qr", qrCode);
       if (clientRole) params.set("role", clientRole);
       const query = params.toString();
       const url = query ? `${WS_BASE}${sep}${query}` : WS_BASE;
@@ -286,7 +271,7 @@ export const useWebSocket = (
         }
       }
     };
-  }, [qrCode, clientRole, enabled]); // Reconnect only when the non-secret connection context changes
+  }, [clientRole, enabled]); // Reconnect only when the non-secret connection context changes
 
   return isConnected;
 };

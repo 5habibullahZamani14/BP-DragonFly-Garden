@@ -12,9 +12,17 @@
  */
 
 const express = require("express");
-const { getTables, getTableByQrCode, createTable, updateTable, deleteTable, setBroadcast } = require("../controllers/tableController");
-const { asyncHandler, validateQrCodeParam } = require("../middleware/validation");
-const { requireManagerToken } = require("../middleware/jwt-auth");
+const {
+  getTables,
+  createCustomerTableSession,
+  getCurrentCustomerTable,
+  createTable,
+  updateTable,
+  deleteTable,
+  setBroadcast,
+} = require("../controllers/tableController");
+const { asyncHandler } = require("../middleware/validation");
+const { requireManagerToken, requireCustomerTableToken } = require("../middleware/jwt-auth");
 
 const router = express.Router();
 
@@ -31,7 +39,8 @@ router.get("/", requireManagerToken, asyncHandler(getTables));
 
 /*
  * POST /tables
- * Creates a new table. Body must include table_number and qr_code.
+ * Creates a new table. Body must include table_number; the server generates
+ * a high-entropy QR credential.
  * The controller generates and caches the QR code SVG automatically.
  */
 router.post("/", requireManagerToken, asyncHandler(createTable));
@@ -51,12 +60,11 @@ router.put("/:id", requireManagerToken, asyncHandler(updateTable));
 router.delete("/:id", requireManagerToken, asyncHandler(deleteTable));
 
 /*
- * GET /tables/qr/:qrCode
- * Looks up a table by its QR code string. The frontend calls this on load
- * when it detects a table QR code in the URL, and uses the returned table ID
- * for all subsequent order requests. validateQrCodeParam ensures the :qrCode
- * parameter matches the expected table-N format before it reaches the controller.
+ * POST /tables/qr/session
+ * Exchanges a random table QR credential for a short-lived HttpOnly session
+ * cookie. Subsequent customer requests are authorized by that cookie.
  */
-router.get("/qr/:qrCode", validateQrCodeParam, asyncHandler(getTableByQrCode));
+router.post("/qr/session", asyncHandler(createCustomerTableSession));
+router.get("/current", requireCustomerTableToken, asyncHandler(getCurrentCustomerTable));
 
 module.exports = router;

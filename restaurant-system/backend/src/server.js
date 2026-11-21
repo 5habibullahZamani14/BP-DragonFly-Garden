@@ -11,9 +11,10 @@
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
 require("dotenv").config({ path: path.resolve(__dirname, "..", ".env.local"), override: true });
-// Fail fast if critical secrets are missing to avoid insecure fallback behavior
-if (!process.env.JWT_SECRET) {
-  console.error("FATAL: JWT_SECRET environment variable is not set. Aborting startup to prevent insecure default secrets.");
+const { validateJwtSecret } = require("./utils/jwtSecret");
+const jwtSecretError = validateJwtSecret(process.env.JWT_SECRET);
+if (jwtSecretError) {
+  console.error(`FATAL: ${jwtSecretError} Generate a unique random secret before starting the server.`);
   process.exit(1);
 }
 const fs = require("fs");
@@ -22,13 +23,18 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { WebSocketServer } = require("ws");
-const { clientShouldReceive } = require("./websocketAccess");
+const { clientShouldReceive, sanitizeCustomerRealtimeEvent } = require("./websocketAccess");
 const helmet = require("helmet");
 const { getAuthCookieValue } = require("./middleware/authCookies");
-const { verifyJwtToken } = require("./middleware/jwt-auth");
+const { verifyJwtToken, verifyCustomerTableToken } = require("./middleware/jwt-auth");
 const { redactSensitiveData, redactText } = require("./middleware/secretRedaction");
-const { isTrustedOrigin, createTrustedOriginMiddleware } = require("./middleware/trustedOrigin");
+const {
+  isTrustedOrigin,
+  isMicrosoftConnectivityOrigin,
+  createTrustedOriginMiddleware,
+} = require("./middleware/trustedOrigin");
 const { printCopies } = require("./services/receiptCopies");
+const { getValidatedRequestBaseUrl } = require("./utils/networkAddress");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const retryAsync = async (work, attempts = 3, initialDelayMs = 5000) => {
@@ -79,9 +85,6 @@ const getRestaurantSetting = (key) =>
     });
   });
 
-const isLocalHostHeader = (host) =>
-  typeof host === "string" && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i.test(host);
-
 const getLocalNetworkAddress = () => {
   const nets = os.networkInterfaces();
   const candidates = [];
@@ -99,11 +102,8 @@ const getLocalNetworkAddress = () => {
 };
 
 const getServerBaseUrlFromRequest = (req) => {
-  const proto = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
-  const hostHeader = req.get("host");
-  if (hostHeader && !isLocalHostHeader(hostHeader)) {
-    return `${proto}://${hostHeader}`;
-  }
+  const requestBaseUrl = getValidatedRequestBaseUrl(req);
+  if (requestBaseUrl) return requestBaseUrl;
 
   const localIp = getLocalNetworkAddress();
   const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
@@ -175,39 +175,28 @@ wss.on("connection", async (ws, req) => {
       return;
     }
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const qr = url.searchParams.get('qr') || url.searchParams.get('qr_code');
 
-    const { getRoleFromQRCode, getTableNumberFromQR } = require('./middleware/role-based-access');
-
-    if (url.searchParams.has("token")) {
+    if (url.searchParams.has("token") || url.searchParams.has("qr") || url.searchParams.has("qr_code")) {
       ws.close(4003, "Query-string authentication is disabled");
       return;
     }
 
-    if (qr) {
-      const role = getRoleFromQRCode(qr);
-      if (!role) {
-        ws.close(4003, 'Invalid QR code');
-        return;
-      }
-
-      // Customer QR codes are the only unauthenticated WebSocket entry point.
-      if (role !== 'customer_waiter') {
-        ws.close(4003, 'Staff and management WebSocket connections must use auth tokens');
-        return;
-      }
-
-      ws._role = role;
-      ws._qr = qr;
-      const tableNumber = getTableNumberFromQR(qr);
-      ws._tableNumber = tableNumber; // numeric table id
-      console.log(`WS client connected via QR (${role})`);
+    const requestedRole = url.searchParams.get("role");
+    if (requestedRole === "customer_waiter") {
+      const tableSession = await verifyCustomerTableToken(req.headers.cookie);
+      ws._role = tableSession.role;
+      ws._tableNumber = tableSession.tableId;
+      ws._tableId = tableSession.tableId;
+      console.log("WS client connected via authenticated table session");
     } else {
-      const requestedRole = url.searchParams.get("role");
       const cookieRole = requestedRole === "payment_counter" ? "payment_counter" : "manager";
+      if (requestedRole && !["manager", "payment_counter"].includes(requestedRole)) {
+        ws.close(4003, "Unsupported WebSocket role");
+        return;
+      }
       const cookieToken = getAuthCookieValue(req.headers.cookie, cookieRole);
       if (!cookieToken) {
-        ws.close(4001, "Missing authenticated session or QR");
+        ws.close(4001, "Missing authenticated session");
         return;
       }
 
@@ -232,7 +221,10 @@ const broadcast = (data) => {
   wss.clients.forEach((client) => {
     try {
       if (clientShouldReceive(client, data)) {
-        client.send(JSON.stringify(data));
+        const clientData = client._role === "customer_waiter"
+          ? sanitizeCustomerRealtimeEvent(data)
+          : data;
+        client.send(JSON.stringify(clientData));
       }
     } catch (e) {
       console.warn('Failed to send WS message to client:', e && e.message);
@@ -257,7 +249,7 @@ app.use(cors((req, callback) => {
   if (!origin) return callback(null, { origin: false, credentials: true });
 
   const trusted = isTrustedOrigin(origin, req.get("host"), allowedOrigins, allowDevelopmentPort, getRequestProtocol(req))
-    || origin.toLowerCase().includes("msftconnecttest.com");
+    || isMicrosoftConnectivityOrigin(origin);
   callback(null, { origin: trusted ? origin : false, credentials: true });
 }));
 app.use(createTrustedOriginMiddleware(allowedOrigins, allowDevelopmentPort, getRequestProtocol));
@@ -269,6 +261,7 @@ app.use(
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
     originAgentCluster: false,
+    referrerPolicy: { policy: "no-referrer" },
   }),
 );
 
@@ -287,8 +280,18 @@ app.use((req, res, next) => {
 });
 
 /* Serve dynamic menu images directly from the backend to bypass Vite caching issues. */
-app.use("/menu-images", express.static(path.resolve(__dirname, "../../../frontend/public/menu-images")));
-app.use("/feedback-images", express.static(path.resolve(__dirname, "../../../frontend/public/feedback-images")));
+app.use("/menu-images", (req, res, next) => {
+  if (!/\.(?:jpe?g|png|webp|gif)$/i.test(path.extname(req.path))) {
+    return res.sendStatus(404);
+  }
+  return express.static(path.resolve(__dirname, "../../../frontend/public/menu-images"))(req, res, next);
+});
+app.use("/feedback-images", (req, res, next) => {
+  if (!/\.(?:jpe?g|png|webp|gif)$/i.test(path.extname(req.path))) {
+    return res.sendStatus(404);
+  }
+  return express.static(path.resolve(__dirname, "../../../frontend/public/feedback-images"))(req, res, next);
+});
 
 app.use((req, res, next) => {
   const noStorePaths = new Set(["/", "/index.html", "/sw.js", "/registerSW.js", "/manifest.webmanifest"]);
