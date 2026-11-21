@@ -25,10 +25,14 @@ const redactSensitiveData = (value, fieldName, seen = new WeakSet()) => {
     if (value instanceof Date || Buffer.isBuffer(value)) return value;
     if (seen.has(value)) return "[Circular]";
     seen.add(value);
-    if (Array.isArray(value)) return value.map(item => redactSensitiveData(item, undefined, seen));
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, redactSensitiveData(item, key, seen)])
-    );
+    try {
+      if (Array.isArray(value)) return value.map(item => redactSensitiveData(item, undefined, seen));
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, redactSensitiveData(item, key, seen)])
+      );
+    } finally {
+      seen.delete(value);
+    }
   }
   return value;
 };

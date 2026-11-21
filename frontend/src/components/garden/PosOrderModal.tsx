@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { createCounterOrder, fetchTables, type OrderType, type TableRecord } fro
 import type { MenuItem, Order } from "@/lib/api";
 import type { ItemOption } from "@/lib/menu-data";
 import { Plus, Minus, ShoppingBag, Trash2, Clock, MapPin, Phone, User, Check, Layers, MessageSquare } from "lucide-react";
+import { safeConsoleError } from "@/lib/safeConsole";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 interface PosOrderModalProps {
   isOpen: boolean;
@@ -54,11 +56,26 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
   const [configuringItem, setConfiguringItem] = useState<MenuItem | null>(null);
   const [selectedGroupOptions, setSelectedGroupOptions] = useState<Record<number, { optionId: number; name: string; delta: number }[]>>({});
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchTables().then(setTables).catch(() => {});
+  const loadTables = useCallback(async () => {
+    try {
+      const data = await fetchTables();
+      const tableList = data || [];
+      setTables(tableList);
+      setSelectedTableId((current) =>
+        current === 999 || tableList.some((table) => table.id === current) ? current : 999
+      );
+    } catch (error) {
+      safeConsoleError("Failed to load POS table list", error);
     }
-  }, [isOpen]);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) void loadTables();
+  }, [isOpen, loadTables]);
+
+  useWebSocket(["TABLE_UPDATE", "DATA_REFRESH"], () => {
+    void loadTables();
+  }, undefined, "payment_counter", isOpen);
 
   useEffect(() => {
     if (isOpen) {

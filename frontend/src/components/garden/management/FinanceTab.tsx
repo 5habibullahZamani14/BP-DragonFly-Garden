@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchFinanceData, FinanceData } from "@/lib/api";
+import { useWebSocket } from "@/lib/useWebSocket";
 import { 
   DollarSign, TrendingUp, TrendingDown, PieChart, 
   Activity, ArrowUpRight, ArrowDownRight, PackageOpen,
@@ -24,6 +25,7 @@ export const FinanceTab = () => {
   const [data, setData] = useState<FinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [topItemsCount, setTopItemsCount] = useState<number>(5);
+  const hasLoadedFinanceDataRef = useRef(false);
 
   // --- Filter States for Card 1: Overview Metrics ---
   const [metricsTimeframe, setMetricsTimeframe] = useState<TimeframeValue>('all');
@@ -67,20 +69,42 @@ export const FinanceTab = () => {
   const [stockEndDate, setStockEndDate] = useState<string>("");
   const [stockProductType, setStockProductType] = useState<'all' | 'food' | 'drink' | 'merchandise'>('all');
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const res = await fetchFinanceData();
-        setData(res);
-      } catch (err) {
-        safeConsoleError("Failed to load finance data", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
+  const loadData = useCallback(async () => {
+    if (!hasLoadedFinanceDataRef.current) setLoading(true);
+    try {
+      const res = await fetchFinanceData();
+      setData(res);
+      hasLoadedFinanceDataRef.current = true;
+    } catch (err) {
+      safeConsoleError("Failed to load finance data", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useWebSocket([
+    "NEW_ORDER",
+    "ORDER_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "INVENTORY_UPDATE",
+    "NEW_FEEDBACK",
+    "FEEDBACK_RESPONSE",
+    "CALL_WAITER",
+    "CALL_WAITER_ACK",
+    "MENU_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
+  ], (event) => {
+    if (event.type === "MENU_UPDATE") {
+      const payload = event.payload as { reason?: string };
+      if (payload?.reason === "inventory" || payload?.reason === "order_inventory") return;
+    }
+    void loadData();
+  });
 
   const filterOrderItems = (
     timeframeVal: TimeframeValue,

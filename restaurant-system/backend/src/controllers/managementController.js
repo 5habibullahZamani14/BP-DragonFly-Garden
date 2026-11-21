@@ -38,10 +38,8 @@ const { setAuthCookie } = require("../middleware/authCookies");
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 const {
   RESET_CONFIRMATION_SENTENCE,
-  RESET_CONFIRMATION_CODE,
   getResetCategoryOptions,
   getResetCategoryByKey,
-  normalizeResetCategoryKey,
 } = require("../utils/dataReset");
 
 const backupsDir = path.join(__dirname, "../../full-manual-backup");
@@ -118,6 +116,10 @@ const get = (sql, params = []) =>
 let broadcastFn = null;
 const setBroadcast = (fn) => { broadcastFn = fn; };
 const getBroadcast = () => broadcastFn;
+const broadcastManagementEvent = (type, payload = {}) => {
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type, payload });
+};
 
 /*
  * generateEmployeeId creates a unique 4-character alphanumeric ID for a new
@@ -152,6 +154,7 @@ const createLog = async (category, action, actorId, actorName, targetId, targetN
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [category, action, actorId, actorName, targetId, targetName, details]
   );
+  broadcastManagementEvent("LOG_UPDATE", { category, action });
 };
 
 const deriveEmployeeJwtRole = (department) => {
@@ -377,37 +380,55 @@ const deleteFileIfExists = (filePath) => {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
+    return null;
   } catch (error) {
-    console.error("Failed to delete file:", filePath, error);
+    return `Could not remove uploaded file ${path.basename(filePath)}: ${error.message}`;
   }
 };
 
-const clearDirectoryContents = (directoryPath) => {
-  if (!fs.existsSync(directoryPath)) return;
-  for (const entry of fs.readdirSync(directoryPath)) {
-    const entryPath = path.join(directoryPath, entry);
+const resolveManagedMenuImagePath = (imageUrl) => {
+  if (typeof imageUrl !== "string" || !imageUrl.startsWith("/menu-images/menu-")) return null;
+  const publicDir = path.resolve(repoRoot, "frontend", "public");
+  const menuImagesDir = path.resolve(publicDir, "menu-images");
+  const filePath = path.resolve(publicDir, imageUrl.replace(/^\/+/, ""));
+  return filePath.startsWith(`${menuImagesDir}${path.sep}`) ? filePath : null;
+};
+
+const removeGeneratedFiles = (directoryPath, filenamePrefix) => {
+  let entries;
+  try {
+    entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const warnings = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.startsWith(filenamePrefix)) continue;
+    const filePath = path.join(directoryPath, entry.name);
     try {
-      const stat = fs.statSync(entryPath);
-      if (stat.isDirectory()) {
-        fs.rmSync(entryPath, { recursive: true, force: true });
-      } else {
-        fs.unlinkSync(entryPath);
-      }
+      fs.unlinkSync(filePath);
     } catch (error) {
-      console.error("Failed to clear directory entry:", entryPath, error);
+      warnings.push(`Could not remove uploaded file ${entry.name}: ${error.message}`);
     }
   }
+  return warnings;
 };
 
 const deleteMenuImageFileIfUnused = async (imageUrl) => {
-  if (!imageUrl || !imageUrl.startsWith("/menu-images/")) return;
+  if (!imageUrl || !imageUrl.startsWith("/menu-images/menu-")) return;
   const remaining = await get(
-    "SELECT COUNT(*) AS count FROM menu_items WHERE image_url = ?",
-    [imageUrl]
+    `SELECT
+       (SELECT COUNT(*) FROM menu_items WHERE image_url = ?) +
+       (SELECT COUNT(*) FROM patterns WHERE image_url = ?) +
+       (SELECT COUNT(*) FROM repo_images WHERE image_url = ?) AS count`,
+    [imageUrl, imageUrl, imageUrl]
   );
   if (remaining?.count) return;
-  const filePath = path.join(repoRoot, "frontend/public", imageUrl);
-  deleteFileIfExists(filePath);
+  const filePath = resolveManagedMenuImagePath(imageUrl);
+  if (!filePath) return `Skipped an unsafe uploaded image path: ${path.basename(imageUrl)}`;
+  return deleteFileIfExists(filePath);
 };
 
 const deleteRepoImageFileIfUnused = async (repoImageId) => {
@@ -422,17 +443,13 @@ const deleteRepoImageFileIfUnused = async (repoImageId) => {
     "SELECT image_url FROM repo_images WHERE id = ?",
     [repoImageId]
   );
-  if (!row || !row.image_url) return;
+  if (!row || !row.image_url || !row.image_url.startsWith("/menu-images/menu-")) return;
 
-  const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
-  deleteFileIfExists(filePath);
+  const filePath = resolveManagedMenuImagePath(row.image_url);
+  if (!filePath) return `Skipped an unsafe repository image path: ${path.basename(row.image_url)}`;
+  const warning = deleteFileIfExists(filePath);
+  if (warning) return warning;
   await run("DELETE FROM repo_images WHERE id = ?", [repoImageId]);
-};
-
-const getDataResetCategoryPayload = async (selectedKey) => {
-  const category = getResetCategoryByKey(selectedKey);
-  if (!category) return null;
-  return category;
 };
 
 const getDataResetOptions = async (req, res, next) => {
@@ -441,7 +458,6 @@ const getDataResetOptions = async (req, res, next) => {
     res.json({
       options,
       confirmationSentence: RESET_CONFIRMATION_SENTENCE,
-      confirmationCode: RESET_CONFIRMATION_CODE,
     });
   } catch (error) {
     next(error);
@@ -450,7 +466,7 @@ const getDataResetOptions = async (req, res, next) => {
 
 const performDataReset = async (req, res, next) => {
   try {
-    const { category: rawCategory, confirmationSentence, confirmationCode, confirmationText } = req.body;
+    const { category: rawCategory, confirmationSentence, confirmationText, managerPassword } = req.body;
     const category = getResetCategoryByKey(rawCategory);
     if (!category) {
       return next(createHttpError(400, "Invalid reset category."));
@@ -460,8 +476,15 @@ const performDataReset = async (req, res, next) => {
       if (String(confirmationSentence || "").trim() !== RESET_CONFIRMATION_SENTENCE) {
         return next(createHttpError(400, "Confirmation sentence does not match."));
       }
-      if (String(confirmationCode || "").trim() !== RESET_CONFIRMATION_CODE) {
-        return next(createHttpError(400, "Confirmation code does not match."));
+      if (typeof managerPassword !== "string" || !managerPassword) {
+        return next(createHttpError(400, "Enter the manager password to reset all data."));
+      }
+      const managerProfile = await getManagerProfile();
+      const passwordMatches = managerProfile.password?.startsWith("$2")
+        ? await bcrypt.compare(managerPassword, managerProfile.password)
+        : managerPassword === managerProfile.password;
+      if (!passwordMatches) {
+        return next(createHttpError(403, "The manager password is incorrect."));
       }
     } else {
       if (String(confirmationText || "").trim() !== category.label) {
@@ -473,10 +496,69 @@ const performDataReset = async (req, res, next) => {
       "SELECT value FROM restaurant_settings WHERE key = 'manager_profile'"
     );
     const managerProfileValue = managerProfileRow?.value || null;
+    const retainedSettingsRows = category.key === "all_data"
+      ? await all(
+        "SELECT key, value FROM restaurant_settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          "work_hours",
+          "sst_enabled",
+          "sst_rate",
+          "service_charge_enabled",
+          "service_charge_rate",
+          "captive_portal_target",
+          "selected_printer",
+          "default_printer",
+          "default_card_size",
+          "printer_preferences",
+          "manager_session",
+        ]
+      )
+      : [];
+    const retainedSettings = new Map(retainedSettingsRows.map(({ key, value }) => [key, value]));
 
     const menuImagesDir = path.join(repoRoot, "frontend/public/menu-images");
     const feedbackImagesDir = path.join(repoRoot, "frontend/public/feedback-images");
-    const uploadsDir = path.join(__dirname, "../../uploads");
+    const cleanupWarnings = [];
+    const insertResetSettings = async () => {
+      const defaultSettings = [
+        ["work_hours", '{"start":"09:00","end":"22:00"}'],
+        ["sst_enabled", "true"],
+        ["sst_rate", "0.06"],
+        ["service_charge_enabled", "true"],
+        ["service_charge_rate", "0.10"],
+        ["captive_portal_target", "http://10.42.0.1:5000/"],
+        ["selected_printer", "BP_Dragonfly_Garden_Confirmed"],
+        ["default_printer", "BP_Dragonfly_Garden_Confirmed"],
+        ["default_card_size", "normal"],
+        ["printer_preferences", JSON.stringify({
+          receipt_copies: {
+            global: {
+              order_customer: 1,
+              order_kitchen: 1,
+              addon_customer: 1,
+              addon_kitchen: 1,
+              final_receipt: 1,
+              daily_sales_report: 1,
+            },
+          },
+        })],
+        ["seed_data_locked", "true"],
+      ];
+      const settings = defaultSettings.map(([key, defaultValue]) => [
+        key,
+        retainedSettings.get(key) ?? defaultValue,
+      ]);
+      if (retainedSettings.has("manager_session")) {
+        settings.push(["manager_session", retainedSettings.get("manager_session")]);
+      }
+      if (managerProfileValue) settings.push(["manager_profile", managerProfileValue]);
+      for (const [key, value] of settings) {
+        await run(
+          "INSERT INTO restaurant_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+          [key, value]
+        );
+      }
+    };
 
     const deleteMenuImagesForType = async (type) => {
       const rows = await all(
@@ -485,8 +567,10 @@ const performDataReset = async (req, res, next) => {
       );
       await run(`UPDATE menu_items SET image_url = NULL, repo_image_id = NULL WHERE type = ?`, [type]);
       for (const row of rows) {
-        await deleteMenuImageFileIfUnused(row.image_url);
-        await deleteRepoImageFileIfUnused(row.repo_image_id);
+        const imageWarning = await deleteMenuImageFileIfUnused(row.image_url);
+        const repoWarning = await deleteRepoImageFileIfUnused(row.repo_image_id);
+        if (imageWarning) cleanupWarnings.push(imageWarning);
+        if (repoWarning) cleanupWarnings.push(repoWarning);
       }
     };
 
@@ -497,7 +581,8 @@ const performDataReset = async (req, res, next) => {
       );
       await run(`UPDATE menu_items SET repo_image_id = NULL WHERE type = ?`, [type]);
       for (const row of rows) {
-        await deleteRepoImageFileIfUnused(row.repo_image_id);
+        const warning = await deleteRepoImageFileIfUnused(row.repo_image_id);
+        if (warning) cleanupWarnings.push(warning);
       }
     };
 
@@ -508,72 +593,100 @@ const performDataReset = async (req, res, next) => {
       );
       await run(`DELETE FROM menu_items WHERE type = ?`, [type]);
       for (const row of rows) {
-        await deleteMenuImageFileIfUnused(row.image_url);
-        await deleteRepoImageFileIfUnused(row.repo_image_id);
+        const imageWarning = await deleteMenuImageFileIfUnused(row.image_url);
+        const repoWarning = await deleteRepoImageFileIfUnused(row.repo_image_id);
+        if (imageWarning) cleanupWarnings.push(imageWarning);
+        if (repoWarning) cleanupWarnings.push(repoWarning);
       }
     };
 
     const deleteAllMenuImages = async () => {
       const imageRows = await all(`SELECT DISTINCT image_url FROM menu_items WHERE image_url IS NOT NULL AND TRIM(image_url) <> ''`);
-      const repoRows = await all(`SELECT id, image_url FROM repo_images`);
-      await run(`UPDATE menu_items SET image_url = NULL, repo_image_id = NULL`);
+      const patternRows = await all(`SELECT image_url FROM patterns`);
+      const repoRows = await all(`SELECT image_url FROM repo_images`);
+      await run(`UPDATE menu_items SET image_url = NULL, pattern_id = NULL, repo_image_id = NULL`);
+      await run(`DELETE FROM patterns`);
+      await run(`DELETE FROM repo_images`);
       for (const row of imageRows) {
-        await deleteMenuImageFileIfUnused(row.image_url);
+        const warning = await deleteMenuImageFileIfUnused(row.image_url);
+        if (warning) cleanupWarnings.push(warning);
+      }
+      for (const row of patternRows) {
+        const warning = await deleteMenuImageFileIfUnused(row.image_url);
+        if (warning) cleanupWarnings.push(warning);
       }
       for (const row of repoRows) {
-        const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
-        deleteFileIfExists(filePath);
+        const warning = await deleteMenuImageFileIfUnused(row.image_url);
+        if (warning) cleanupWarnings.push(warning);
       }
-      await run(`DELETE FROM repo_images`);
     };
 
     const deleteAllFeedbackImages = async () => {
-      const rows = await all(`SELECT DISTINCT image_url FROM customer_feedback_images`);
       await run(`DELETE FROM customer_feedback_images`);
-      for (const row of rows) {
-        if (row.image_url && row.image_url.startsWith("/feedback-images/")) {
-          const filePath = path.join(repoRoot, "frontend/public", row.image_url.replace(/^\//, ""));
-          deleteFileIfExists(filePath);
-        }
-      }
+      cleanupWarnings.push(...removeGeneratedFiles(feedbackImagesDir, "fb-"));
     };
 
     const deleteAllFeedbackRecords = async () => {
-      await run(`DELETE FROM customer_feedback`);
-      await run(`DELETE FROM feedback_analysis_findings`);
-      await run(`DELETE FROM feedback_analysis_runs`);
-      clearDirectoryContents(feedbackImagesDir);
-    };
-
-    const deleteAllAppData = async () => {
-      await run(`DELETE FROM order_items`);
-      await run(`DELETE FROM orders`);
-      await run(`DELETE FROM order_status_history`);
-      await run(`DELETE FROM payments`);
-      await run(`DELETE FROM payment_logs`);
-      await run(`DELETE FROM archived_orders`);
-      await run(`DELETE FROM staff_assistance_requests`);
+      await run(`DELETE FROM customer_feedback_access_entries`);
+      await run(`DELETE FROM customer_feedback_access_sessions`);
       await run(`DELETE FROM customer_feedback_images`);
       await run(`DELETE FROM customer_feedback`);
       await run(`DELETE FROM feedback_analysis_findings`);
       await run(`DELETE FROM feedback_analysis_runs`);
-      await run(`DELETE FROM menu_item_ingredients`);
-      await run(`DELETE FROM menu_items`);
-      await run(`DELETE FROM categories`);
-      await run(`DELETE FROM inventory_items`);
-      await run(`DELETE FROM employees`);
-      await run(`DELETE FROM payment_methods`);
-      await run(`DELETE FROM promo_items`); // defensive if future fallback table exists
-      await run(`DELETE FROM restaurant_settings`);
-      if (managerProfileValue) {
+      cleanupWarnings.push(...removeGeneratedFiles(feedbackImagesDir, "fb-"));
+    };
+
+    const deleteAllAppData = async () => {
+      await run("BEGIN TRANSACTION");
+      try {
+        await run(`DELETE FROM printer_jobs`);
+        await run(`DELETE FROM payment_logs`);
+        await run(`DELETE FROM payments`);
+        await run(`DELETE FROM order_status_history`);
+        await run(`DELETE FROM order_items`);
+        await run(`DELETE FROM orders`);
+        await run(`DELETE FROM archived_orders`);
+        await run(`DELETE FROM staff_assistance_requests`);
+        await run(`DELETE FROM customer_feedback_access_entries`);
+        await run(`DELETE FROM customer_feedback_access_sessions`);
+        await run(`DELETE FROM customer_feedback_images`);
+        await run(`DELETE FROM customer_feedback`);
+        await run(`DELETE FROM feedback_analysis_findings`);
+        await run(`DELETE FROM feedback_analysis_runs`);
+        await run(`DELETE FROM item_options`);
+        await run(`DELETE FROM item_option_groups`);
+        await run(`DELETE FROM item_modifier_assignments`);
+        await run(`DELETE FROM modifier_options`);
+        await run(`DELETE FROM modifier_groups`);
+        await run(`DELETE FROM menu_item_ingredients`);
+        await run(`DELETE FROM menu_items`);
+        await run(`DELETE FROM modifier_options`);
+        await run(`DELETE FROM modifier_groups`);
+        await run(`DELETE FROM patterns`);
+        await run(`DELETE FROM repo_images`);
+        await run(`DELETE FROM image_repository_sections`);
+        await run(`DELETE FROM promotion_templates`);
+        await run(`DELETE FROM categories`);
+        await run(`DELETE FROM inventory_items`);
+        await run(`DELETE FROM employees`);
+        await run(`DELETE FROM payment_methods`);
+        await run(`DELETE FROM grand_archive_logs`);
+        await run(`DELETE FROM tables WHERE id <> 999`);
         await run(
-          "INSERT INTO restaurant_settings (key, value) VALUES ('manager_profile', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-          [managerProfileValue]
+          "INSERT OR IGNORE INTO tables (id, table_number, qr_code) VALUES (999, 'Counter Order', 'counter-orders')"
         );
+        for (const method of ["Cash", "Visa Card", "Mastercard", "eWallet"]) {
+          await run("INSERT INTO payment_methods (name) VALUES (?)", [method]);
+        }
+        await run(`DELETE FROM restaurant_settings`);
+        await insertResetSettings();
+        await run("COMMIT");
+      } catch (error) {
+        await run("ROLLBACK");
+        throw error;
       }
-      clearDirectoryContents(menuImagesDir);
-      clearDirectoryContents(feedbackImagesDir);
-      clearDirectoryContents(uploadsDir);
+      cleanupWarnings.push(...removeGeneratedFiles(menuImagesDir, "menu-"));
+      cleanupWarnings.push(...removeGeneratedFiles(feedbackImagesDir, "fb-"));
     };
 
     if (category.key === "all_data") {
@@ -594,6 +707,9 @@ const performDataReset = async (req, res, next) => {
       await deleteAllFeedbackImages();
     }
 
+    await run(
+      "INSERT INTO restaurant_settings (key, value) VALUES ('seed_data_locked', 'true') ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    );
     await createLog(
       "SYSTEM",
       "DATA_RESET",
@@ -604,7 +720,8 @@ const performDataReset = async (req, res, next) => {
       { category: category.key }
     );
 
-    res.json({ success: true, message: `Reset completed for ${category.label}` });
+    broadcastManagementEvent("DATA_REFRESH");
+    res.json({ success: true, message: `Reset completed for ${category.label}`, warnings: cleanupWarnings });
   } catch (error) {
     next(error);
   }
@@ -774,6 +891,7 @@ const createInventoryItem = async (req, res, next) => {
     );
     const item = await get("SELECT * FROM inventory_items WHERE id = ?", [result.lastID]);
     await createLog("INVENTORY", "CREATE", req.user?.id, req.user?.name, item.id.toString(), item.name, item);
+    broadcastManagementEvent("INVENTORY_UPDATE", { id: item.id });
     res.status(201).json(item);
   } catch (error) { next(error); }
 };
@@ -805,6 +923,8 @@ const updateInventoryStock = async (req, res, next) => {
     );
     const item = await get("SELECT * FROM inventory_items WHERE id = ?", [id]);
     await createLog("INVENTORY", "UPDATE_STOCK", req.user?.id, req.user?.name, item.id.toString(), item.name, { current_stock });
+    broadcastManagementEvent("INVENTORY_UPDATE", { id: item.id });
+    broadcastManagementEvent("MENU_UPDATE", { reason: "inventory" });
     res.json(item);
   } catch (error) { next(error); }
 };
@@ -867,6 +987,8 @@ const updateRecipe = async (req, res, next) => {
       await run("COMMIT");
       const menuItem = await get("SELECT name FROM menu_items WHERE id = ?", [menu_item_id]);
       await createLog("RECIPE", "UPDATE", req.user?.id, req.user?.name, menu_item_id.toString(), menuItem?.name, { ingredients });
+      broadcastManagementEvent("INVENTORY_UPDATE", { menu_item_id: Number(menu_item_id) });
+      broadcastManagementEvent("MENU_UPDATE", { reason: "inventory" });
       res.json({ success: true, menu_item_id });
     } catch (err) {
       await run("ROLLBACK");
@@ -1007,6 +1129,7 @@ const updateManagerProfile = async (req, res, next) => {
       [JSON.stringify(updated)]
     );
     await createLog("SYSTEM", "UPDATE_MANAGER_PROFILE", updated.id, updated.name, "manager", "Manager Profile", { name: updated.name, email: updated.email });
+    broadcastManagementEvent("SETTINGS_UPDATE", { key: "manager_profile" });
     const { password: _pw, ...safe } = updated;
     res.json({ success: true, profile: safe });
   } catch (error) { next(error); }
@@ -1132,6 +1255,7 @@ const createBackup = async (req, res, next) => {
     }
 
     await createLog("SYSTEM", "CREATE_BACKUP", req.user?.id, req.user?.name, "system", "Backup Archive", { filename: created });
+    broadcastManagementEvent("BACKUP_UPDATE");
     res.json({ success: true, message: "Full backup archive created successfully", filename: created });
   } catch (error) { next(error); }
 };
@@ -1358,6 +1482,7 @@ const restoreBackup = async (req, res, next) => {
     await performRestore(sourcePath, finalName);
     
     await createLog("SYSTEM", "RESTORE_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
+    broadcastManagementEvent("DATA_REFRESH");
     res.json({ success: true, message: "System restored successfully from backup" });
   } catch (error) { next(error); }
 };
@@ -1387,6 +1512,7 @@ const restoreCloudBackup = async (req, res, next) => {
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
     await createLog("SYSTEM", "RESTORE_CLOUD_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: finalName });
+    broadcastManagementEvent("DATA_REFRESH");
     res.json({ success: true, message: "System restored successfully from cloud backup" });
   } catch (error) { next(error); }
 };
@@ -1408,6 +1534,7 @@ const restoreUploadedBackup = async (req, res, next) => {
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     await createLog("SYSTEM", "RESTORE_UPLOADED_BACKUP", req.user?.id, req.user?.name, "system", "Database", { filename: file.originalname });
+    broadcastManagementEvent("DATA_REFRESH");
     res.json({ success: true, message: "System restored successfully from uploaded backup" });
   } catch (error) { next(error); }
 };

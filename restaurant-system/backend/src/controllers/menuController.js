@@ -21,6 +21,14 @@ const { compressImage } = require("../utils/imageCompressor");
 let broadcastFn = null;
 const setBroadcast = (fn) => { broadcastFn = fn; };
 const getBroadcast = () => broadcastFn;
+const broadcastMenuUpdate = (payload = {}) => {
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "MENU_UPDATE", payload });
+};
+const broadcastMenuAdminUpdate = (payload = {}) => {
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "MENU_ADMIN_UPDATE", payload });
+};
 
 /** Remove a menu image file only when no other menu item still references it. */
 const deleteMenuImageIfUnused = async (imageUrl, excludeItemId = null) => {
@@ -639,6 +647,7 @@ const createRepoSection = async (req, res) => {
       `INSERT INTO image_repository_sections (name, display_order, max_bytes) VALUES (?, ?, ?)`,
       [name.trim(), nextOrder, normalizedMaxBytes]
     );
+    broadcastMenuAdminUpdate({ action: "repo_section_created" });
     res.json({ id: result.lastID, name: name.trim(), display_order: nextOrder, max_bytes: normalizedMaxBytes, created_at: new Date().toISOString(), images: [] });
   } catch (error) {
     if (error.message.includes("UNIQUE")) {
@@ -668,6 +677,7 @@ const updateRepoSection = async (req, res) => {
     }
 
     const updated = await all(`SELECT id, name, display_order, max_bytes, created_at FROM image_repository_sections WHERE id = ?`, [id]);
+    broadcastMenuAdminUpdate({ action: "repo_section_updated", id: Number(id) });
     res.json({ success: true, section: updated[0] });
   } catch (error) {
     if (error.message.includes("UNIQUE")) {
@@ -689,6 +699,7 @@ const deleteRepoSection = async (req, res) => {
       await deleteRepoImageFileIfUnused(image.image_url, image.id);
     }
 
+    broadcastMenuUpdate({ action: "repo_section_deleted", id: Number(id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -732,6 +743,7 @@ const uploadRepoImage = async (req, res) => {
       created_at: new Date().toISOString()
     };
 
+    broadcastMenuAdminUpdate({ action: "repo_image_uploaded", id: repoImage.id });
     res.json({ success: true, repo_image: repoImage });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -749,6 +761,7 @@ const deleteRepoImage = async (req, res) => {
     await run(`UPDATE menu_items SET repo_image_id = NULL WHERE repo_image_id = ?`, [id]);
     await run(`DELETE FROM repo_images WHERE id = ?`, [id]);
     await deleteRepoImageFileIfUnused(imageUrl, Number(id));
+    broadcastMenuUpdate({ action: "repo_image_deleted", id: Number(id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1272,6 +1285,7 @@ const createPromotionTemplate = async (req, res) => {
       "INSERT INTO promotion_templates (promo_label, promo_affects_price, promo_discount_percent) VALUES (?, ?, ?)",
       [promo_label, promo_affects_price ? 1 : 0, promo_discount_percent !== undefined ? promo_discount_percent : null]
     );
+    broadcastMenuAdminUpdate({ action: "promotion_template_created", id: result.lastID });
     res.json({ id: result.lastID, success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1282,6 +1296,7 @@ const deletePromotionTemplate = async (req, res) => {
   const { id } = req.params;
   try {
     await run("DELETE FROM promotion_templates WHERE id = ?", [id]);
+    broadcastMenuAdminUpdate({ action: "promotion_template_deleted", id: Number(id) });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

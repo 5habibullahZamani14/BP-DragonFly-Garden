@@ -11,12 +11,11 @@
  * reflected instantly in the UI via optimistic updates.
  */
 import { useTranslation } from "react-i18next";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -27,7 +26,9 @@ import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadClou
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { notifyServerShutdownRequested } from "@/lib/useServerConnectionNotice";
 import { safeConsoleError } from "@/lib/safeConsole";
+import { DataCleanupTab } from "./DataCleanupTab";
 
 type ReceiptCopies = {
   order_customer?: number;
@@ -69,6 +70,29 @@ type PrinterSettingsResponse = PrinterApiResponse & {
   defaultPrinter?: string;
   printerPreferences?: PrinterPreferences;
 };
+type SampleTicketResponse = PrinterApiResponse & { ticket?: string };
+type SampleTicketType = "order_customer" | "order_kitchen" | "addon_customer" | "addon_kitchen" | "final_receipt" | "daily_sales_report";
+type SampleTicketLine = { text: string; alignment: "left" | "center" | "right" };
+
+const SAMPLE_TICKET_TYPES: { value: SampleTicketType; label: string }[] = [
+  { value: "order_customer", label: "New Order — Customer Copy" },
+  { value: "order_kitchen", label: "New Order — Kitchen Copy" },
+  { value: "addon_customer", label: "Add-on — Customer Copy" },
+  { value: "addon_kitchen", label: "Add-on — Kitchen Copy" },
+  { value: "final_receipt", label: "Final Receipt" },
+  { value: "daily_sales_report", label: "Daily Sales Report" }
+];
+
+const isSampleTicketType = (value: string): value is SampleTicketType =>
+  SAMPLE_TICKET_TYPES.some((ticketType) => ticketType.value === value);
+
+const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
+  ticket.split(/\r?\n/).map((line) => {
+    if (line.startsWith("[CENTER]")) return { text: line.slice(8), alignment: "center" };
+    if (line.startsWith("[RIGHT]")) return { text: line.slice(7), alignment: "right" };
+    if (line.startsWith("[LEFT]")) return { text: line.slice(6), alignment: "left" };
+    return { text: line, alignment: "left" };
+  });
 
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
@@ -124,8 +148,7 @@ export const SettingsTab = () => {
   const [resetCategory, setResetCategory] = useState<string>("all_data");
   const [resetConfirmationInput, setResetConfirmationInput] = useState("");
   const [resetSentenceExpected, setResetSentenceExpected] = useState("");
-  const [resetCodeExpected, setResetCodeExpected] = useState("");
-  const [resetCodeInput, setResetCodeInput] = useState("");
+  const [resetPasswordInput, setResetPasswordInput] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -165,6 +188,7 @@ export const SettingsTab = () => {
     message: string;
   } | null>(null);
   const [printerSettingsLoading, setPrinterSettingsLoading] = useState(false);
+  const hasLoadedPrinterSettingsRef = useRef(false);
   const [printerChoiceSaving, setPrinterChoiceSaving] = useState<{
     printerName: string;
     choice: "active" | "default";
@@ -175,6 +199,13 @@ export const SettingsTab = () => {
   const [editingTicketPreview, setEditingTicketPreview] = useState(false);
   const [ticketPreviewSaving, setTicketPreviewSaving] = useState(false);
   const [ticketPreviewHasBeenSaved, setTicketPreviewHasBeenSaved] = useState(false);
+  const ticketPreviewValueRef = useRef(ticketPreview);
+  const ticketPreviewContentRef = useRef<HTMLPreElement>(null);
+  const [sampleTicketType, setSampleTicketType] = useState<SampleTicketType>("order_customer");
+  const [sampleTicket, setSampleTicket] = useState("");
+  const [sampleTicketLoading, setSampleTicketLoading] = useState(false);
+  const [sampleTicketError, setSampleTicketError] = useState<string | null>(null);
+  const [printingSampleTicket, setPrintingSampleTicket] = useState(false);
   const [receiptCopiesSaving, setReceiptCopiesSaving] = useState(false);
   const [receiptCopiesSaved, setReceiptCopiesSaved] = useState(false);
   
@@ -199,14 +230,60 @@ export const SettingsTab = () => {
     pending: boolean;
   }>({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
 
+  ticketPreviewValueRef.current = ticketPreview;
+
+  useEffect(() => {
+    const preview = ticketPreviewContentRef.current;
+    if (!preview) return;
+    preview.textContent = ticketPreviewValueRef.current;
+    if (editingTicketPreview) preview.focus();
+  }, [editingTicketPreview]);
+
   useEffect(() => {
     loadAll();
   }, []);
 
   // WebSocket listener for real-time settings updates
-  useWebSocket(["SETTINGS_UPDATE", "PRINT_JOB_REVIEW_REQUIRED"], (event) => {
-    if (event.type === "SETTINGS_UPDATE") loadAll();
-    if (event.type === "PRINT_JOB_REVIEW_REQUIRED") void loadPrinterJobs();
+  useWebSocket([
+    "SETTINGS_UPDATE",
+    "MENU_UPDATE",
+    "BACKUP_UPDATE",
+    "DATA_REFRESH",
+    "PRINTER_SETTINGS_UPDATE",
+    "PRINT_JOB_REVIEW_REQUIRED",
+    "PRINT_JOB_REVIEW_UPDATED",
+    "CONNECTION_RESTORED",
+  ], (event) => {
+    if (event.type === "SETTINGS_UPDATE" || event.type === "DATA_REFRESH" || event.type === "CONNECTION_RESTORED") {
+      void loadAll();
+    }
+    if (
+      event.type === "PRINTER_SETTINGS_UPDATE" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      void loadPrinterSettings();
+    }
+    if (event.type === "MENU_UPDATE") {
+      const payload = event.payload as { reason?: string };
+      if (payload?.reason !== "inventory" && payload?.reason !== "order_inventory") {
+        void fetchPatterns()
+          .then((data) => setPatterns(data || []))
+          .catch((error) => safeConsoleError("Failed to refresh settings patterns", error));
+      }
+    }
+    if (event.type === "BACKUP_UPDATE") {
+      void loadBackups();
+      void loadCloudBackups();
+    }
+    if (
+      event.type === "PRINT_JOB_REVIEW_REQUIRED" ||
+      event.type === "PRINT_JOB_REVIEW_UPDATED" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      void loadPrinterJobs();
+    }
   });
 
   const loadAll = async () => {
@@ -249,7 +326,6 @@ export const SettingsTab = () => {
       setResetOptions(data.options || []);
       setResetCategory(data.options?.[0]?.key || "all_data");
       setResetSentenceExpected(data.confirmationSentence || "");
-      setResetCodeExpected(data.confirmationCode || "");
     } catch (e) {
       safeConsoleError("Failed to load data reset options", e);
     }
@@ -346,6 +422,7 @@ export const SettingsTab = () => {
             throw new Error(result.message || "The server did not accept the shutdown request.");
           }
           setShutdownRequested(true);
+          notifyServerShutdownRequested();
         } catch (err: unknown) {
           safeConsoleError("Server shutdown request failed", err);
           setShutdownError(getErrorMessage(err));
@@ -408,9 +485,10 @@ export const SettingsTab = () => {
   const [printerError, setPrinterError] = useState<string | null>(null);
   const [printerJobs, setPrinterJobs] = useState<PrinterJobReview[]>([]);
   const [printerJobsLoading, setPrinterJobsLoading] = useState(false);
+  const hasLoadedPrinterJobsRef = useRef(false);
 
-  const loadPrinterJobs = useCallback(async () => {
-    setPrinterJobsLoading(true);
+  const loadPrinterJobs = useCallback(async (showLoading = false) => {
+    if (showLoading || !hasLoadedPrinterJobsRef.current) setPrinterJobsLoading(true);
     try {
       const response = await fetch("/management/printers/jobs/review", {
         credentials: "include",
@@ -421,6 +499,7 @@ export const SettingsTab = () => {
         throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
       setPrinterJobs(data.jobs || []);
+      hasLoadedPrinterJobsRef.current = true;
     } catch (error: unknown) {
       safeConsoleError("Failed to load printer jobs needing review", error);
       toast.error(`Could not load printer job status: ${getErrorMessage(error)}`);
@@ -492,7 +571,7 @@ export const SettingsTab = () => {
   }, []);
 
   const loadPrinterSettings = async () => {
-    setPrinterSettingsLoading(true);
+    if (!hasLoadedPrinterSettingsRef.current) setPrinterSettingsLoading(true);
     try {
       const response = await fetch("/management/printers/settings", {
         credentials: "include",
@@ -521,6 +600,7 @@ export const SettingsTab = () => {
       setAddonKitchenCopies(copies?.addon_kitchen ?? 1);
       setFinalReceiptCopies(copies?.final_receipt ?? 1);
       setDailySalesReportCopies(copies?.daily_sales_report ?? 1);
+      hasLoadedPrinterSettingsRef.current = true;
     } catch (err: unknown) {
       safeConsoleError("Failed to load printer settings", err);
       toast.error(`Could not load printer settings: ${getErrorMessage(err)}`);
@@ -551,6 +631,40 @@ export const SettingsTab = () => {
       toast.error(`Failed to print daily sales report: ${getErrorMessage(err)}`);
     } finally {
       setPrintingDailyReport(false);
+      void loadPrinterJobs();
+    }
+  };
+
+  const printSampleTicket = async () => {
+    const printerName = selectedPrinter || defaultPrinter;
+    if (!printerName) {
+      toast.error("Choose an active or default printer before printing a sample.");
+      return;
+    }
+    if (sampleTicketLoading || sampleTicketError || !sampleTicket.trim()) {
+      toast.error("Wait for the selected sample preview to finish loading.");
+      return;
+    }
+
+    setPrintingSampleTicket(true);
+    try {
+      const response = await fetch("/management/printers/sample-ticket/print", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: sampleTicketType })
+      });
+      const data: PrinterApiResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
+      }
+      const sampleLabel = SAMPLE_TICKET_TYPES.find(({ value }) => value === sampleTicketType)?.label || "sample ticket";
+      toast.success(data.message || `${sampleLabel} sent to ${printerName}.`);
+    } catch (error: unknown) {
+      safeConsoleError("Failed to print sample ticket", error);
+      toast.error(`Sample print failed: ${getErrorMessage(error)}`);
+    } finally {
+      setPrintingSampleTicket(false);
       void loadPrinterJobs();
     }
   };
@@ -852,6 +966,35 @@ export const SettingsTab = () => {
     loadPrinterSettings();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadSampleTicket = async () => {
+      setSampleTicketLoading(true);
+      setSampleTicketError(null);
+      setSampleTicket("");
+      try {
+        const response = await fetch(
+          `/management/printers/sample-ticket?type=${encodeURIComponent(sampleTicketType)}`,
+          { credentials: "include", signal: controller.signal }
+        );
+        const data: SampleTicketResponse = await response.json();
+        if (!response.ok || !data.success || typeof data.ticket !== "string") {
+          throw new Error(data.message || `Request failed (HTTP ${response.status})`);
+        }
+        setSampleTicket(data.ticket);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        safeConsoleError("Failed to load sample ticket preview", error);
+        setSampleTicketError(getErrorMessage(error, "Could not load this sample ticket."));
+      } finally {
+        if (!controller.signal.aborted) setSampleTicketLoading(false);
+      }
+    };
+
+    void loadSampleTicket();
+    return () => controller.abort();
+  }, [sampleTicketType]);
+
   // Don't reload printer settings when switching printers - use local state
   // Only reload on initial mount
 
@@ -927,21 +1070,26 @@ export const SettingsTab = () => {
       const payload: {
         category: string;
         confirmationSentence?: string;
-        confirmationCode?: string;
         confirmationText?: string;
+        managerPassword?: string;
       } = { category: resetCategory };
 
       if (selectedOption.key === "all_data") {
         payload.confirmationSentence = resetConfirmationInput.trim();
-        payload.confirmationCode = resetCodeInput.trim();
+        payload.managerPassword = resetPasswordInput;
       } else {
         payload.confirmationText = resetConfirmationInput.trim();
       }
 
-      await performDataReset(payload);
-      setResetMessage({ text: "✅ Data reset completed successfully.", isError: false });
+      const result = await performDataReset(payload);
+      setResetMessage({
+        text: result.warnings?.length
+          ? `Data reset completed. ${result.warnings.join(" ")}`
+          : "Data reset completed successfully.",
+        isError: false,
+      });
       setResetConfirmationInput("");
-      setResetCodeInput("");
+      setResetPasswordInput("");
       if (selectedOption.key === "all_data") {
         setTimeout(() => window.location.reload(), 1500);
       }
@@ -965,27 +1113,6 @@ export const SettingsTab = () => {
     setUploadFile(file);
     setUploadError(null);
   };
-
-  if (shutdownRequested) return (
-    <div className="p-6" role="status" aria-live="polite">
-      <Card className="mx-auto max-w-2xl border-2 border-amber-300 bg-amber-50">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Power className="h-6 w-6 text-amber-700" />
-            <CardTitle className="text-xl text-amber-950">Server shutdown requested</CardTitle>
-          </div>
-
-          <CardDescription className="text-amber-900">
-            New requests are blocked and connected sessions are closing. The backend is finishing active background work before closing the database.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-amber-950">
-          <p>You can close this browser window. Closing the window alone does not stop the backend.</p>
-          <p>To start the app again, use the normal server startup method, such as a DragonFly Garden desktop shortcut on Windows.</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
 
   if (hoursLoading) return (
     <div className="space-y-6 p-6">
@@ -1097,7 +1224,17 @@ export const SettingsTab = () => {
       </Card>
 
     <Accordion type="single" collapsible className="space-y-6" value={activeAccordion} onValueChange={setActiveAccordion}>
-
+      <AccordionItem value="data-cleanup" className="border rounded-xl bg-card text-card-foreground shadow-sm border-amber-200">
+        <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
+          <div className="font-semibold text-lg flex items-center gap-2">
+            <Database className="h-5 w-5 text-amber-700" />
+            {t("m.dataCleanup.title")}
+          </div>
+        </AccordionTrigger>
+        <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
+          <DataCleanupTab />
+        </AccordionContent>
+      </AccordionItem>
       {/* ── Tax & Service Charge ─────────────────────────── */}
       <AccordionItem value="tax" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
@@ -1429,7 +1566,7 @@ export const SettingsTab = () => {
                   <p className="text-sm text-muted-foreground">
                     If submission was interrupted, the ticket may or may not have printed. Check the printer and its queue before arranging a manual reprint. The system never retries these jobs automatically.
                   </p>
-                  <Button variant="outline" size="sm" onClick={() => void loadPrinterJobs()} disabled={printerJobsLoading}>
+                  <Button variant="outline" size="sm" onClick={() => void loadPrinterJobs(true)} disabled={printerJobsLoading}>
                     {printerJobsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                     Refresh job status
                   </Button>
@@ -1575,82 +1712,168 @@ export const SettingsTab = () => {
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-4">
-                  <div className="bg-gray-50 border rounded-lg p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h4 className="font-semibold text-sm">Test Ticket Preview</h4>
-                      {!editingTicketPreview ? (
-                        <Button variant="outline" size="sm" onClick={() => setEditingTicketPreview(true)}>
-                          Edit
-                        </Button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setTicketPreview(savedTicketPreview || DEFAULT_TEST_TICKET);
-                              setEditingTicketPreview(false);
-                            }}
-                            disabled={ticketPreviewSaving}
-                          >
-                            Cancel
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="min-w-0 bg-gray-50 border rounded-lg p-4" style={{ containerType: "inline-size" }}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h4 className="font-semibold text-sm">Test Ticket Preview</h4>
+                        {!editingTicketPreview ? (
+                          <Button variant="outline" size="sm" onClick={() => setEditingTicketPreview(true)}>
+                            Edit
                           </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => void saveTicketPreview()}
-                            disabled={ticketPreviewSaving || !ticketPreview.trim() || ticketPreview.length > 4000}
-                          >
-                            {ticketPreviewSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Preview"}
-                          </Button>
-                        </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setTicketPreview(savedTicketPreview || DEFAULT_TEST_TICKET);
+                                setEditingTicketPreview(false);
+                              }}
+                              disabled={ticketPreviewSaving}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => void saveTicketPreview()}
+                              disabled={ticketPreviewSaving || !ticketPreview.trim() || ticketPreview.length > 4000}
+                            >
+                              {ticketPreviewSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Preview"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <pre
+                        ref={ticketPreviewContentRef}
+                        contentEditable={editingTicketPreview}
+                        suppressContentEditableWarning
+                        role={editingTicketPreview ? "textbox" : undefined}
+                        aria-label={editingTicketPreview ? "Editable test ticket text" : undefined}
+                        aria-multiline={editingTicketPreview || undefined}
+                        spellCheck={false}
+                        onInput={(event) => {
+                          const enteredText = event.currentTarget.innerText.replace(/\r\n?/g, "\n");
+                          const nextText = enteredText.slice(0, 4000);
+                          if (nextText !== enteredText) {
+                            event.currentTarget.textContent = nextText;
+                            const range = document.createRange();
+                            range.selectNodeContents(event.currentTarget);
+                            range.collapse(false);
+                            const selection = window.getSelection();
+                            selection?.removeAllRanges();
+                            selection?.addRange(range);
+                          }
+                          setTicketPreview(nextText);
+                        }}
+                        className="mt-3 min-h-40 w-full whitespace-pre-wrap break-all bg-white border font-mono focus:outline-none"
+                        style={{
+                          fontSize: "calc(3.472222cqi - 0.069444px)",
+                          lineHeight: 1.2,
+                          padding: 0,
+                          overflowWrap: "anywhere"
+                        }}
+                      >
+                        {editingTicketPreview ? null : ticketPreview}
+                      </pre>
+                      {ticketPreviewHasBeenSaved && ticketPreview !== savedTicketPreview && (
+                        <p role="status" className="mt-2 text-sm text-amber-700">Preview changed; save it before printing the test ticket.</p>
                       )}
+                      {!ticketPreviewHasBeenSaved && (
+                        <p role="status" className="mt-2 text-sm text-amber-700">Save this preview once before printing a test ticket.</p>
+                      )}
+                      <Button
+                        onClick={() => void printTestTicket()}
+                        disabled={printingTestTicket || !selectedPrinter || !ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview}
+                        className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
+                      >
+                        {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
+                          : <><Printer className="h-4 w-4" /> Print Test Ticket</>}
+                      </Button>
                     </div>
 
-                    {editingTicketPreview ? (
-                      <Textarea
-                        value={ticketPreview}
-                        onChange={(event) => setTicketPreview(event.target.value)}
-                        maxLength={4000}
-                        rows={12}
-                        className="mt-3 font-mono text-sm"
-                        aria-label="Editable test ticket text"
-                      />
-                    ) : (
-                      <pre className="mt-3 max-h-96 min-h-40 overflow-auto whitespace-pre bg-white border rounded p-4 font-mono text-sm leading-5">
-                        {ticketPreview}
-                      </pre>
-                    )}
-                    {ticketPreviewHasBeenSaved && ticketPreview !== savedTicketPreview && (
-                      <p role="status" className="mt-2 text-sm text-amber-700">Preview changed; save it before printing the test ticket.</p>
-                    )}
-                    {!ticketPreviewHasBeenSaved && (
-                      <p role="status" className="mt-2 text-sm text-amber-700">Save this preview once before printing a test ticket.</p>
-                    )}
-                    <Button
-                      onClick={() => void printTestTicket()}
-                      disabled={printingTestTicket || !selectedPrinter || !ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview}
-                      className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
-                    >
-                      {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
-                        : <><Printer className="h-4 w-4" /> Print Test Ticket</>}
-                    </Button>
-                    
-                    {/* Daily Sales Report Button */}
-                    <div className="space-y-4 pt-4 border-t mt-4">
-                      <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
-                      <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
-                      
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={printDailySalesReport} 
-                          disabled={printingDailyReport}
-                          className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
+                    <div className="min-w-0 bg-gray-50 border rounded-lg p-4" style={{ containerType: "inline-size" }}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h4 className="font-semibold text-sm">Sample Ticket Preview</h4>
+                        <Select
+                          value={sampleTicketType}
+                          disabled={printingSampleTicket}
+                          onValueChange={(value) => {
+                            if (isSampleTicketType(value)) setSampleTicketType(value);
+                          }}
                         >
-                          {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
-                            : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>
-                          }
-                        </Button>
+                          <SelectTrigger aria-label="Sample ticket type" className="w-full sm:w-64">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SAMPLE_TICKET_TYPES.map(({ value, label }) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
+
+                      <div className="mt-3 min-h-40 w-full whitespace-pre-wrap break-all border bg-white font-mono">
+                        {sampleTicketLoading ? (
+                          <p role="status" className="p-3 text-sm text-muted-foreground">Loading sample...</p>
+                        ) : sampleTicketError ? (
+                          <p role="alert" className="p-3 text-sm text-destructive">{sampleTicketError}</p>
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: "calc(3.472222cqi - 0.069444px)",
+                              lineHeight: 1.2,
+                              overflowWrap: "anywhere"
+                            }}
+                          >
+                            {parseSampleTicketLines(sampleTicket).map((line, index) => (
+                              <div key={index} style={{ textAlign: line.alignment }}>
+                                {line.text || "\u00a0"}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <Button
+                          onClick={() => void printSampleTicket()}
+                          disabled={
+                            printingSampleTicket ||
+                            sampleTicketLoading ||
+                            Boolean(sampleTicketError) ||
+                            !sampleTicket.trim() ||
+                            (!selectedPrinter && !defaultPrinter)
+                          }
+                          className="bg-indigo-600 text-white hover:bg-indigo-700"
+                        >
+                          {printingSampleTicket ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Printing sample...</>
+                          ) : (
+                            <><Printer className="mr-2 h-4 w-4" /> Print This Sample</>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedPrinter || defaultPrinter
+                            ? `Prints one copy on ${selectedPrinter || defaultPrinter}.`
+                            : "Select an active or default printer to enable sample printing."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
+                    <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={printDailySalesReport}
+                        disabled={printingDailyReport}
+                        className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
+                      >
+                        {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
+                          : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1798,8 +2021,8 @@ export const SettingsTab = () => {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-orange-600" />
                 <div>
-                  <p className="font-bold text-gray-900">System Data Reset</p>
-                  <p className="text-sm text-gray-600">Select a reset category and confirm to safely clear app data.</p>
+                <p className="font-bold text-gray-900">Data Reset</p>
+                <p className="text-sm text-gray-600">Remove a complete data category, or use Reset Everything for a clean restaurant setup.</p>
                 </div>
               </div>
 
@@ -1821,26 +2044,34 @@ export const SettingsTab = () => {
 
                 {resetCategory === "all_data" ? (
                   <div className="space-y-4">
+                    <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950">
+                      <p className="font-bold">This permanently removes business data and uploaded photos.</p>
+                      <p className="mt-1">It clears orders and archives, feedback, menu items and categories, tables, inventory, employees, printer history, promotions, and activity history.</p>
+                      <p className="mt-1">Your manager login, printer setup, tax and service-charge settings, working hours, the Counter Order system route, and backup archives are retained so the app remains usable and recoverable.</p>
+                      <p className="mt-1 font-semibold">This cannot be undone except by restoring a backup.</p>
+                    </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reset-confirmation-sentence">Confirmation sentence</Label>
+                      <Label htmlFor="reset-confirmation-sentence">Type the exact confirmation sentence</Label>
                       <Input
                         id="reset-confirmation-sentence"
                         value={resetConfirmationInput}
                         onChange={(e) => setResetConfirmationInput(e.target.value)}
-                        placeholder="Type the exact confirmation sentence to proceed"
+                        autoComplete="off"
+                        placeholder="Type the exact sentence shown below"
                       />
-                      <p className="text-xs text-muted-foreground">Exact sentence: {resetSentenceExpected || "N/A"}</p>
+                      <p className="text-xs text-muted-foreground">Required: {resetSentenceExpected || "Loading confirmation..."}</p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="reset-confirmation-code">Confirmation code</Label>
+                      <Label htmlFor="reset-manager-password">Re-enter the manager password</Label>
                       <Input
-                        id="reset-confirmation-code"
-                        value={resetCodeInput}
-                        onChange={(e) => setResetCodeInput(e.target.value)}
-                        placeholder="Type the confirmation code"
+                        id="reset-manager-password"
+                        type="password"
+                        value={resetPasswordInput}
+                        onChange={(e) => setResetPasswordInput(e.target.value)}
+                        autoComplete="current-password"
+                        placeholder="Manager password"
                       />
-                      <p className="text-xs text-muted-foreground">Exact code: {resetCodeExpected || "N/A"}</p>
                     </div>
                   </div>
                 ) : (
@@ -1863,11 +2094,19 @@ export const SettingsTab = () => {
                 <div className="flex justify-end">
                   <Button
                     onClick={handlePerformDataReset}
-                    disabled={resetLoading || !resetCategory}
+                    disabled={
+                      resetLoading ||
+                      !resetCategory ||
+                      (resetCategory === "all_data"
+                        ? resetConfirmationInput.trim() !== resetSentenceExpected || !resetPasswordInput
+                        : resetConfirmationInput.trim() !== resetOptions.find((option) => option.key === resetCategory)?.label)
+                    }
                     variant="destructive"
                     className="bg-rose-600 hover:bg-rose-700 text-white"
                   >
-                    {resetLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Reset</> : "Reset"}
+                    {resetLoading
+                      ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Deleting data…</>
+                      : resetCategory === "all_data" ? "Reset Everything" : "Delete this category"}
                   </Button>
                 </div>
               </div>

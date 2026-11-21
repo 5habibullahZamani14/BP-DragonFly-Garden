@@ -1,5 +1,10 @@
-const CACHE_NAME = "dragonfly-garden-pwa-v1";
+const CACHE_NAME = "dragonfly-garden-pwa-v3";
 const URLS_TO_CACHE = ["/", "/favicon.ico", "/manifest.webmanifest"];
+
+const isNetworkOnlyRequest = (request) =>
+  request.method !== "GET" ||
+  request.destination === "" ||
+  new URL(request.url).origin !== self.location.origin;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -17,12 +22,35 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (!response.ok) return response;
+          return caches.open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, response.clone()))
+            .then(() => response, () => response);
+        })
+        .catch(() => caches.match(event.request).then((cachedResponse) =>
+          cachedResponse || caches.match("/")
+        ))
+    );
+    return;
+  }
+
+  if (isNetworkOnlyRequest(event.request)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request);
-    })
+    fetch(event.request)
+      .then((response) => {
+        if (!response.ok) return response;
+        return caches.open(CACHE_NAME)
+          .then((cache) => cache.put(event.request, response.clone()))
+          .then(() => response, () => response);
+      })
+      .catch(async () => (await caches.match(event.request)) || Response.error())
   );
 });

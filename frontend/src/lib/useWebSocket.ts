@@ -8,10 +8,9 @@
  *
  * Design decisions worth noting:
  *
- *   Automatic reconnection: If the connection drops (server restart, network
- *   blip), the hook waits 3 seconds and reconnects automatically. This is
- *   important for real-time updates — staff should not miss an incoming order
- *   because of a temporary connection loss.
+ *   Automatic reconnection: If the connection drops, the hook retries from
+ *   250 ms with bounded backoff. A reconnect notification lets live views
+ *   refresh changes that happened while their socket was unavailable.
  *
  *   Shared connection status: The hook also publishes active and connected
  *   socket counts so the app shell can distinguish a live-update interruption
@@ -119,11 +118,19 @@ export type WSEventType =
   | "NEW_FEEDBACK"
   | "FEEDBACK_ANALYSIS_UPDATE"
   | "MENU_UPDATE"
+  | "MENU_ADMIN_UPDATE"
   | "TABLE_UPDATE"
   | "EMPLOYEE_UPDATE"
   | "SETTINGS_UPDATE"
   | "FEEDBACK_RESPONSE"
-  | "PRINT_JOB_REVIEW_REQUIRED";
+  | "FEEDBACK_UPDATE"
+  | "PRINT_JOB_REVIEW_REQUIRED"
+  | "PRINT_JOB_REVIEW_UPDATED"
+  | "PRINTER_SETTINGS_UPDATE"
+  | "LOG_UPDATE"
+  | "BACKUP_UPDATE"
+  | "DATA_REFRESH"
+  | "CONNECTION_RESTORED";
 
 interface WSEvent {
   type: WSEventType;
@@ -175,18 +182,25 @@ export const useWebSocket = (
     }
 
     let reconnectTimeout: ReturnType<typeof setTimeout>;
+    let stableConnectionTimeout: ReturnType<typeof setTimeout> | undefined;
     let reconnectAttempts = 0;
+    let hasConnectedBefore = false;
     let cleanupRequested = false;
     let currentWs: WebSocket | null = null;
     const connection = registerConnection();
+
+    const scheduleReconnect = () => {
+      if (cleanupRequested) return;
+      const delay = Math.min(250 * 2 ** reconnectAttempts, 5000) + Math.floor(Math.random() * 200);
+      reconnectAttempts++;
+      reconnectTimeout = setTimeout(connect, delay);
+    };
 
     const connect = () => {
       if (qrCodeGetterRef.current && !qrCode) {
         connection.setConnected(false);
         setIsConnected(false);
-        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
-        reconnectAttempts++;
-        reconnectTimeout = setTimeout(connect, delay);
+        scheduleReconnect();
         return;
       }
 
@@ -209,7 +223,14 @@ export const useWebSocket = (
           }
           connection.setConnected(true);
           setIsConnected(true);
-          reconnectAttempts = 0; // Reset attempts on successful connection
+          if (hasConnectedBefore && eventTypesRef.current.includes("CONNECTION_RESTORED")) {
+            callbackRef.current({ type: "CONNECTION_RESTORED", payload: null });
+          }
+          hasConnectedBefore = true;
+          if (stableConnectionTimeout !== undefined) clearTimeout(stableConnectionTimeout);
+          stableConnectionTimeout = setTimeout(() => {
+            reconnectAttempts = 0;
+          }, 10000);
         };
 
         ws.onmessage = (event) => {
@@ -227,11 +248,11 @@ export const useWebSocket = (
           if (cleanupRequested || currentWs !== ws) return;
           connection.setConnected(false);
           setIsConnected(false);
-          const base = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000);
-          const jitter = Math.floor(Math.random() * 3000);
-          const delay = base + jitter;
-          reconnectAttempts++;
-          reconnectTimeout = setTimeout(connect, delay);
+          if (stableConnectionTimeout !== undefined) {
+            clearTimeout(stableConnectionTimeout);
+            stableConnectionTimeout = undefined;
+          }
+          scheduleReconnect();
         };
 
         ws.onerror = (error) => {
@@ -242,9 +263,7 @@ export const useWebSocket = (
       } catch (error) {
         connection.setConnected(false);
         safeConsoleError("Failed to create WebSocket connection", error);
-        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 30000) + Math.floor(Math.random() * 3000);
-        reconnectAttempts++;
-        reconnectTimeout = setTimeout(connect, delay);
+        scheduleReconnect();
       }
     };
 
@@ -254,6 +273,7 @@ export const useWebSocket = (
     return () => {
       cleanupRequested = true;
       clearTimeout(reconnectTimeout);
+      if (stableConnectionTimeout !== undefined) clearTimeout(stableConnectionTimeout);
       connection.unregister();
       if (currentWs && currentWs.readyState !== WebSocket.CLOSED) {
         currentWs.onclose = null;

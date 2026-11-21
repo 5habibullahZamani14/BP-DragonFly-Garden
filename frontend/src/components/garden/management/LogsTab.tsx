@@ -22,7 +22,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { useCallback, useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -40,11 +40,13 @@ import { matchesTimeframe, type TimeframeValue } from "@/lib/parseDbTimestamp";
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { safeConsoleError } from "@/lib/safeConsole";
+import { useWebSocket } from "@/lib/useWebSocket";
 
 export const LogsTab = () => {
   const { t } = useTranslation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedLogsRef = useRef(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [timeFrame, setTimeFrame] = useState<string>("all");
@@ -106,9 +108,10 @@ export const LogsTab = () => {
 
   const loadLogs = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedLogsRef.current) setLoading(true);
       const data = await fetchLogs("");
       setLogs(data || []);
+      hasLoadedLogsRef.current = true;
     } catch (e) {
       safeConsoleError("Failed to load logs", e);
     } finally {
@@ -117,8 +120,25 @@ export const LogsTab = () => {
   }, []);
 
   useEffect(() => {
-    loadLogs();
+    void loadLogs();
   }, [loadLogs]);
+
+  useWebSocket([
+    "LOG_UPDATE",
+    "NEW_ORDER",
+    "ORDER_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "CALL_WAITER",
+    "CALL_WAITER_ACK",
+    "INVENTORY_UPDATE",
+    "TABLE_UPDATE",
+    "EMPLOYEE_UPDATE",
+    "SETTINGS_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
+  ], () => {
+    void loadLogs();
+  });
 
   const filteredLogs = useMemo(() => {
     let result = [...logs];

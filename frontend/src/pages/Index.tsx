@@ -21,7 +21,10 @@ import { CustomerView } from "@/components/garden/CustomerView";
 import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
 import { ManagementView } from "@/components/garden/ManagementView";
 import { ServerConnectionNotice } from "@/components/ServerConnectionNotice";
-import { useServerConnectionNotice } from "@/lib/useServerConnectionNotice";
+import {
+  isServerConnectionOutage,
+  useServerConnectionNotice,
+} from "@/lib/useServerConnectionNotice";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 const TABLE_QR_PATTERN = /^table-[a-z0-9_-]+$/i;
@@ -84,6 +87,14 @@ const Index = () => {
 
   const role: Role = initial.role;
   const qr = initial.qrCode;
+
+  if (isServerConnectionOutage(connectionNotice)) {
+    return (
+      <main className="relative min-h-screen overflow-x-clip">
+        <ServerConnectionNotice kind={connectionNotice} />
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen overflow-x-clip">

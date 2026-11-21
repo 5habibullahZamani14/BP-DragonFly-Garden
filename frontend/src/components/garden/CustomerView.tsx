@@ -23,7 +23,7 @@
  *
  *   4. Order Confirmation: To prevent accidental orders, I implemented a
  *      two-phase system. When "Send Order" is tapped, a circular countdown
- *      starts. The guest has 8 seconds to cancel before the order is
+ *      starts. The guest has 5 seconds to cancel before the order is
  *      atomically sent to the backend.
  *
  *   5. Receipt UI: The order tracking uses a "zig-zag" receipt design with
@@ -144,6 +144,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   });
   const [tableInfo, setTableInfo] = useState<{ id: number; table_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionRefreshVersion, setConnectionRefreshVersion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   // Active orders (in queue / preparing / ready-but-not-yet-viewed-and-cleared)
   const [orders, setOrders] = useState<Order[]>([]);
@@ -179,6 +180,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const confirmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingCartRef = useRef<CartLine[] | null>(null); // ref-backed copy of pendingCart — avoids stale closure
+  const hasLoadedCustomerDataRef = useRef(false);
 
   // ── Confirmation countdown (5 s before order actually sent) ────────────
   const [pendingCart, setPendingCart] = useState<CartLine[] | null>(null);
@@ -316,13 +318,13 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   // Load menu + table + tax settings + categories + patterns, then restore any active orders from the DB
   useEffect(() => {
     let alive = true;
+    if (!hasLoadedCustomerDataRef.current) setLoading(true);
     (async () => {
-      setLoading(true);
       try {
-        const [m, t, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchPublicSettings(), fetchCategories(), fetchPublicPatterns()]);
+        const [m, table, settings, cats, p] = await Promise.all([fetchMenu(), fetchTable(qrCode), fetchPublicSettings(), fetchCategories(), fetchPublicPatterns()]);
         if (!alive) return;
         setMenu(m);
-        setTableInfo(t);
+        setTableInfo(table);
         setCategoriesFromApi(cats.sort((a, b) => a.display_order - b.display_order));
         setPatterns(p || []);
         // Load tax settings
@@ -331,18 +333,16 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
         const sstRate = sstEnabled ? parseFloat(String(settings?.sst_rate ?? 0.06)) : 0;
         const scRate = scEnabled ? parseFloat(String(settings?.service_charge_rate ?? 0.10)) : 0;
         if (alive) setTaxSettings({ sstEnabled, sstRate, scEnabled, scRate });
-        // Re-hydrate active orders so they survive a refresh
-        try {
-          const active = await fetchActiveOrdersForTable(t.id, qrCode);
-          if (alive && active.length > 0) {
+        hasLoadedCustomerDataRef.current = true;
+        if (alive) setLoading(false);
+        void fetchActiveOrdersForTable(table.id, qrCode)
+          .then((active) => {
+            if (!alive) return;
             setOrders(active);
             active.forEach(o => { prevStageRef.current[o.id] = o.status; });
-          }
-        } catch { /* non-critical: orders panel just starts empty */ }
-        // Fetch user's feedback history/replies
-        if (alive) {
-          loadFeedbackList();
-        }
+          })
+          .catch((error) => safeConsoleError("Failed to refresh active customer orders", error));
+        if (alive) void loadFeedbackList();
       } catch (err) {
         if (alive) notify("error", t("customer.failedLoadMenu"));
       } finally {
@@ -350,7 +350,7 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
       }
     })();
     return () => { alive = false; };
-  }, [notify, qrCode]);
+  }, [notify, qrCode, connectionRefreshVersion]);
 
   // Persist cart / history / celebratedIds to sessionStorage
   useEffect(() => { sessionStorage.setItem(`dfg_cart_${qrCode}`, JSON.stringify(cart)); }, [cart, qrCode]);
@@ -363,13 +363,65 @@ export const CustomerView = ({ qrCode, notify }: Props) => {
   useWebSocket([
     "ORDER_STATUS_UPDATE",
     "ITEM_STATUS_UPDATE",
-    "NEW_PAYMENT",
-    "FEEDBACK_RESPONSE"
+    "FEEDBACK_RESPONSE",
+    "NEW_ORDER",
+    "MENU_UPDATE",
+    "SETTINGS_UPDATE",
+    "TABLE_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
   ], (event) => {
-    if (event.type === "FEEDBACK_RESPONSE") {
-      loadFeedbackList();
+    if (event.type === "CONNECTION_RESTORED" || event.type === "DATA_REFRESH") {
+      setConnectionRefreshVersion((version) => version + 1);
       return;
     }
+    if (event.type === "FEEDBACK_RESPONSE") {
+      void loadFeedbackList();
+      return;
+    }
+    if (event.type === "MENU_UPDATE") {
+      void Promise.all([fetchMenu(), fetchCategories(), fetchPublicPatterns()])
+        .then(([menu, categories, patterns]) => {
+          setMenu(menu);
+          setCategoriesFromApi(categories.sort((a, b) => a.display_order - b.display_order));
+          setPatterns(patterns || []);
+        })
+        .catch((error) => safeConsoleError("Failed to refresh customer menu after an update", error));
+      return;
+    }
+    if (event.type === "SETTINGS_UPDATE") {
+      void fetchPublicSettings()
+        .then((settings) => {
+          const sstEnabled = settings?.sst_enabled !== false && settings?.sst_enabled !== "false";
+          const scEnabled = settings?.service_charge_enabled !== false && settings?.service_charge_enabled !== "false";
+          const sstRate = sstEnabled ? parseFloat(String(settings?.sst_rate ?? 0.06)) : 0;
+          const scRate = scEnabled ? parseFloat(String(settings?.service_charge_rate ?? 0.10)) : 0;
+          setTaxSettings({ sstEnabled, sstRate, scEnabled, scRate });
+        })
+        .catch((error) => safeConsoleError("Failed to refresh customer settings after an update", error));
+      return;
+    }
+    if (event.type === "TABLE_UPDATE") {
+      void fetchTable(qrCode)
+        .then(setTableInfo)
+        .catch((error) => safeConsoleError("Failed to refresh customer table after an update", error));
+      return;
+    }
+    if (event.type === "NEW_ORDER") {
+      const newOrder = event.payload as Order | null;
+      if (
+        !newOrder?.id ||
+        (tableInfo && newOrder.table_id != null && Number(newOrder.table_id) !== tableInfo.id)
+      ) return;
+      setOrders((current) => {
+        if (current.some((order) => order.id === newOrder.id)) {
+          return current.map((order) => order.id === newOrder.id ? newOrder : order);
+        }
+        return [newOrder, ...current];
+      });
+      return;
+    }
+
     const updatedOrder = event.payload as Order | null;
     if (!updatedOrder?.id) return;
     

@@ -605,6 +605,7 @@ const addOrderItem = async (req, res) => {
     try {
       console.log(`[paymentController] broadcasting ORDER_STATUS_UPDATE for order ${orderId}`);
       broadcast({ type: "ORDER_STATUS_UPDATE", payload: updatedOrder });
+      broadcast({ type: "MENU_UPDATE", payload: { reason: "order_inventory" } });
       console.log(`[paymentController] broadcast succeeded for order ${orderId}`);
     } catch (e) {
       // non-fatal: continue to return the updated order

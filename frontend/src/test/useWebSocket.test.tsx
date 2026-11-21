@@ -48,6 +48,20 @@ const ConnectionStatusWrapper = () => {
   return <div data-testid="connection-status">{`${activeConnections}:${connectedConnections}`}</div>;
 };
 
+const ReconnectWrapper = ({ onReconnect }: { onReconnect: () => void }) => {
+  useWebSocket(["CONNECTION_RESTORED"], (event) => {
+    if (event.type === "CONNECTION_RESTORED") onReconnect();
+  }, undefined, "manager");
+  return null;
+};
+
+const DataRefreshWrapper = ({ onRefresh }: { onRefresh: () => void }) => {
+  useWebSocket(["DATA_REFRESH"], (event) => {
+    if (event.type === "DATA_REFRESH") onRefresh();
+  }, undefined, "manager");
+  return null;
+};
+
 describe("useWebSocket", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
@@ -58,6 +72,7 @@ describe("useWebSocket", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -168,5 +183,47 @@ describe("useWebSocket", () => {
       );
     });
     expect(screen.getByTestId("connection-status").textContent).toBe("0:0");
+  });
+
+  it("reconnects quickly and tells views to refresh after a dropped connection", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const onReconnect = vi.fn();
+    render(<ReconnectWrapper onReconnect={onReconnect} />);
+    const firstSocket = MockWebSocket.instances[0];
+
+    await act(async () => {
+      firstSocket.onopen?.();
+    });
+    expect(onReconnect).not.toHaveBeenCalled();
+
+    await act(async () => {
+      firstSocket.onclose?.();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(249);
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+    await act(async () => {
+      MockWebSocket.instances[1].onopen?.();
+    });
+
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("delivers server data-refresh events to subscribed views", async () => {
+    const onRefresh = vi.fn();
+    render(<DataRefreshWrapper onRefresh={onRefresh} />);
+    const socket = MockWebSocket.instances[0];
+
+    await act(async () => {
+      socket.onmessage?.({ data: JSON.stringify({ type: "DATA_REFRESH", payload: {} }) });
+    });
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

@@ -835,6 +835,56 @@
   20%  { opacity: 1; }
   100% { transform: translate(var(--cx,0), var(--cy,-40px)) scale(1); opacity: 0; }
 }
+@keyframes connection-outage-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes connection-robot-head {
+  0%, 100% { transform: rotate(-8deg); }
+  35% { transform: rotate(-11deg); }
+  70% { transform: rotate(-6deg); }
+}
+@keyframes connection-robot-arm-left {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-5deg); }
+}
+@keyframes connection-robot-arm-right {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(5deg); }
+}
+@keyframes connection-robot-blink {
+  0%, 42%, 46%, 100% { transform: scaleY(1); }
+  44% { transform: scaleY(0.12); }
+}
+@keyframes connection-robot-worry {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-3deg); }
+}
+.connection-outage-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 12%, rgba(119, 133, 239, 0.2), transparent 42%),
+    linear-gradient(160deg, #E9ECF9 0%, #F8FAFF 48%, #EDF0F8 100%);
+  backdrop-filter: blur(14px);
+}
+.connection-outage-panel { animation: connection-outage-enter 0.36s ease-out both; }
+.connection-robot-head { animation: connection-robot-head 5s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.connection-robot-arm-left { animation: connection-robot-arm-left 3.1s ease-in-out infinite; transform-box: view-box; transform-origin: 34.7% 56.9%; }
+.connection-robot-arm-right { animation: connection-robot-arm-right 3.4s ease-in-out infinite; transform-box: view-box; transform-origin: 64.7% 56.9%; }
+.connection-robot-eyes { animation: connection-robot-blink 5.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.connection-robot-mouth { animation: connection-robot-worry 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.connection-robot-bubble { position: relative; }
+.connection-robot-bubble::after {
+  position: absolute;
+  bottom: -5px;
+  left: 28px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid #E8E2D6;
+  border-bottom: 1px solid #E8E2D6;
+  background: #FFFFFF;
+  content: "";
+  transform: rotate(45deg);
+}
 
 @layer utilities {
   .animate-fade-up { animation: fade-up 0.6s var(--ease-out) both; }
@@ -891,6 +941,12 @@ body { overflow-wrap: anywhere; word-break: break-word; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .connection-outage-panel,
+  .connection-robot-head,
+  .connection-robot-arm-left,
+  .connection-robot-arm-right,
+  .connection-robot-eyes,
+  .connection-robot-mouth { animation: none !important; }
 }
 
 @media print {

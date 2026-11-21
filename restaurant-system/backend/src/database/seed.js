@@ -1,15 +1,8 @@
 /*
  * seed.js — Default data for a fresh installation.
  *
- * This file inserts the starting data the application needs to be usable
- * right away: the actual BP DragonFly Garden menu items, five restaurant
- * tables, and the accepted payment methods. Every insert is idempotent —
- * I check whether the record already exists before inserting, so running
- * the seeder multiple times (which happens on every server restart) does
- * not create duplicates. It will update prices and descriptions to match
- * whatever is defined here. image_url is only set on first insert — manager
- * uploads in the dashboard permanently replace the default and are never
- * overwritten by a restart.
+ * This file inserts starter data once for a genuinely fresh database.
+ * Manager-owned records are never recreated or overwritten on later starts.
  */
 
 const db = require("./db");
@@ -140,12 +133,49 @@ const TABLES = Array.from({ length: 5 }, (_, index) => ({
 }));
 
 /*
- * seedDatabase runs through all seed data and either inserts or updates each
- * record. The logic for each entity type is the same: check if it exists,
- * update if it does, insert if it does not. This means the database always
- * reflects what is defined above after every server start.
+ * seedDatabase adds starter data only to an empty database. Synthetic demo
+ * transactions require an explicit SEED_DEMO_ORDERS=true opt-in.
  */
 const seedDatabase = async () => {
+  const seedLock = await get("SELECT value FROM restaurant_settings WHERE key = 'seed_data_locked'");
+  const existingData = await get(`
+    SELECT
+      (SELECT COUNT(*) FROM categories) +
+      (SELECT COUNT(*) FROM menu_items) +
+      (SELECT COUNT(*) FROM orders) +
+      (SELECT COUNT(*) FROM archived_orders) +
+      (SELECT COUNT(*) FROM employees) +
+      (SELECT COUNT(*) FROM inventory_items) +
+      (SELECT COUNT(*) FROM grand_archive_logs) +
+      (SELECT COUNT(*) FROM customer_feedback) +
+      (SELECT COUNT(*) FROM customer_feedback_images) +
+      (SELECT COUNT(*) FROM feedback_analysis_runs) +
+      (SELECT COUNT(*) FROM staff_assistance_requests) +
+      (SELECT COUNT(*) FROM printer_jobs) +
+      (SELECT COUNT(*) FROM patterns) +
+      (SELECT COUNT(*) FROM repo_images) +
+      (SELECT COUNT(*) FROM image_repository_sections) +
+      (SELECT COUNT(*) FROM promotion_templates) +
+      (SELECT COUNT(*) FROM modifier_groups) +
+      (SELECT COUNT(*) FROM payment_methods) +
+      (SELECT COUNT(*) FROM tables WHERE id <> 999) AS count
+  `);
+  const ensurePaymentMethods = async () => {
+    for (const method of ["Cash", "Visa Card", "Mastercard", "eWallet"]) {
+      await run("INSERT OR IGNORE INTO payment_methods (name) VALUES (?)", [method]);
+    }
+  };
+
+  if (seedLock?.value === "true" || (existingData?.count || 0) > 0) {
+    await ensurePaymentMethods();
+    if (seedLock?.value !== "true") {
+      await run(
+        "INSERT INTO restaurant_settings (key, value) VALUES ('seed_data_locked', 'true') ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      );
+    }
+    return;
+  }
+
   /* Seed categories — update display_order if the category already exists. */
   for (const category of CATEGORIES) {
     const existing = await get(`SELECT id FROM categories WHERE name = ?`, [category.name]);
@@ -263,22 +293,13 @@ const seedDatabase = async () => {
     );
   }
 
-  /* Seed payment methods — only insert if the method does not exist yet. */
-  const PAYMENT_METHODS = ["Cash", "Visa Card", "Mastercard", "eWallet"];
-
-  for (const method of PAYMENT_METHODS) {
-    const existing = await get(`SELECT id FROM payment_methods WHERE name = ?`, [method]);
-
-    if (!existing) {
-      await run(`INSERT INTO payment_methods (name) VALUES (?)`, [method]);
-    }
-  }
+  await ensurePaymentMethods();
 
   // Seed mock orders if there are few paid/archived orders for analytics
   const paidOrdersCount = await get(
     "SELECT COUNT(*) as count FROM orders WHERE payment_status = 'paid' OR status = 'archived'"
   );
-  if (paidOrdersCount.count < 10) {
+  if (process.env.SEED_DEMO_ORDERS === "true" && paidOrdersCount.count < 10) {
     console.log("Seeding mock orders and analytics data...");
     
     const tables = await all("SELECT id, table_number FROM tables");
@@ -369,6 +390,9 @@ const seedDatabase = async () => {
     }
   }
 
+  await run(
+    "INSERT INTO restaurant_settings (key, value) VALUES ('seed_data_locked', 'true') ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  );
   console.log("Seed data ready");
 };
 

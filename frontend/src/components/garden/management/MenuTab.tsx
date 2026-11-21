@@ -668,8 +668,29 @@ export function MenuTab() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const hasLoadedMenuDataRef = useRef(false);
+  const [patternRefreshVersion, setPatternRefreshVersion] = useState(0);
+
   useEffect(() => { loadData(); loadPatterns(); loadRepoSections(); loadPromoTemplates(); }, []);
-  useWebSocket(["MENU_UPDATE"], () => { loadData(); });
+  useWebSocket(["MENU_UPDATE", "MENU_ADMIN_UPDATE", "DATA_REFRESH", "CONNECTION_RESTORED"], (event) => {
+    if (event.type === "MENU_ADMIN_UPDATE") {
+      void loadRepoSections();
+      void loadPromoTemplates();
+      return;
+    }
+
+    void loadData();
+    const payload = event.payload as { reason?: string };
+    const inventoryOnly =
+      event.type === "MENU_UPDATE" &&
+      (payload?.reason === "inventory" || payload?.reason === "order_inventory");
+    if (!inventoryOnly) {
+      void loadPatterns();
+      void loadRepoSections();
+      void loadPromoTemplates();
+      setPatternRefreshVersion((version) => version + 1);
+    }
+  });
 
   const loadPatterns = async () => {
     try {
@@ -849,10 +870,11 @@ export function MenuTab() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedMenuDataRef.current) setLoading(true);
       const [menuData, catData] = await Promise.all([fetchMenu(true), fetchCategories()]);
       setItems(menuData);
       setCategories(catData);
+      hasLoadedMenuDataRef.current = true;
     } catch { toast.error(t("m.loadMenuFailed")); }
     finally { setLoading(false); }
   };
@@ -1091,7 +1113,7 @@ export function MenuTab() {
 
             {repoRepositoryTab === "pattern" ? (
               <div className="max-h-[400px] overflow-y-auto">
-                <PatternRepositoryTab />
+                <PatternRepositoryTab refreshVersion={patternRefreshVersion} />
               </div>
             ) : (
               <div className="space-y-4">

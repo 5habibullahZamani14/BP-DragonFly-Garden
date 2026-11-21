@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -256,6 +256,7 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
   const { t } = useTranslation();
   const [list, setList] = useState<CustomerFeedback[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedFeedbackListRef = useRef(false);
   const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">("active");
   const [sortBy, setSortBy] = useState<"date" | "rating" | "sentiment">("date");
   const [selected, setSelected] = useState<CustomerFeedback | null>(null);
@@ -291,7 +292,7 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
   }, [calculateAverageRating]);
 
   const loadList = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedFeedbackListRef.current) setLoading(true);
     try {
       const data = await fetchManagerFeedback({ status: statusFilter });
       
@@ -311,6 +312,7 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
       });
       
       setList(sorted);
+      hasLoadedFeedbackListRef.current = true;
     } catch {
       notify("error", t("manager.feedback.loadFailed"));
     } finally {
@@ -336,11 +338,31 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
   }, [loadAnalysis]);
 
   // WebSocket listener for real-time updates
-  useWebSocket(["NEW_FEEDBACK", "FEEDBACK_ANALYSIS_UPDATE"], (event) => {
-    if (event.type === "NEW_FEEDBACK") {
-      loadList();
+  useWebSocket([
+    "NEW_FEEDBACK",
+    "FEEDBACK_RESPONSE",
+    "FEEDBACK_UPDATE",
+    "FEEDBACK_ANALYSIS_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
+  ], (event) => {
+    if (
+      event.type === "NEW_FEEDBACK" ||
+      event.type === "FEEDBACK_RESPONSE" ||
+      event.type === "FEEDBACK_UPDATE" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      void loadList();
     } else if (event.type === "FEEDBACK_ANALYSIS_UPDATE") {
-      loadAnalysis();
+      void loadAnalysis();
+    }
+    if (
+      event.type === "FEEDBACK_UPDATE" ||
+      event.type === "CONNECTION_RESTORED" ||
+      event.type === "DATA_REFRESH"
+    ) {
+      void loadAnalysis();
     }
   });
 

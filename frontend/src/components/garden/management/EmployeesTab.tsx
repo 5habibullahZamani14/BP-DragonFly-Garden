@@ -23,7 +23,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ export const EmployeesTab = () => {
   const { t } = useTranslation();
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedEmployeesRef = useRef(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -121,15 +122,16 @@ export const EmployeesTab = () => {
   }, []);
 
   // WebSocket listener for real-time employee updates
-  useWebSocket(["EMPLOYEE_UPDATE"], (event) => {
-    loadEmployees();
+  useWebSocket(["EMPLOYEE_UPDATE", "DATA_REFRESH", "CONNECTION_RESTORED"], () => {
+    void loadEmployees();
   });
 
   const loadEmployees = async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedEmployeesRef.current) setLoading(true);
       const data = await fetchEmployees(false);
       setEmployees(data || []);
+      hasLoadedEmployeesRef.current = true;
     } catch (e) {
       safeConsoleError("Failed to load employee data", e);
     } finally {

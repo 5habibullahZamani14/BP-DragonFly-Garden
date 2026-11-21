@@ -11,7 +11,9 @@ const { withCircuitBreaker } = require("./circuitBreaker");
 const { submitWindowsPrintJob } = require("./windowsPrintJob");
 const { normalizeReceiptCopyCounts } = require("./receiptCopies");
 
-const DEFAULT_PRINTER_COLUMNS = 48;
+const DEFAULT_PRINTER_COLUMNS = 44;
+const TICKET_RULE = "-".repeat(DEFAULT_PRINTER_COLUMNS);
+const TICKET_TOTAL_RULE = "=".repeat(DEFAULT_PRINTER_COLUMNS);
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
   "PRINTER TEST",
@@ -243,7 +245,8 @@ const executeTicketPrint = async (
   let result;
   try {
     result = await submitPrintJob(finalTicket, printerName, filename, {
-      interpretAlignmentTags: !preserveTicketText
+      interpretAlignmentTags: !preserveTicketText,
+      columns: DEFAULT_PRINTER_COLUMNS
     });
   } catch (error) {
     const submissionError = error instanceof Error ? error : new Error(String(error));
@@ -312,46 +315,132 @@ const parseItemOptions = (item) => {
   return options;
 };
 
+const formatDailySalesReport = (todayOrders, now = new Date()) => {
+  const timestamp = formatDateTime(now);
+  const todayDateStr = now.toLocaleDateString('en-GB');
+
+  let ticket = "";
+  ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
+  ticket += "[CENTER]DAILY SALES REPORT\n";
+  ticket += "[CENTER]END-OF-DAY SUMMARY\n";
+  ticket += `${TICKET_RULE}\n`;
+  ticket += `DATE: ${todayDateStr}\n`;
+  ticket += `PRINTED: ${timestamp}\n`;
+  ticket += `${TICKET_RULE}\n`;
+  ticket += "SALES BY ORDER\n";
+
+  let totalSales = 0;
+  if (todayOrders.length === 0) {
+    ticket += "No orders were recorded today.\n";
+  }
+  todayOrders.forEach((order, index) => {
+    const orderNum = order.daily_ticket_number || order.id;
+    const price = Number(order.total_price || 0);
+    totalSales += price;
+
+    if (index > 0) ticket += "\n";
+    ticket += `ORDER #${orderNum}\n`;
+    ticket += `[RIGHT]SALES: RM ${price.toFixed(2)}\n`;
+  });
+
+  ticket += `${TICKET_RULE}\n`;
+  ticket += `ORDERS RECORDED: ${todayOrders.length}\n`;
+  ticket += `${TICKET_TOTAL_RULE}\n`;
+  ticket += `[RIGHT]TOTAL SALES: RM ${totalSales.toFixed(2)}\n`;
+  ticket += `${TICKET_TOTAL_RULE}\n`;
+  return ticket;
+};
+
+const SAMPLE_ORDER_ITEMS = [
+  {
+    quantity: 1,
+    item_name: "Jacket Potato",
+    price_at_order_time: 7,
+    options_json: JSON.stringify([{ option: "Large", delta: 0 }]),
+    notes: "No sour cream"
+  },
+  {
+    quantity: 2,
+    item_name: "Lemon Tea",
+    price_at_order_time: 5.5,
+    options_json: JSON.stringify([{ option: "Less sugar", delta: 0 }]),
+    notes: "Less ice"
+  },
+  {
+    quantity: 1,
+    item_name: "Kampung Eggs",
+    price_at_order_time: 11.5,
+    options_json: JSON.stringify([{ option: "Extra cheese", delta: 2.5 }]),
+    notes: "Cut in half"
+  }
+];
+
+const SAMPLE_ORDER = {
+  id: 1042,
+  daily_ticket_number: 42,
+  order_type: "DINE_IN",
+  table_id: 3,
+  table_number: "3",
+  customer_name: "Sample Guest",
+  customer_phone: "012-345 6789",
+  collection_time: null,
+  delivery_address: null,
+  total_price: 29.5,
+  service_charge_rate: 0.1,
+  vat_rate: 0.06,
+  items: SAMPLE_ORDER_ITEMS
+};
+
 const printerService = {
   formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle) => {
     const timestamp = formatDateTime(new Date());
     let ticket = "";
 
     let orderTypeStr = isAddOn ? "ADD-ON" : "NEW ORDER";
-    if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON (PICKUP)" : "PICKUP";
-    else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON (DELIVERY)" : "DELIVERY";
-    else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON (TAKEAWAY)" : "TAKEAWAY";
-    else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON (COUNTER)" : "COUNTER ORDER";
+    if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON ORDER (PICKUP)" : "PICKUP ORDER";
+    else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON ORDER (DELIVERY)" : "DELIVERY ORDER";
+    else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON ORDER (TAKEAWAY)" : "TAKEAWAY ORDER";
+    else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON ORDER (COUNTER)" : "COUNTER ORDER";
+    else if (isAddOn) orderTypeStr = "ADD-ON ORDER";
 
-    if (copyTitle) ticket += `[CENTER]${copyTitle}\n`;
+    ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
     ticket += `[CENTER]${orderTypeStr}\n`;
-    ticket += `${timestamp}\n`;
-    ticket += `[RIGHT]#${order.daily_ticket_number || order.id}\n`;
-    ticket += "Send by: Cashier\n";
+    if (copyTitle) ticket += `[CENTER]${copyTitle}\n`;
+    ticket += `${TICKET_RULE}\n`;
+    ticket += "ORDER DETAILS\n";
+    ticket += `ORDER: #${order.daily_ticket_number || order.id}\n`;
+    ticket += `TIME: ${timestamp}\n`;
+    ticket += "PLACED BY: Cashier\n";
 
     if (!order.order_type || order.order_type === 'DINE_IN') {
       const table = formatTableNumber(order.table_number);
-      if (table) ticket += `${table}\n`;
+      if (table) ticket += `${table.toUpperCase()}\n`;
     } else {
       if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
-        ticket += `${formatTableNumber(order.table_number)}\n`;
+        ticket += `${formatTableNumber(order.table_number).toUpperCase()}\n`;
       }
-      if (order.customer_name) ticket += `Name: ${order.customer_name}\n`;
-      if (order.customer_phone) ticket += `Phone: ${order.customer_phone}\n`;
-      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup At: ${order.collection_time}\n`;
-      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Address: ${order.delivery_address}\n`;
+      if (order.customer_name) ticket += `CUSTOMER: ${order.customer_name}\n`;
+      if (order.customer_phone) ticket += `PHONE: ${order.customer_phone}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${order.collection_time}\n`;
+      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `DELIVER TO: ${order.delivery_address}\n`;
     }
 
-    ticket += "Items:\n";
+    ticket += `${TICKET_RULE}\n`;
+    ticket += isAddOn ? "ADDED ITEMS\n" : "ITEMS TO PREPARE\n";
     itemsToPrint.forEach(item => {
       ticket += `${item.quantity} x ${item.item_name || ""}\n`;
-      if (item.notes) ticket += `Note: ${item.notes}\n`;
+      if (item.notes) ticket += `  Note: ${item.notes}\n`;
       for (const option of parseItemOptions(item)) {
-        const suffix = option.delta > 0 ? ` (+${parseFloat(option.delta).toFixed(2)})` : '';
-        ticket += `> ${option.option}${suffix}\n`;
+        const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
+        ticket += `  Option: ${option.option}${suffix}\n`;
       }
+      ticket += "\n";
     });
 
+    ticket += `${TICKET_RULE}\n`;
+    ticket += copyTitle === "KITCHEN COPY"
+      ? isAddOn ? "Please add these items to the existing\norder.\n" : "Please prepare the items listed above.\n"
+      : isAddOn ? "These items have been added to your order.\n" : "Thank you! Your order is being prepared.\n";
     return ticket;
   },
 
@@ -360,45 +449,46 @@ const printerService = {
     let ticket = "";
 
     ticket += `[CENTER]BP DRAGONFLY GARDEN\n`;
-    ticket += `[CENTER]Solok Pondok Upih\n`;
-    ticket += `[CENTER]Taman Kristal\n`;
-    ticket += `[CENTER]11020 Balik Pulau\n`;
-    ticket += `[CENTER]Pulau Pinang\n`;
+    ticket += `[CENTER]Solok Pondok Upih, Taman Kristal\n`;
+    ticket += `[CENTER]11020 Balik Pulau, Pulau Pinang\n`;
+    ticket += `[CENTER]FINAL RECEIPT\n`;
+    ticket += `${TICKET_RULE}\n`;
 
-    ticket += `Invoice: ${order.id}\n`;
-    ticket += `Date: ${timestamp}\n`;
-    ticket += `Cashier: ${cashierName}\n`;
+    ticket += "ORDER DETAILS\n";
+    ticket += `RECEIPT: ${order.id}\n`;
+    ticket += `ORDER: #${order.daily_ticket_number || order.id}\n`;
+    ticket += `DATE: ${timestamp}\n`;
+    ticket += `CASHIER: ${cashierName}\n`;
     if (!order.order_type || order.order_type === 'DINE_IN') {
-      ticket += `${formatTableNumber(order.table_number)}\n`;
+      ticket += `${formatTableNumber(order.table_number).toUpperCase()}\n`;
     } else {
-      ticket += `Type: ${order.order_type}\n`;
+      ticket += `ORDER TYPE: ${order.order_type.replace(/_/g, " ")}\n`;
       if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
-        ticket += `${formatTableNumber(order.table_number)}\n`;
+        ticket += `${formatTableNumber(order.table_number).toUpperCase()}\n`;
       }
-      if (order.customer_name) ticket += `Cust: ${order.customer_name}\n`;
-      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Addr: ${order.delivery_address}\n`;
-      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup: ${order.collection_time}\n`;
+      if (order.customer_name) ticket += `CUSTOMER: ${order.customer_name}\n`;
+      if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `DELIVER TO: ${order.delivery_address}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${order.collection_time}\n`;
     }
 
-    ticket += `Order #${order.daily_ticket_number || order.id}\n`;
-    ticket += "Items:\n";
+    ticket += `${TICKET_RULE}\n`;
+    ticket += "ITEMS\n";
     let totalQty = 0;
 
     order.items.forEach(item => {
       totalQty += item.quantity;
       ticket += `${item.quantity} x ${item.item_name || ""}\n`;
-      ticket += `[RIGHT]RM ${(item.quantity * item.price_at_order_time).toFixed(2)}\n`;
-      if (item.price_at_order_time > 0) {
-        ticket += `Price each: RM ${item.price_at_order_time.toFixed(2)}\n`;
-      }
       for (const option of parseItemOptions(item)) {
         const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
-        ticket += `> ${option.option}${suffix}\n`;
+        ticket += `  OPTION: ${option.option}${suffix}\n`;
       }
-      if (item.notes) ticket += `Note: ${item.notes}\n`;
+      if (item.notes) ticket += `  NOTE: ${item.notes}\n`;
+      ticket += `[RIGHT]RM ${(item.quantity * item.price_at_order_time).toFixed(2)}\n`;
+      ticket += "\n";
     });
 
-    ticket += `Qty: ${totalQty}\n`;
+    ticket += `${TICKET_RULE}\n`;
+    ticket += `ITEMS: ${totalQty}\n`;
 
     const subtotal = Number(order.total_price || 0);
     const serviceChargeRate = order.service_charge_rate || 0;
@@ -409,18 +499,19 @@ const printerService = {
     const roundedTotal = Math.round(rawTotal * 20) / 20;
     const rounding = roundedTotal - rawTotal;
 
-    ticket += `[RIGHT]Subtotal: RM ${subtotal.toFixed(2)}\n`;
+    ticket += `[RIGHT]SUBTOTAL: RM ${subtotal.toFixed(2)}\n`;
     if (serviceChargeRate > 0) {
-      ticket += `[RIGHT]Service charge: RM ${serviceCharge.toFixed(2)}\n`;
+      ticket += `[RIGHT]SERVICE CHARGE: RM ${serviceCharge.toFixed(2)}\n`;
     }
     if (vatRate > 0) {
       ticket += `[RIGHT]SST: RM ${sst.toFixed(2)}\n`;
     }
-    ticket += `[RIGHT]Rounding: RM ${rounding.toFixed(2)}\n`;
-    ticket += `[RIGHT]TOTAL: RM ${roundedTotal.toFixed(2)}\n`;
-    ticket += "[CENTER]~ Official Receipt ~\n";
-    ticket += "[CENTER]Thank you!\n";
-    ticket += "[CENTER]Visit us again\n";
+    ticket += `[RIGHT]ROUNDING: RM ${rounding.toFixed(2)}\n`;
+    ticket += `${TICKET_TOTAL_RULE}\n`;
+    ticket += `[RIGHT]TOTAL DUE: RM ${roundedTotal.toFixed(2)}\n`;
+    ticket += `${TICKET_TOTAL_RULE}\n`;
+    ticket += "[CENTER]THANK YOU FOR DINING WITH US\n";
+    ticket += "[CENTER]We hope to see you again!\n";
 
     return ticket;
   },
@@ -451,29 +542,19 @@ const printerService = {
   printDailySalesReport: async (todayOrders) => {
     const printerName = await getSelectedPrinter();
     if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
-    const timestamp = formatDateTime(new Date());
-    const todayDateStr = new Date().toLocaleDateString('en-GB');
-
-    let ticket = "";
-    ticket += "[CENTER]DAILY SALES\n";
-    ticket += "[CENTER]BP DRAGONFLY\n";
-    ticket += `Date: ${todayDateStr}\n`;
-    ticket += `At: ${timestamp}\n`;
-
-    let totalSales = 0;
-    todayOrders.forEach((order, index) => {
-      const orderNum = order.daily_ticket_number || order.id;
-      const price = Number(order.total_price || 0);
-      totalSales += price;
-
-      ticket += `${index + 1}. #${orderNum}\n`;
-      ticket += `[RIGHT]RM ${price.toFixed(2)}\n`;
-    });
-
-    ticket += `[RIGHT]Total: RM ${totalSales.toFixed(2)}\n`;
+    const ticket = formatDailySalesReport(todayOrders);
 
     return await executePrintWithPrinter(ticket, `daily_sales_report`, printerName, {
       jobType: "daily_sales_report"
+    });
+  },
+
+  printSampleTicket: async (type) => {
+    const ticket = formatSampleTicket(type);
+    const printerName = await getSelectedPrinter();
+    if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
+    return executePrintWithPrinter(ticket, "sample_ticket", printerName, {
+      jobType: `sample_${type}`
     });
   },
 
@@ -505,4 +586,30 @@ const printerService = {
   }
 };
 
-module.exports = { ...printerService, getReceiptCopyCounts };
+const formatSampleTicket = (type) => {
+  switch (type) {
+    case "order_customer":
+      return printerService.formatChecklistTicket(SAMPLE_ORDER, SAMPLE_ORDER_ITEMS, false, "CUSTOMER COPY");
+    case "order_kitchen":
+      return printerService.formatChecklistTicket(SAMPLE_ORDER, SAMPLE_ORDER_ITEMS, false, "KITCHEN COPY");
+    case "addon_customer":
+      return printerService.formatChecklistTicket(SAMPLE_ORDER, SAMPLE_ORDER_ITEMS, true, "CUSTOMER COPY");
+    case "addon_kitchen":
+      return printerService.formatChecklistTicket(SAMPLE_ORDER, SAMPLE_ORDER_ITEMS, true, "KITCHEN COPY");
+    case "final_receipt":
+      return printerService.formatFinalReceipt(SAMPLE_ORDER, "Sample Cashier");
+    case "daily_sales_report":
+      return formatDailySalesReport([
+        { daily_ticket_number: 40, total_price: 23.5 },
+        { daily_ticket_number: 41, total_price: 18 },
+        { daily_ticket_number: 42, total_price: 29.5 }
+      ]);
+    default: {
+      const error = new Error("Unsupported sample ticket type.");
+      error.code = "INVALID_SAMPLE_TICKET_TYPE";
+      throw error;
+    }
+  }
+};
+
+module.exports = { ...printerService, formatSampleTicket, getReceiptCopyCounts };

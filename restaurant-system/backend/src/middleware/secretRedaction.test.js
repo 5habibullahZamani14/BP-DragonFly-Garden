@@ -24,3 +24,14 @@ test("redacts credential fields and common credential formats from text", () => 
   assert.equal(redactText("password=correct horse battery staple"), "password=[REDACTED]");
   assert.equal(redactText("OpenAI key sk-proj-abcdefghijklmnopqrstuvwxyz012345"), "OpenAI key [REDACTED_API_KEY]");
 });
+
+test("preserves shared objects reused in separate response branches", () => {
+  const sharedOption = { id: 7, label: "Large", price_delta: 0 };
+  const response = redactSensitiveData({
+    firstItem: { option_groups: [{ options: [sharedOption] }] },
+    secondItem: { option_groups: [{ options: [sharedOption] }] }
+  });
+
+  assert.deepEqual(response.firstItem.option_groups[0].options[0], sharedOption);
+  assert.deepEqual(response.secondItem.option_groups[0].options[0], sharedOption);
+});

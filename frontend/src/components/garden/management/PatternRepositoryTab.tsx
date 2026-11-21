@@ -175,9 +175,10 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
   );
 }
 
-export function PatternRepositoryTab() {
+export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: number }) {
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedPatternsRef = useRef(false);
   const [editingPattern, setEditingPattern] = useState<Pattern | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -194,13 +195,14 @@ export function PatternRepositoryTab() {
   useEffect(() => {
     loadPatterns();
     loadMenuItems();
-  }, []);
+  }, [refreshVersion]);
 
   const loadPatterns = async () => {
-    setLoading(true);
+    if (!hasLoadedPatternsRef.current) setLoading(true);
     try {
       const data = await fetchPatterns();
       setPatterns(data || []);
+      hasLoadedPatternsRef.current = true;
     } catch {
       toast.error("Failed to load patterns");
     } finally {

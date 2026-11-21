@@ -1,11 +1,10 @@
 const RESET_CONFIRMATION_SENTENCE = "I understand this will permanently remove all selected app data and restore the app to a clean state.";
-const RESET_CONFIRMATION_CODE = "DRAGONFLY-RESET-2026";
 
 const RESET_CATEGORY_OPTIONS = [
   {
     key: "all_data",
-    label: "All app data",
-    description: "Wipe the app back to an empty, freshly seeded state including menu, orders, feedback, tables, inventory, and settings.",
+    label: "Reset everything",
+    description: "Permanently remove restaurant data, uploaded menu/feedback photos, and activity history. Manager credentials, printer/tax/working-hour settings, the Counter Order system route, and backup archives are kept so the app remains functional and recoverable.",
   },
   {
     key: "foods",
@@ -30,7 +29,7 @@ const RESET_CATEGORY_OPTIONS = [
   {
     key: "menu_images",
     label: "Menu images",
-    description: "Clear all menu item images from the system.",
+    description: "Clear menu-item photos, remove pattern and repository image assets, and keep the menu items themselves.",
   },
   {
     key: "feedbacks",
@@ -45,21 +44,20 @@ const RESET_CATEGORY_OPTIONS = [
 ];
 
 const normalizeResetCategoryKey = (value) => {
-  if (typeof value !== "string") return "all_data";
-  const normalized = value.trim().toLowerCase();
-  return normalized || "all_data";
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
 };
 
 const getResetCategoryOptions = () => RESET_CATEGORY_OPTIONS.map((item) => ({ ...item }));
 
 const getResetCategoryByKey = (value) => {
   const normalized = normalizeResetCategoryKey(value);
-  return RESET_CATEGORY_OPTIONS.find((item) => item.key === normalized) || RESET_CATEGORY_OPTIONS[0];
+  if (!normalized) return null;
+  return RESET_CATEGORY_OPTIONS.find((item) => item.key === normalized) || null;
 };
 
 module.exports = {
   RESET_CONFIRMATION_SENTENCE,
-  RESET_CONFIRMATION_CODE,
   RESET_CATEGORY_OPTIONS,
   getResetCategoryOptions,
   getResetCategoryByKey,

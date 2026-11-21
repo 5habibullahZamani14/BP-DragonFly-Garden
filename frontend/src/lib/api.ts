@@ -1269,15 +1269,72 @@ export const restoreUploadedBackup = async (file: File): Promise<{ success: bool
   return (await res.json()) as { success: boolean; message: string };
 };
 
-export const fetchDataResetOptions = async (): Promise<{ options: { key: string; label: string; description: string }[]; confirmationSentence: string; confirmationCode: string }> =>
+export const fetchDataResetOptions = async (): Promise<{ options: { key: string; label: string; description: string }[]; confirmationSentence: string }> =>
   safeFetch("/management/data-reset/options");
+
+export type DataCleanupDataset = {
+  key: string;
+  label: string;
+  impact: string;
+  dateFilter: boolean;
+  filters: Record<string, string[]>;
+};
+
+export type DataCleanupRecord = {
+  id: string;
+  label: string;
+  created_at: string | null;
+  type: string;
+  details: string;
+};
+
+export type DataCleanupFilters = Record<string, string | undefined>;
+
+export const fetchDataCleanupDatasets = async (): Promise<{ datasets: DataCleanupDataset[] }> =>
+  safeFetch("/management/data-cleanup/datasets");
+
+export const fetchDataCleanupRecords = async (
+  dataset: string,
+  filters: DataCleanupFilters,
+  page = 1,
+  pageSize = 50
+): Promise<{
+  dataset: string;
+  label: string;
+  impact: string;
+  filters: Record<string, string[]>;
+  rows: DataCleanupRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return safeFetch(`/management/data-cleanup/${encodeURIComponent(dataset)}/records?${params.toString()}`);
+};
+
+export const deleteDataCleanupRecords = async (body: {
+  dataset: string;
+  ids?: string[];
+  filters?: DataCleanupFilters;
+  allMatching?: boolean;
+  expectedCount: number;
+  confirmationText: string;
+}): Promise<{ success: boolean; deleted: number; warnings: string[] }> =>
+  safeFetch("/management/data-cleanup/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 export const performDataReset = async (body: {
   category: string;
   confirmationSentence?: string;
-  confirmationCode?: string;
   confirmationText?: string;
-}): Promise<{ success: boolean; message: string }> =>
+  managerPassword?: string;
+}): Promise<{ success: boolean; message: string; warnings?: string[] }> =>
   safeFetch("/management/data-reset", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

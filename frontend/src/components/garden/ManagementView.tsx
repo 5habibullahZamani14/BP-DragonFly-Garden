@@ -219,9 +219,26 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, [isLoggedIn]);
 
-  useWebSocket(["NEW_ORDER", "NEW_PAYMENT", "PRINT_JOB_REVIEW_REQUIRED"], (event) => {
+  useWebSocket([
+    "NEW_ORDER",
+    "ORDER_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "INVENTORY_UPDATE",
+    "DATA_REFRESH",
+    "PRINT_JOB_REVIEW_REQUIRED",
+    "CONNECTION_RESTORED",
+  ], (event) => {
     if (!isLoggedIn) return;
-    if (event.type === "NEW_ORDER" || event.type === "NEW_PAYMENT") loadNotifications();
+    if (
+      event.type === "NEW_ORDER" ||
+      event.type === "ORDER_STATUS_UPDATE" ||
+      event.type === "NEW_PAYMENT" ||
+      event.type === "INVENTORY_UPDATE" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      void loadNotifications();
+    }
     if (event.type === "PRINT_JOB_REVIEW_REQUIRED") {
       const payload = event.payload as { orderId?: number; submissionStarted?: boolean };
       const orderLabel = payload.orderId ? ` for order #${payload.orderId}` : "";

@@ -33,6 +33,7 @@ export const TablesTab = () => {
   const { t } = useTranslation();
   const [tables, setTables] = useState<TableRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedTablesRef = useRef(false);
   const [isAdding, setIsAdding] = useState(false);
   const [addMode, setAddMode] = useState<"manual" | "auto" | null>(null); // "manual" or "auto"
   const [newTable, setNewTable] = useState({ table_number: "", qr_code: "" });
@@ -164,15 +165,30 @@ export const TablesTab = () => {
   }, []);
 
   // WebSocket listener for real-time table updates
-  useWebSocket(["TABLE_UPDATE"], (event) => {
-    loadTables();
+  useWebSocket(["TABLE_UPDATE", "SETTINGS_UPDATE", "DATA_REFRESH", "CONNECTION_RESTORED"], (event) => {
+    if (
+      event.type === "TABLE_UPDATE" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      void loadTables();
+    }
+    if (event.type === "DATA_REFRESH" || event.type === "CONNECTION_RESTORED") {
+      void loadHotspotSettings();
+    } else if (event.type === "SETTINGS_UPDATE") {
+      const payload = event.payload as { key?: string };
+      if (["hotspot_ssid", "hotspot_password", "hotspot_security"].includes(payload?.key ?? "")) {
+        void loadHotspotSettings();
+      }
+    }
   });
 
   const loadTables = async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedTablesRef.current) setLoading(true);
       const data = await fetchTables();
       setTables(data || []);
+      hasLoadedTablesRef.current = true;
     } catch (e) {
       safeConsoleError("Failed to load table data", e);
     } finally {

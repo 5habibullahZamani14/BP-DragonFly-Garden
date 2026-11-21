@@ -116,6 +116,7 @@ const orderRoutes = (broadcast) => {
 
     const { order, isAddOn, newItems } = await createOrder(req.body);
     broadcast({ type: "NEW_ORDER", payload: order });
+    broadcast({ type: "MENU_UPDATE", payload: { reason: "order_inventory" } });
     
     // If the cashier adds an item at the counter right before paying, they can pass silent: true to skip kitchen print
     if (!req.body.silent) {
@@ -322,7 +323,9 @@ const orderRoutes = (broadcast) => {
    * active order tracker.
    */
   router.patch("/:id/customer-archive", asyncHandler(async (req, res) => {
-    res.json(await customerArchiveOrder(req.params.id));
+    const archivedOrder = await customerArchiveOrder(req.params.id);
+    if (archivedOrder) broadcast({ type: "ORDER_STATUS_UPDATE", payload: archivedOrder });
+    res.json(archivedOrder);
   }));
 
   /*

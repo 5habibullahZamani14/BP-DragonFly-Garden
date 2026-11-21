@@ -77,6 +77,7 @@ export const InventoryTab = ({
   // Stock State
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedInventoryDataRef = useRef(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", category: "Vegetables", unit: "kg", usage_unit: "g", usage_conversion: "1000", current_stock: "", max_stock: "100", low_stock_threshold_percent: "15" });
   const [addWarning, setAddWarning] = useState<{ message: string, isExact: boolean } | null>(null);
@@ -118,27 +119,39 @@ export const InventoryTab = ({
 
   const loadData = async () => {
     try {
-      setLoading(true);
-      const invData = await fetchInventory();
-      const inventoryItems = invData || [];
-      setInventory(inventoryItems);
-      setRestockInputs(inventoryItems.reduce((acc, item) => ({ ...acc, [item.id]: String(item.current_stock) }), {}));
-
-      const menuData = await fetchMenuItems("");
-      setMenuItems(menuData || []);
-
-      const recipeData = await fetchRecipes();
-      setRecipes(recipeData || []);
-    } catch (e) {
-      safeConsoleError("Failed to load inventory data", e);
+      if (!hasLoadedInventoryDataRef.current) setLoading(true);
+      const [inventoryResult, menuResult, recipeResult] = await Promise.allSettled([
+        fetchInventory(),
+        fetchMenuItems(""),
+        fetchRecipes(),
+      ]);
+      if (inventoryResult.status === "fulfilled") {
+        const inventoryItems = inventoryResult.value || [];
+        setInventory(inventoryItems);
+        setRestockInputs(inventoryItems.reduce((acc, item) => ({ ...acc, [item.id]: String(item.current_stock) }), {}));
+        hasLoadedInventoryDataRef.current = true;
+      } else {
+        safeConsoleError("Failed to load inventory data", inventoryResult.reason);
+      }
+      if (menuResult.status === "fulfilled") setMenuItems(menuResult.value || []);
+      else safeConsoleError("Failed to load inventory menu data", menuResult.reason);
+      if (recipeResult.status === "fulfilled") setRecipes(recipeResult.value || []);
+      else safeConsoleError("Failed to load inventory recipe data", recipeResult.reason);
     } finally {
       setLoading(false);
     }
   };
 
-  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
+  useWebSocket([
+    "NEW_ORDER",
+    "ORDER_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "INVENTORY_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
+  ], () => {
     // Inventory changes on order creation/payment
-    loadData();
+    void loadData();
   });
 
   const handleCreateItem = async (force = false) => {

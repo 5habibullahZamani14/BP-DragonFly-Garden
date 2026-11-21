@@ -5,9 +5,8 @@
  * configure the system: authentication, their own profile, system settings,
  * employee records, inventory, recipes, and the activity log.
  *
- * Unlike the order and payment route files, this one is a plain Express router
- * (not a factory function) because the management routes do not need to push
- * WebSocket events.
+ * This is a plain Express router. Its broadcast callback is installed by the
+ * server so manager-side mutations can notify connected views.
  *
  * The manager authenticates via POST /management/auth. The backend stores the
  * JWT in an HttpOnly cookie; all management routes require a valid session.
@@ -15,6 +14,7 @@
 
 const express = require("express");
 const managementController = require("../controllers/managementController");
+const dataCleanupController = require("../controllers/dataCleanupController");
 const menuController = require("../controllers/menuController");
 const { createCategory, updateCategory, deleteCategory, reorderCategories } = menuController;
 const {
@@ -49,6 +49,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 const router = express.Router();
+let managementBroadcast = null;
 let shutdownHandler = null;
 
 const setupShutdownHandler = (handler) => {
@@ -251,6 +252,9 @@ router.put("/settings/:key", managementController.updateSetting);
 
 // ── Data reset / app cleanup ──────────────────────────────────────────────────
 router.get("/data-reset/options", managementController.getDataResetOptions);
+router.get("/data-cleanup/datasets", dataCleanupController.listDatasets);
+router.get("/data-cleanup/:dataset/records", dataCleanupController.listRecords);
+router.post("/data-cleanup/delete", dataCleanupController.deleteRecords);
 router.post("/data-reset", managementController.performDataReset);
 
 // ── Employee management ───────────────────────────────────────────────────────
@@ -380,7 +384,11 @@ const setupMenuBroadcast = (broadcastFn) => {
 
 // Set up broadcast function for management controller
 const setupManagementBroadcast = (broadcastFn) => {
+  managementBroadcast = broadcastFn;
   managementController.setBroadcast(broadcastFn);
+};
+const setupDataCleanupBroadcast = (broadcastFn) => {
+  dataCleanupController.setBroadcast(broadcastFn);
 };
 
 
@@ -640,6 +648,9 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
       ? await updateStoredPrinterPreferences(db, { printerPreferences, testTicket })
       : await getStoredPrinterPreferences(db);
 
+    if (managementBroadcast) {
+      managementBroadcast({ type: "PRINTER_SETTINGS_UPDATE" });
+    }
     res.json({
       success: true,
       message: "Printer settings updated successfully",
@@ -647,6 +658,57 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get("/printers/sample-ticket", requireManagerToken, (req, res) => {
+  const { type } = req.query;
+  if (typeof type !== "string") {
+    return res.status(400).json({ success: false, message: "A sample ticket type is required." });
+  }
+
+  try {
+    const printerService = require("../services/printerService");
+    const ticket = printerService.formatSampleTicket(type);
+    res.json({ success: true, ticket });
+  } catch (error) {
+    if (error.code === "INVALID_SAMPLE_TICKET_TYPE") {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error("Could not format sample ticket:", error);
+    res.status(500).json({ success: false, message: "Could not load the sample ticket." });
+  }
+});
+
+router.post("/printers/sample-ticket/print", requireManagerToken, async (req, res) => {
+  const type = req.body && req.body.type;
+  if (typeof type !== "string") {
+    return res.status(400).json({ success: false, message: "A sample ticket type is required." });
+  }
+
+  try {
+    const printerService = require("../services/printerService");
+    const result = await printerService.printSampleTicket(type);
+    if (!result || result.success !== true) {
+      return res.status(503).json({
+        success: false,
+        message: result && result.message ? result.message : "The printer did not accept the sample ticket."
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Sample ${type.replace(/_/g, " ")} submitted to the selected printer.`
+    });
+  } catch (error) {
+    if (error.code === "INVALID_SAMPLE_TICKET_TYPE") {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error("Could not print sample ticket:", error);
+    return res.status(503).json({
+      success: false,
+      message: error.message || "Could not submit the sample ticket to the printer."
+    });
   }
 });
 
@@ -777,6 +839,9 @@ router.post("/printers/jobs/:id/acknowledge", requireManagerToken, async (req, r
     if (!changes) {
       return res.status(404).json({ success: false, message: "Printer job was not found or was already reviewed." });
     }
+    if (managementBroadcast) {
+      managementBroadcast({ type: "PRINT_JOB_REVIEW_UPDATED", payload: { id: jobId } });
+    }
     res.json({ success: true, message: "Printer job marked as reviewed. No print retry was made." });
   } catch (error) {
     console.error(`Could not acknowledge printer job ${jobId}:`, error);
@@ -789,4 +854,5 @@ module.exports = router;
 module.exports.setupFeedbackBroadcast = setupFeedbackBroadcast;
 module.exports.setupMenuBroadcast = setupMenuBroadcast;
 module.exports.setupManagementBroadcast = setupManagementBroadcast;
+module.exports.setupDataCleanupBroadcast = setupDataCleanupBroadcast;
 module.exports.setupShutdownHandler = setupShutdownHandler;

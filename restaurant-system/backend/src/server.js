@@ -22,6 +22,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { WebSocketServer } = require("ws");
+const { clientShouldReceive } = require("./websocketAccess");
 const helmet = require("helmet");
 const { getAuthCookieValue } = require("./middleware/authCookies");
 const { verifyJwtToken } = require("./middleware/jwt-auth");
@@ -225,52 +226,8 @@ wss.on("connection", async (ws, req) => {
 
 /*
  * The broadcast function sends a JSON event to every currently-connected
- * WebSocket client. readyState === 1 means the connection is open and
- * ready to receive messages (OPEN state in the WebSocket spec).
- * Controllers call this function after any state change that clients
- * need to know about immediately, such as a new order or a status update.
+ * WebSocket client. Controllers call this after relevant state changes.
  */
-/**
- * Determine whether a given WebSocket client should receive this event.
- * Managers (JWT with role=manager) receive everything. Payment counters
- * receive events relevant to their workflows. Customers
- * (table QR) only receive events that reference their table.
- */
-const clientShouldReceive = (client, data) => {
-  if (client.readyState !== 1) return false;
-  const type = data && data.type;
-
-  // Managers get all events
-  if (client._auth?.role === 'manager' || client._role === 'manager') return true;
-
-  // Customer (table) sockets only get events for their own table
-  if (client._role === 'customer_waiter') {
-    const tableId = client._tableNumber || client._tableId || client._tableNumber === 0 ? client._tableNumber : null;
-    // payload may include table_id or order.table_id
-    const payload = data && data.payload;
-    const eventTableId = payload && (payload.table_id || payload.order?.table_id || payload.table_id);
-    if (eventTableId && tableId && Number(eventTableId) === Number(tableId)) return true;
-    // Also allow explicit CALL_WAITER_ACK/CALL_WAITER events containing table_id
-    if (type === 'CALL_WAITER' || type === 'CALL_WAITER_ACK') {
-      return payload && Number(payload.table_id) === Number(tableId);
-    }
-    return false;
-  }
-
-  // Payment counter: interested in new orders, payments, and order status changes
-  if (client._role === 'payment_counter') {
-    return ['NEW_ORDER', 'NEW_PAYMENT', 'ORDER_STATUS_CHANGED', 'ORDER_STATUS_UPDATE', 'CALL_WAITER', 'CALL_WAITER_ACK'].includes(type);
-  }
-
-  // Fallback: if client has an authenticated role via JWT, allow if role matches the type
-  if (client._auth && client._auth.role) {
-    // conservative default: allow authenticated non-manager roles to receive nothing
-    return false;
-  }
-
-  return false;
-};
-
 const broadcast = (data) => {
   wss.clients.forEach((client) => {
     try {
@@ -370,6 +327,7 @@ app.use("/management", managementRoutes);
 managementRoutes.setupFeedbackBroadcast(broadcast);
 managementRoutes.setupMenuBroadcast(broadcast);
 managementRoutes.setupManagementBroadcast(broadcast);
+managementRoutes.setupDataCleanupBroadcast(broadcast);
 
 // Set up broadcast function for table routes
 tableRoutes.setBroadcast(broadcast);
@@ -615,6 +573,7 @@ const startServer = async () => {
               const leftoverCount = await forceArchiveLeftovers();
               const assistanceCount = await archiveStaffAssistanceRequests();
               console.log(`Scheduled archive completed. Archived ${count} paid orders, ${leftoverCount} leftover orders, and ${assistanceCount} staff assistance requests.`);
+              broadcast({ type: "DATA_REFRESH" });
             }, 3, 10000);
           } catch (err) {
             console.error("Scheduled archive permanently failed after retries:", err);
@@ -643,6 +602,7 @@ const startServer = async () => {
             await retryAsync(async () => {
               await executeNightlyCloudBackup();
             }, 3, 15000);
+            broadcast({ type: "BACKUP_UPDATE" });
           } catch (err) {
             console.error("Scheduled cloud backup permanently failed after retries:", err);
           }
@@ -746,9 +706,14 @@ const startServer = async () => {
       scheduleDailySalesReport();
       
       // Execute a catch-up backup check immediately on startup
-      trackScheduledTask(() => ensureCloudBackupUpToDate().catch(err => {
-        console.error("Startup catch-up cloud backup failed:", err);
-      }));
+      trackScheduledTask(async () => {
+        try {
+          await ensureCloudBackupUpToDate();
+          broadcast({ type: "BACKUP_UPDATE" });
+        } catch (err) {
+          console.error("Startup catch-up cloud backup failed:", err);
+        }
+      });
     });
   } catch (error) {
     console.error("Server startup failed:", error);

@@ -376,7 +376,7 @@ exports.respondToFeedback = async (req, res) => {
   // Emit WebSocket event for feedback response
   const broadcast = getBroadcast();
   if (broadcast) {
-    broadcast({ type: "FEEDBACK_RESPONSE", payload: { id } });
+    broadcast({ type: "FEEDBACK_RESPONSE", payload: { id, table_id: row.table_id } });
   }
 
   res.json(stripFeedbackToken(await mapFeedbackRow(row)));
@@ -390,6 +390,8 @@ exports.archiveFeedback = async (req, res) => {
   );
   const row = await get("SELECT * FROM customer_feedback WHERE id = ?", [id]);
   if (!row) throw createHttpError(404, "Feedback not found.");
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "FEEDBACK_UPDATE", payload: { id } });
   res.json(stripFeedbackToken(await mapFeedbackRow(row)));
 };
 
@@ -397,6 +399,8 @@ exports.deleteFeedback = async (req, res) => {
   const id = Number(req.params.id);
   await run(`DELETE FROM customer_feedback_images WHERE feedback_id = ?`, [id]);
   await run(`DELETE FROM customer_feedback WHERE id = ?`, [id]);
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "FEEDBACK_UPDATE", payload: { id } });
   res.json({ success: true });
 };
 
@@ -581,12 +585,16 @@ exports.updateFindingStatus = async (req, res) => {
   );
   const row = await get("SELECT * FROM feedback_analysis_findings WHERE id = ?", [id]);
   if (!row) throw createHttpError(404, "Finding not found.");
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "FEEDBACK_UPDATE", payload: { finding_id: id } });
   res.json(row);
 };
 
 exports.deleteFinding = async (req, res) => {
   const id = Number(req.params.id);
   await run(`DELETE FROM feedback_analysis_findings WHERE id = ?`, [id]);
+  const broadcast = getBroadcast();
+  if (broadcast) broadcast({ type: "FEEDBACK_UPDATE", payload: { finding_id: id } });
   res.json({ success: true });
 };
 

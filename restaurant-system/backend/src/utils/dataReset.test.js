@@ -14,5 +14,7 @@ test('reset categories include full reset and specific menu/feedback scopes', ()
 
   const fullReset = getResetCategoryByKey('all_data');
   assert.ok(fullReset);
-  assert.equal(fullReset.label, 'All app data');
+  assert.equal(fullReset.label, 'Reset everything');
+  assert.equal(getResetCategoryByKey('not-a-reset-category'), null);
+  assert.equal(getResetCategoryByKey(undefined), null);
 });

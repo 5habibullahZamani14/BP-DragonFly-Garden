@@ -168,6 +168,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const [newItemId, setNewItemId] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [loading, setLoading] = useState(true);
+  const [settingsRefreshVersion, setSettingsRefreshVersion] = useState(0);
+  const hasLoadedPaymentDataRef = useRef(false);
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [posModalInitialType, setPosModalInitialType] = useState<"TAKEAWAY" | "PICKUP" | "DELIVERY" | "COUNTER">("TAKEAWAY");
   const [posModalParentOrder, setPosModalParentOrder] = useState<PaymentOrder | null>(null);
@@ -358,9 +360,9 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     };
     
     checkWorkingHours();
-    const interval = setInterval(checkWorkingHours, 60000); // Check every minute
+    const interval = setInterval(checkWorkingHours, 60000);
     return () => clearInterval(interval);
-  }, [loggedInEmployee]);
+  }, [loggedInEmployee, settingsRefreshVersion]);
 
   const handleLogout = () => {
     void logoutPaymentCounter().catch(error => {
@@ -381,7 +383,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
     
     try {
-      setLoading(true);
+      if (!hasLoadedPaymentDataRef.current) setLoading(true);
       const [unpaid, paid, methods, menu] = await Promise.all([
         fetchUnpaidOrders(qrCode),
         fetchPaidOrders(qrCode),
@@ -393,6 +395,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
       setPaidOrders(paid);
       setPaymentMethods(methods);
       setMenuItems(menu);
+      hasLoadedPaymentDataRef.current = true;
 
       const cashMethod = methods.find(m => m.name.toLowerCase() === "cash");
       if (cashMethod) {
@@ -463,7 +466,25 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     }
   };
 
-  useWebSocket(["NEW_ORDER", "ORDER_STATUS_UPDATE", "NEW_PAYMENT", "CALL_WAITER", "CALL_WAITER_ACK"], (event) => {
+  useWebSocket([
+    "NEW_ORDER",
+    "ORDER_STATUS_UPDATE",
+    "NEW_PAYMENT",
+    "CALL_WAITER",
+    "CALL_WAITER_ACK",
+    "MENU_UPDATE",
+    "SETTINGS_UPDATE",
+    "DATA_REFRESH",
+    "CONNECTION_RESTORED",
+  ], (event) => {
+    if (event.type === "CONNECTION_RESTORED" || event.type === "DATA_REFRESH") {
+      if (loggedInEmployee) {
+        void loadData();
+        void loadAssistanceRequests();
+        setSettingsRefreshVersion((version) => version + 1);
+      }
+      return;
+    }
     if (event.type === "CALL_WAITER") {
       const request = event.payload as StaffAssistanceRequest;
       setAssistanceRequests((current) => {
@@ -479,6 +500,18 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
         current.map((item) => item.id === request.id ? request : item)
       );
       setActiveAssistanceRequest((current) => current?.id === request.id ? null : current);
+      return;
+    }
+    if (event.type === "MENU_UPDATE") {
+      const payload = event.payload as { reason?: string };
+      if (payload?.reason === "order_inventory") return;
+      void fetchMenuItems(qrCode)
+        .then(setMenuItems)
+        .catch((error) => safeConsoleError("Failed to refresh payment menu after an update", error));
+      return;
+    }
+    if (event.type === "SETTINGS_UPDATE") {
+      setSettingsRefreshVersion((version) => version + 1);
       return;
     }
     if (loggedInEmployee) {

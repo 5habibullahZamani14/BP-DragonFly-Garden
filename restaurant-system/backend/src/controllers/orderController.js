@@ -70,6 +70,7 @@ const fetchOrderById = async (orderId) => {
         t.table_number,
         t.qr_code,
         o.status,
+        o.customer_archived_at,
         o.total_price,
         o.created_at,
         o.daily_ticket_number,
