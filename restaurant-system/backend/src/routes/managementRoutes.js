@@ -477,12 +477,9 @@ const printerDiscoveryService = require("../services/printerDiscoveryService");
 router.get("/printers/discover", requireManagerToken, async (req, res) => {
   console.log("[discovery] Route handler called, request received");
   try {
-    // Clear cache to ensure fresh discovery results
-    if (printerDiscoveryService.clearCache) {
+    if (req.query.refresh === "true" && printerDiscoveryService.clearCache) {
       printerDiscoveryService.clearCache();
-      console.log("[discovery] Cache cleared before discovery");
     }
-    
     console.log("[discovery] Starting printer discovery...");
     const printers = await printerDiscoveryService.discoverPrinters();
     console.log(`[discovery] discoverPrinters returned ${printers.length} printers`);
@@ -734,6 +731,57 @@ router.post("/printers/test", requireManagerToken, async (req, res) => {
   } catch (error) {
     console.error(`[thermal] ROUTE B error:`, error);
     res.status(503).json({ success: false, message: error.message });
+  }
+});
+
+router.get("/printers/jobs/review", requireManagerToken, async (_req, res) => {
+  try {
+    const db = require("../database/db");
+    const jobs = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT id, order_id AS orderId, job_type AS jobType, printer_name AS printerName,
+                status, error_message AS errorMessage, created_at AS createdAt
+         FROM printer_jobs
+         WHERE status IN ('submitting', 'uncertain')
+         ORDER BY id DESC
+         LIMIT 50`,
+        (error, rows) => error ? reject(error) : resolve(rows)
+      );
+    });
+    res.json({ success: true, jobs });
+  } catch (error) {
+    console.error("Could not load printer jobs needing review:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post("/printers/jobs/:id/acknowledge", requireManagerToken, async (req, res) => {
+  const jobId = Number(req.params.id);
+  if (!Number.isSafeInteger(jobId) || jobId < 1) {
+    return res.status(400).json({ success: false, message: "Invalid printer job ID." });
+  }
+
+  try {
+    const db = require("../database/db");
+    const changes = await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE printer_jobs
+         SET status = 'reviewed', updated_at = CURRENT_TIMESTAMP, reviewed_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status IN ('submitting', 'uncertain')`,
+        [jobId],
+        function (error) {
+          if (error) reject(error);
+          else resolve(this.changes);
+        }
+      );
+    });
+    if (!changes) {
+      return res.status(404).json({ success: false, message: "Printer job was not found or was already reviewed." });
+    }
+    res.json({ success: true, message: "Printer job marked as reviewed. No print retry was made." });
+  } catch (error) {
+    console.error(`Could not acknowledge printer job ${jobId}:`, error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

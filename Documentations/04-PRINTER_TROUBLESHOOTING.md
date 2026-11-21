@@ -25,6 +25,15 @@ Windows print-queue path.
 - Confirm the same queue can print a Windows test page.
 - Check backend output for printer submission errors.
 
+### A print job needs review
+
+- The application did not receive confirmation that submission finished. The job might
+  already be in the queue or printed.
+- Inspect the operating-system queue and the physical printer before arranging a manual
+  reprint. Do not mark the job reviewed until you have checked; marking it reviewed does
+  not reprint it.
+- The application will not automatically retry uncertain jobs, to avoid duplicate tickets.
+
 ### Width, margins, or cutting are wrong
 
 - Check the manufacturer's driver settings and selected paper size.

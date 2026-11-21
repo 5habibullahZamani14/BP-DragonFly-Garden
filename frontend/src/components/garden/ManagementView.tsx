@@ -219,8 +219,17 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     }
   }, [isLoggedIn]);
 
-  useWebSocket(["NEW_ORDER", "NEW_PAYMENT"], () => {
-    if (isLoggedIn) loadNotifications();
+  useWebSocket(["NEW_ORDER", "NEW_PAYMENT", "PRINT_JOB_REVIEW_REQUIRED"], (event) => {
+    if (!isLoggedIn) return;
+    if (event.type === "NEW_ORDER" || event.type === "NEW_PAYMENT") loadNotifications();
+    if (event.type === "PRINT_JOB_REVIEW_REQUIRED") {
+      const payload = event.payload as { orderId?: number; submissionStarted?: boolean };
+      const orderLabel = payload.orderId ? ` for order #${payload.orderId}` : "";
+      const notification = payload.submissionStarted
+        ? `Printer submission${orderLabel} has an uncertain outcome. Check Printer Management and the printer before arranging a reprint.`
+        : `Printer submission${orderLabel} could not be started. Check Printer Management before trying again.`;
+      notify("error", notification);
+    }
   }, undefined, "manager", isLoggedIn);
 
   const handleLogin = async () => {

@@ -48,7 +48,7 @@ const printerDiscoveryService = {
   discoverPrinters: async () => {
     // Check cache first
     const now = Date.now();
-    if (discoveryCache.printers.length > 0 && (now - discoveryCache.timestamp) < discoveryCache.ttl) {
+    if (discoveryCache.timestamp > 0 && (now - discoveryCache.timestamp) < discoveryCache.ttl) {
       console.log(`[discovery] Returning cached printers (${discoveryCache.printers.length} printers, cache age: ${now - discoveryCache.timestamp}ms)`);
       return discoveryCache.printers;
     }
@@ -63,141 +63,22 @@ const printerDiscoveryService = {
     discoveryPromise = (async () => {
       try {
         const platform = os.platform();
-        let allPrinters = [];
-        
-        console.log(`[discovery] Starting enhanced printer discovery on platform: ${platform}`);
-        
+        console.log(`[discovery] Discovering installed print queues on platform: ${platform}`);
+        let printers;
         if (platform === "win32") {
-          // Discover installed printers (USB, network, etc.)
-          try {
-            console.log("[discovery] Discovering Windows installed printers...");
-            const installedPrinters = await printerDiscoveryService.discoverWindowsPrinters();
-            allPrinters = allPrinters.concat(installedPrinters);
-            console.log(`[discovery] Windows installed printers found: ${installedPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] Windows printer discovery failed:", err.message);
-          }
-          
-          // Discover network printers on local network
-          try {
-            console.log("[discovery] Discovering network printers...");
-            const networkPrinters = await printerDiscoveryService.discoverNetworkPrinters();
-            allPrinters = allPrinters.concat(networkPrinters);
-            console.log(`[discovery] Network printers found: ${networkPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] Network printer discovery failed:", err.message);
-          }
-          
-          // Discover Bluetooth printers
-          try {
-            console.log("[discovery] Discovering Bluetooth printers...");
-            const bluetoothPrinters = await printerDiscoveryService.discoverBluetoothPrinters();
-            allPrinters = allPrinters.concat(bluetoothPrinters);
-            console.log(`[discovery] Bluetooth printers found: ${bluetoothPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] Bluetooth printer discovery failed:", err.message);
-          }
-
-          // Enhanced: mDNS/Bonjour discovery
-          try {
-            console.log("[discovery] Discovering printers via mDNS/Bonjour...");
-            const mdnsPrinters = await printerDiscoveryService.discoverMdnsPrinters();
-            allPrinters = allPrinters.concat(mdnsPrinters);
-            console.log(`[discovery] mDNS printers found: ${mdnsPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] mDNS discovery failed:", err.message);
-          }
-
-          // Enhanced: SNMP discovery
-          try {
-            console.log("[discovery] Discovering printers via SNMP...");
-            const snmpPrinters = await printerDiscoveryService.discoverSnmpPrinters();
-            allPrinters = allPrinters.concat(snmpPrinters);
-            console.log(`[discovery] SNMP printers found: ${snmpPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] SNMP discovery failed:", err.message);
-          }
-
-          // Enhanced: Direct USB enumeration
-          try {
-            console.log("[discovery] Discovering USB printers via node-usb...");
-            const usbPrinters = await printerDiscoveryService.discoverUsbPrinters();
-            allPrinters = allPrinters.concat(usbPrinters);
-            console.log(`[discovery] USB enumeration printers found: ${usbPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] USB enumeration failed:", err.message);
-          }
-          
-          // Remove duplicates by name
-          const uniquePrinters = [];
-          const seenNames = new Set();
-          for (const printer of allPrinters) {
-            if (!seenNames.has(printer.name)) {
-              seenNames.add(printer.name);
-              uniquePrinters.push(printer);
-            }
-          }
-          
-          console.log(`[discovery] Total unique printers discovered: ${uniquePrinters.length}`);
-          
-          // Update cache
-          discoveryCache.printers = uniquePrinters;
-          discoveryCache.timestamp = Date.now();
-          
-          return uniquePrinters;
+          printers = await printerDiscoveryService.discoverWindowsPrinters();
+        } else if (platform === "linux") {
+          printers = await printerDiscoveryService.discoverLinuxPrinters();
         } else {
-          console.log("[discovery] Running Linux printer discovery...");
-          const linuxPrinters = await printerDiscoveryService.discoverLinuxPrinters();
-          
-          // Enhanced: mDNS/Bonjour discovery on Linux
-          try {
-            console.log("[discovery] Discovering printers via mDNS/Bonjour on Linux...");
-            const mdnsPrinters = await printerDiscoveryService.discoverMdnsPrinters();
-            linuxPrinters.push(...mdnsPrinters);
-            console.log(`[discovery] mDNS printers found on Linux: ${mdnsPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] mDNS discovery failed on Linux:", err.message);
-          }
-
-          // Enhanced: SNMP discovery on Linux
-          try {
-            console.log("[discovery] Discovering printers via SNMP on Linux...");
-            const snmpPrinters = await printerDiscoveryService.discoverSnmpPrinters();
-            linuxPrinters.push(...snmpPrinters);
-            console.log(`[discovery] SNMP printers found on Linux: ${snmpPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] SNMP discovery failed on Linux:", err.message);
-          }
-
-          // Enhanced: Direct USB enumeration on Linux
-          try {
-            console.log("[discovery] Discovering USB printers via node-usb on Linux...");
-            const usbPrinters = await printerDiscoveryService.discoverUsbPrinters();
-            linuxPrinters.push(...usbPrinters);
-            console.log(`[discovery] USB enumeration printers found on Linux: ${usbPrinters.length}`);
-          } catch (err) {
-            console.error("[discovery] USB enumeration failed on Linux:", err.message);
-          }
-
-          // Remove duplicates
-          const uniquePrinters = [];
-          const seenNames = new Set();
-          for (const printer of linuxPrinters) {
-            if (!seenNames.has(printer.name)) {
-              seenNames.add(printer.name);
-              uniquePrinters.push(printer);
-            }
-          }
-
-          // Update cache
-          discoveryCache.printers = uniquePrinters;
-          discoveryCache.timestamp = Date.now();
-
-          return uniquePrinters;
+          throw new Error(`Printer discovery is not supported on ${platform}.`);
         }
+
+        discoveryCache.printers = printers;
+        discoveryCache.timestamp = Date.now();
+        return printers;
       } catch (error) {
-        console.error("[discovery] Printer discovery failed:", error);
-        return [];
+        console.error("[discovery] Printer discovery failed:", error.message);
+        throw error;
       } finally {
         discoveryInProgress = false;
         discoveryPromise = null;
@@ -481,7 +362,7 @@ const printerDiscoveryService = {
    * Discover printers on Windows using PowerShell
    */
   discoverWindowsPrinters: async () => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       // Use WMI for accurate offline detection (Get-Printer is unreliable)
       const psCommand = `
         Get-WmiObject Win32_Printer | Select-Object Name, DriverName, PortName, PrinterStatus, WorkOffline | ConvertTo-Json
@@ -496,6 +377,18 @@ const printerDiscoveryService = {
       
       let stdout = "";
       let stderr = "";
+      let settled = false;
+      const finish = (error, printers) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve(printers);
+      };
+      const timeout = setTimeout(() => {
+        proc.kill();
+        finish(new Error("Timed out while reading installed Windows printer queues."));
+      }, 10000);
       
       proc.stdout.on("data", (data) => stdout += data);
       proc.stderr.on("data", (data) => stderr += data);
@@ -503,18 +396,19 @@ const printerDiscoveryService = {
       proc.on("close", async (code) => {
         if (code !== 0) {
           console.error(`[discovery] PowerShell failed with code ${code}: ${stderr}`);
-          resolve([]); // Return empty array instead of rejecting
+          finish(new Error(`Windows printer discovery failed: ${stderr.trim() || `PowerShell exited with code ${code}`}`));
           return;
         }
         
         if (!stdout || stdout.trim() === "") {
           console.error("[discovery] PowerShell returned empty output");
-          resolve([]);
+          finish(null, []);
           return;
         }
         
         try {
-          const printers = JSON.parse(stdout);
+          const parsed = JSON.parse(stdout);
+          const printers = Array.isArray(parsed) ? parsed : [parsed];
           const availablePrinters = [];
           
           for (const printer of printers) {
@@ -558,17 +452,15 @@ const printerDiscoveryService = {
           }
           
           console.log(`[discovery] Found ${availablePrinters.length} available printers (filtered from ${printers.length} total)`);
-          resolve(availablePrinters);
+          finish(null, availablePrinters);
         } catch (parseError) {
           console.error(`[discovery] Failed to parse printer data: ${parseError.message}`);
-          console.error(`[discovery] Raw output: ${stdout.substring(0, 200)}`);
-          resolve([]); // Return empty array instead of rejecting
+          finish(new Error(`Could not parse installed Windows printer queues: ${parseError.message}`));
         }
       });
       
       proc.on("error", (err) => {
-        console.error(`[discovery] PowerShell process error: ${err.message}`);
-        resolve([]); // Return empty array instead of rejecting
+        finish(new Error(`Could not start Windows printer discovery: ${err.message}`));
       });
     });
   },
@@ -577,47 +469,7 @@ const printerDiscoveryService = {
    * Discover printers on Linux using CUPS
    */
   discoverLinuxPrinters: async () => {
-    let allPrinters = [];
-    
-    // Method 1: Try CUPS (lpstat)
-    try {
-      const cupsPrinters = await printerDiscoveryService.discoverCUPSPrinters();
-      allPrinters = allPrinters.concat(cupsPrinters);
-      console.log(`[discovery] CUPS found ${cupsPrinters.length} printers`);
-    } catch (err) {
-      console.warn(`[discovery] CUPS discovery failed: ${err.message}`);
-    }
-    
-    // Method 2: Try USB device discovery (fallback for systems without CUPS)
-    try {
-      const usbPrinters = await printerDiscoveryService.discoverLinuxUSBPrinters();
-      allPrinters = allPrinters.concat(usbPrinters);
-      console.log(`[discovery] USB discovery found ${usbPrinters.length} printers`);
-    } catch (err) {
-      console.warn(`[discovery] USB discovery failed: ${err.message}`);
-    }
-    
-    // Method 3: Try Bluetooth discovery
-    try {
-      const bluetoothPrinters = await printerDiscoveryService.discoverLinuxBluetoothPrinters();
-      allPrinters = allPrinters.concat(bluetoothPrinters);
-      console.log(`[discovery] Bluetooth discovery found ${bluetoothPrinters.length} printers`);
-    } catch (err) {
-      console.warn(`[discovery] Bluetooth discovery failed: ${err.message}`);
-    }
-    
-    // Remove duplicates by name
-    const uniquePrinters = [];
-    const seenNames = new Set();
-    for (const printer of allPrinters) {
-      if (!seenNames.has(printer.name)) {
-        seenNames.add(printer.name);
-        uniquePrinters.push(printer);
-      }
-    }
-    
-    console.log(`[discovery] Total unique Linux printers: ${uniquePrinters.length}`);
-    return uniquePrinters;
+    return printerDiscoveryService.discoverCUPSPrinters();
   },
 
   /**
@@ -625,49 +477,39 @@ const printerDiscoveryService = {
    */
   discoverCUPSPrinters: async () => {
     return new Promise((resolve, reject) => {
-      // First check if CUPS is available (use command -v instead of which for better compatibility)
-      const cupsCheck = spawn("command", ["-v", "lpstat"], { shell: false });
-      
-      cupsCheck.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error("CUPS (lpstat) not available on this system"));
-          return;
-        }
-        
-        // Get list of printers
         const proc = spawn("lpstat", ["-p", "-v"], { shell: false });
         
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        const finish = (error, printers) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (error) reject(error);
+          else resolve(printers);
+        };
+        const timeout = setTimeout(() => {
+          proc.kill();
+          finish(new Error("Timed out while reading CUPS printer queues."));
+        }, 10000);
         
         proc.stdout.on("data", (data) => stdout += data);
         proc.stderr.on("data", (data) => stderr += data);
         
-        // Add timeout to prevent hanging
-        const timeout = setTimeout(() => {
-          proc.kill();
-          console.warn("[discovery] CUPS lpstat timeout");
-          reject(new Error("CUPS lpstat timeout"));
-        }, 10000); // 10 second timeout
-        
         proc.on("close", (code) => {
-          clearTimeout(timeout);
           if (code !== 0) {
-            reject(new Error(`lpstat failed: ${stderr}`));
+            finish(new Error(`CUPS printer discovery failed: ${stderr.trim() || `lpstat exited with code ${code}`}`));
             return;
           }
           
           const printers = printerDiscoveryService.parseLinuxPrinters(stdout);
-          resolve(printers);
+          finish(null, printers);
         });
         
         proc.on("error", (err) => {
-          clearTimeout(timeout);
-          reject(err);
+          finish(new Error(`Could not start CUPS printer discovery: ${err.message}`));
         });
-      });
-      
-      cupsCheck.on("error", (err) => reject(err));
     });
   },
 
@@ -881,47 +723,38 @@ const printerDiscoveryService = {
    * Parse Linux CUPS printer output
    */
   parseLinuxPrinters: (output) => {
-    const lines = output.split('\n');
-    const printers = [];
-    let currentPrinter = null;
-    
+    const printersByName = new Map();
+    const lines = output.split(/\r?\n/);
     for (const line of lines) {
-      const printerMatch = line.match(/printer (\S+) is enabled/);
+      const printerMatch = line.match(/^printer\s+(.+)\s+is\s+(idle|printing|processing|disabled)\b(.*)$/i);
       if (printerMatch) {
-        if (currentPrinter) {
-          // Only add if printer is online
-          if (currentPrinter.status !== "offline") {
-            printers.push(currentPrinter);
-          }
-        }
-        currentPrinter = {
-          name: printerMatch[1],
-          status: "online",
+        const [, name, rawStatus] = printerMatch;
+        const status = rawStatus.toLowerCase() === "disabled"
+          ? "offline"
+          : rawStatus.toLowerCase() === "printing" || rawStatus.toLowerCase() === "processing"
+            ? "printing"
+            : "idle";
+        printersByName.set(name, {
+          name,
+          status,
           connectionType: "unknown",
-          platform: "linux"
-        };
+          platform: "linux",
+          discoveredBy: "CUPS"
+        });
+        continue;
       }
-      
-      const deviceMatch = line.match(/device for (\S+): (.+)/);
-      if (deviceMatch && currentPrinter) {
-        currentPrinter.port = deviceMatch[2];
-        currentPrinter.connectionType = printerDiscoveryService.detectLinuxConnectionType(deviceMatch[2]);
-      }
-      
-      const statusMatch = line.match(/printer (\S+) disabled/);
-      if (statusMatch && currentPrinter) {
-        currentPrinter.status = "offline";
-      }
-    }
-    
-    if (currentPrinter) {
-      // Only add if printer is online
-      if (currentPrinter.status !== "offline") {
-        printers.push(currentPrinter);
+
+      const deviceMatch = line.match(/^device for\s+(.+):\s+(.+)$/i);
+      if (deviceMatch) {
+        const printer = printersByName.get(deviceMatch[1]);
+        if (printer) {
+          printer.port = deviceMatch[2];
+          printer.connectionType = printerDiscoveryService.detectLinuxConnectionType(deviceMatch[2]);
+        }
       }
     }
-    
-    return printers;
+
+    return [...printersByName.values()].filter(printer => printer.status !== "offline");
   },
 
   /**
@@ -1339,12 +1172,7 @@ const printerDiscoveryService = {
       arch: os.arch(),
       hostname: os.hostname(),
       type: os.type(),
-      release: os.release(),
-      discoveryMethods: {
-        mDNS: !!dnssd,
-        SNMP: !!snmp,
-        USB: !!usb
-      }
+      release: os.release()
     };
   }
 };

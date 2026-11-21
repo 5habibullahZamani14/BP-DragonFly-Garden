@@ -6,7 +6,7 @@
  * 
  * Width handling:
  * - 80mm paper = ~48 characters per line
- * - 50mm paper = ~32 characters per line  
+ * - 58mm / 50mm paper = ~32 characters per line
  * - Width is set per-printer in the printer profile (stored in DB)
  * - The ticket formatters dynamically use the configured width
  * - Hardcoded fallback: 48 chars (80mm paper)
@@ -18,30 +18,12 @@ const { spawn } = require("child_process");
 const db = require("../database/db");
 const { withCircuitBreaker } = require("./circuitBreaker");
 const { submitWindowsPrintJob } = require("./windowsPrintJob");
+const { getPrintableCharacterColumns, wrapReceiptText } = require("./printerFormatting");
 
-// Load thermalPrinterService with explicit error logging
-let thermalPrinterService;
-try {
-  thermalPrinterService = require("./thermalPrinterService");
-  console.log("[thermal] thermalPrinterService loaded successfully");
-} catch (err) {
-  console.error("[thermal] FAILED to load thermalPrinterService:", err.message);
-  // Create a stub so the rest of the code doesn't crash
-  thermalPrinterService = {
-    convertTicketToEscPos: () => Buffer.from(""),
-    addEmptyLines: (buf) => buf,
-    sendRawToPrinter: () => Promise.reject(new Error("thermalPrinterService not loaded")),
-    ensurePrinterShared: () => Promise.resolve(false),
-    getPrinterShareName: () => Promise.resolve(""),
-    getPrinterConnectionType: () => Promise.resolve("unknown"),
-    shouldUseRawMode: () => false
-  };
-}
+const DEFAULT_PAPER_WIDTH_MM = 80;
+const DEFAULT_PRINTER_COLUMNS = 48;
 
-// Default width for 50mm thermal paper (32 chars). Can be overridden per printer.
-const DEFAULT_PRINTER_WIDTH = 32;
-
-const centerText = (text, width = DEFAULT_PRINTER_WIDTH) => {
+const centerText = (text, width = DEFAULT_PRINTER_COLUMNS) => {
   const pad = Math.max(0, Math.floor((width - text.length) / 2));
   return ' '.repeat(pad) + text;
 };
@@ -49,7 +31,7 @@ const centerText = (text, width = DEFAULT_PRINTER_WIDTH) => {
 /**
  * Draw a separator line using the configured width
  */
-const separator = (width = DEFAULT_PRINTER_WIDTH) => '='.repeat(Math.max(10, width));
+const separator = (width = DEFAULT_PRINTER_COLUMNS) => '='.repeat(Math.max(10, width));
 
 /**
  * Get receipt copy counts from printer preferences
@@ -82,12 +64,12 @@ const getReceiptCopyCounts = () => {
         const globalCopies = receiptCopies.global || {};
         
         resolve({
-          order_customer: globalCopies.order_customer || 1,
-          order_kitchen: globalCopies.order_kitchen || 1,
-          addon_customer: globalCopies.addon_customer || 1,
-          addon_kitchen: globalCopies.addon_kitchen || 1,
-          final_receipt: globalCopies.final_receipt || 1,
-          daily_sales_report: globalCopies.daily_sales_report || 1
+          order_customer: globalCopies.order_customer ?? 1,
+          order_kitchen: globalCopies.order_kitchen ?? 1,
+          addon_customer: globalCopies.addon_customer ?? 1,
+          addon_kitchen: globalCopies.addon_kitchen ?? 1,
+          final_receipt: globalCopies.final_receipt ?? 1,
+          daily_sales_report: globalCopies.daily_sales_report ?? 1
         });
       } catch (e) {
         console.error("Error parsing receipt copy counts:", e);
@@ -104,7 +86,7 @@ const getReceiptCopyCounts = () => {
 const getPrinterSettings = (printerName) => {
   return new Promise((resolve, reject) => {
     const defaultSettings = {
-      width: DEFAULT_PRINTER_WIDTH,
+      width: DEFAULT_PAPER_WIDTH_MM,
       marginLeft: 0,
       marginRight: 0,
       marginTop: 0,
@@ -128,27 +110,28 @@ const getPrinterSettings = (printerName) => {
       
       try {
         const prefs = JSON.parse(row.value);
-        const printerProfiles = prefs.printer_profiles || {};
+        const printerProfiles = prefs && typeof prefs.printer_profiles === "object" && prefs.printer_profiles
+          ? prefs.printer_profiles
+          : {};
         const printerProfile = printerProfiles[printerName];
         
         if (printerProfile) {
           resolve({
-            width: printerProfile.width || DEFAULT_PRINTER_WIDTH,
-            marginLeft: printerProfile.margin_left || 0,
-            marginRight: printerProfile.margin_right || 0,
-            marginTop: printerProfile.margin_top || 0,
-            marginBottom: printerProfile.margin_bottom || 0,
-            delaySeconds: printerProfile.print_delay_seconds || 0,
-            emptyLinesBefore: printerProfile.empty_lines_before || 2,
-            emptyLinesAfter: printerProfile.empty_lines_after || 3,
-            hasAutoCutter: printerProfile.has_auto_cutter || false
+            width: printerProfile.width ?? DEFAULT_PAPER_WIDTH_MM,
+            marginLeft: printerProfile.margin_left ?? 0,
+            marginRight: printerProfile.margin_right ?? 0,
+            marginTop: printerProfile.margin_top ?? 0,
+            marginBottom: printerProfile.margin_bottom ?? 0,
+            delaySeconds: printerProfile.print_delay_seconds ?? 0,
+            emptyLinesBefore: printerProfile.empty_lines_before ?? 0,
+            emptyLinesAfter: printerProfile.empty_lines_after ?? 0,
+            hasAutoCutter: printerProfile.has_auto_cutter === true
           });
         } else {
           resolve(defaultSettings);
         }
       } catch (e) {
-        console.error("Error parsing printer preferences:", e);
-        resolve(defaultSettings);
+        reject(new Error(`Could not read printer settings: ${e.message}`));
       }
     });
   });
@@ -164,14 +147,15 @@ const getSelectedPrinter = () => {
       if (err) {
         reject(err);
       } else {
-        const selectedPrinter = row ? row.value : null;
+        const selectedPrinter = row && typeof row.value === "string" ? row.value.trim() : "";
         
         if (!selectedPrinter) {
           db.get("SELECT value FROM restaurant_settings WHERE key = 'default_printer'", (err, row) => {
             if (err) {
               reject(err);
             } else {
-              resolve(row ? row.value : "BP_DragonFly_Garden_Confirmed");
+              const defaultPrinter = row && typeof row.value === "string" ? row.value.trim() : "";
+              resolve(defaultPrinter || null);
             }
           });
         } else {
@@ -203,8 +187,8 @@ const formatTableNumber = (tableNumber) => {
   return `Table: ${trimmed}`;
 };
 
-/* Strips GDI tags and applies alignment manually for non-Windows (Linux/Raspberry Pi) raw print fallback. */
-const stripGdiTags = (ticket, width = DEFAULT_PRINTER_WIDTH) => {
+/* Strips ticket markup and applies alignment for the Windows and CUPS text paths. */
+const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
   return ticket
     .split('\n')
     .map(line => {
@@ -236,51 +220,44 @@ const stripGdiTags = (ticket, width = DEFAULT_PRINTER_WIDTH) => {
         cleanLine = "[ ] " + cleanLine;
       }
 
+      const wrappedLines = wrapReceiptText(cleanLine, width);
       if (isCenter) {
-        cleanLine = centerText(cleanLine, width);
-      } else if (isRight) {
-        cleanLine = cleanLine.padStart(width, ' ');
+        return wrappedLines.map(wrappedLine => centerText(wrappedLine, width)).join('\n');
       }
-      return cleanLine;
+      if (isRight) {
+        return wrappedLines.map(wrappedLine => wrappedLine.padStart(width, ' ')).join('\n');
+      }
+      if (cleanLine.length <= width) return cleanLine;
+      const indent = cleanLine.match(/^\s*/)[0];
+      return wrapReceiptText(cleanLine.trimStart(), Math.max(1, width - indent.length))
+        .map(wrappedLine => indent + wrappedLine)
+        .join('\n');
     })
     .join('\n');
 };
 
 // ── Dynamic width helper ─────────────────────────────────────────────
-// All ticket formatters now accept an optional 'width' parameter.
-// The print functions resolve the printer's configured width and pass it
-// to the formatters, so separators, padding, and text wrapping all fit
-// the actual paper size (50mm = 32 chars, 80mm = 48 chars).
-
-/**
- * Format a ticket line with proper padding for a given width.
- * Wraps long text to fit within the available space.
- */
-const wrapText = (text, maxWidth) => {
-  if (!text || text.length <= maxWidth) return [text || ''];
-  const words = text.split(/\s+/);
-  const lines = [];
-  let cur = '';
-  for (const word of words) {
-    if ((cur + ' ' + word).trim().length > maxWidth) {
-      if (cur) lines.push(cur.trim());
-      cur = word.length > maxWidth ? word.substring(0, maxWidth) : word;
-    } else {
-      cur = cur ? cur + ' ' + word : word;
-    }
-  }
-  if (cur.trim()) lines.push(cur.trim());
-  return lines;
-};
+// Formatter widths are character columns; stored profile widths are millimeters.
 
 const formatTicketForPrinter = (ticket, settings, skipMargins = false) => {
-  if (skipMargins) return ticket;
+  const width = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
+  for (const { name, value, max, unit } of [
+    { name: "Top margin", value: settings.marginTop, max: 20, unit: "lines" },
+    { name: "Bottom margin", value: settings.marginBottom, max: 20, unit: "lines" },
+    { name: "Empty lines before", value: settings.emptyLinesBefore, max: 20, unit: "lines" },
+    { name: "Empty lines after", value: settings.emptyLinesAfter, max: 20, unit: "lines" },
+    { name: "Print delay", value: settings.delaySeconds, max: 60, unit: "seconds" }
+  ]) {
+    if (!Number.isInteger(value) || value < 0 || value > max) {
+      throw new Error(`${name} must be a whole number between 0 and ${max} ${unit}.`);
+    }
+  }
+  if (skipMargins) return stripGdiTags(ticket, width);
 
   const leftMargin = ' '.repeat(settings.marginLeft);
   const topMargin = '\n'.repeat(settings.marginTop);
   const bottomMargin = '\n'.repeat(settings.marginBottom);
-  const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-  const cleanTicket = stripGdiTags(ticket, effectiveWidth > 0 ? effectiveWidth : settings.width);
+  const cleanTicket = stripGdiTags(ticket, width);
   const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
   const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
   const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
@@ -288,92 +265,161 @@ const formatTicketForPrinter = (ticket, settings, skipMargins = false) => {
 };
 
 const submitPrintJob = async (ticket, printerName, filename, settings) => {
+  if (!printerName || !String(printerName).trim()) {
+    throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
+  }
+  const selectedPrinterName = String(printerName).trim();
   let result;
   if (process.platform === 'win32') {
-    result = await submitWindowsPrintJob(ticket, printerName, filename);
+    result = await submitWindowsPrintJob(ticket, selectedPrinterName, filename);
   } else {
-    const logsDir = path.join(__dirname, '../../logs');
-    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-    const filepath = path.join(logsDir, filename);
-    fs.writeFileSync(filepath, ticket, 'utf8');
+    const os = require("os");
+    const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-print-"));
+    try {
+      const filepath = path.join(tempDirectory, path.basename(filename));
+      fs.writeFileSync(filepath, ticket, 'utf8');
+      result = await new Promise((resolve, reject) => {
+        const proc = spawn('lp', ['-d', selectedPrinterName, filepath], { shell: false });
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        const finish = (error, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (error) reject(error);
+          else resolve(value);
+        };
+        const timeout = setTimeout(() => {
+          proc.kill();
+          finish(new Error("Timed out while submitting the print job to CUPS."));
+        }, 30000);
 
-    result = await new Promise((resolve, reject) => {
-      const proc = spawn('lp', ['-d', printerName, filepath], { shell: false });
-      let stdout = '';
-      let stderr = '';
-      proc.stdout.on('data', data => { stdout += data; });
-      proc.stderr.on('data', data => { stderr += data; });
-      proc.once('close', code => {
-        if (code === 0) {
-          resolve({
-            success: true,
-            message: `Print job submitted to ${printerName}`,
-            filename,
-            method: 'lp'
-          });
-        } else {
-          reject(new Error(stderr.trim() || stdout.trim() || `lp command failed (exit code ${code})`));
-        }
+        proc.stdout.on('data', data => { stdout += data; });
+        proc.stderr.on('data', data => { stderr += data; });
+        proc.once('close', code => {
+          if (code === 0) {
+            finish(null, {
+              success: true,
+              message: `Print job submitted to ${selectedPrinterName}`,
+              filename,
+              method: 'lp'
+            });
+          } else {
+            finish(new Error(stderr.trim() || stdout.trim() || `lp command failed (exit code ${code})`));
+          }
+        });
+        proc.once('error', error => finish(new Error(`Could not start lp: ${error.message}`)));
       });
-      proc.once('error', error => reject(new Error(`Could not start lp: ${error.message}`)));
-    });
+    } finally {
+      try {
+        fs.rmSync(tempDirectory, { recursive: true, force: true });
+      } catch (error) {
+        console.warn("Could not remove temporary print files:", error.message);
+      }
+    }
   }
 
+  return result;
+};
+
+const createPrinterJob = (printerName, metadata) => new Promise((resolve, reject) => {
+  db.run(
+    `INSERT INTO printer_jobs (order_id, job_type, printer_name, status)
+     VALUES (?, ?, ?, 'submitting')`,
+    [metadata.orderId ?? null, metadata.jobType || "receipt", printerName],
+    function (error) {
+      if (error) reject(error);
+      else resolve(this.lastID);
+    }
+  );
+});
+
+const updatePrinterJob = (jobId, status, errorMessage = null) => new Promise((resolve, reject) => {
+  db.run(
+    `UPDATE printer_jobs
+     SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP,
+         reviewed_at = CASE WHEN ? = 'reviewed' THEN CURRENT_TIMESTAMP ELSE reviewed_at END
+     WHERE id = ?`,
+    [status, errorMessage, status, jobId],
+    function (error) {
+      if (error) reject(error);
+      else resolve(this.changes);
+    }
+  );
+});
+
+const executeTicketPrint = async (ticket, filenamePrefix, printerName, isTestPrint = false, metadata = {}) => {
+  const settings = await getPrinterSettings(printerName);
+  const filename = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+  const finalTicket = formatTicketForPrinter(ticket, settings, isTestPrint);
+  console.log(`Submitting ${filenamePrefix} print job to ${printerName}`);
+  const jobId = await createPrinterJob(printerName, metadata);
+  let result;
+  try {
+    result = await submitPrintJob(finalTicket, printerName, filename, settings);
+  } catch (error) {
+    const submissionError = error instanceof Error ? error : new Error(String(error));
+    submissionError.printerSubmissionStarted = true;
+    try {
+      await updatePrinterJob(jobId, "uncertain", submissionError.message);
+    } catch (trackingError) {
+      console.error(`Could not record uncertain printer job ${jobId}:`, trackingError.message);
+    }
+    throw submissionError;
+  }
+  try {
+    await updatePrinterJob(jobId, "submitted");
+  } catch (error) {
+    console.error(`Print job ${jobId} was submitted, but its status could not be recorded:`, error.message);
+  }
   if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
     await new Promise(resolve => setTimeout(resolve, settings.delaySeconds * 1000));
   }
   return result;
 };
 
-const executeTicketPrint = async (ticket, filenamePrefix, printerName, isTestPrint) => {
-  const settings = await getPrinterSettings(printerName);
-  const filename = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
-  const finalTicket = formatTicketForPrinter(ticket, settings, isTestPrint);
-  console.log(`Submitting ${filenamePrefix} print job to ${printerName}`);
-  return submitPrintJob(finalTicket, printerName, filename, settings);
-};
-
-const _executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
+const _executePrintWithPrinter = async (ticket, filenamePrefix, printerName, metadata) => {
   if (!printerName || !String(printerName).trim()) {
     throw new Error('A printer must be selected before printing');
   }
-  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test');
+  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test', metadata);
 };
 
-const _executePrint = async (ticket, filenamePrefix) => {
+const _executePrint = async (ticket, filenamePrefix, metadata) => {
   const printerName = await getSelectedPrinter();
   if (!printerName || !String(printerName).trim()) {
     throw new Error('No default printer is selected');
   }
-  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test');
+  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test', metadata);
 };
-const executePrintWithPrinter = async (ticket, filenamePrefix, printerName) => {
+const executePrintWithPrinter = async (ticket, filenamePrefix, printerName, metadata = {}) => {
   const breaker = withCircuitBreaker('printer', _executePrintWithPrinter, {
     failureThreshold: 3,
     timeoutMs: 60000,
     successThreshold: 2
   });
-  return breaker(ticket, filenamePrefix, printerName);
+  return breaker(ticket, filenamePrefix, printerName, metadata);
 };
 
 /**
  * executePrint - Wrapped with circuit breaker for resilience.
  */
-const executePrint = async (ticket, filenamePrefix) => {
+const executePrint = async (ticket, filenamePrefix, metadata = {}) => {
   const breaker = withCircuitBreaker('printer', _executePrint, {
     failureThreshold: 3,
     timeoutMs: 60000,
     successThreshold: 2
   });
-  return breaker(ticket, filenamePrefix);
+  return breaker(ticket, filenamePrefix, metadata);
 };
 
 // ── Ticket Formatting Functions ──────────────────────────────────────────
-// ALL formatters accept a 'width' parameter (defaults to DEFAULT_PRINTER_WIDTH = 32 for 50mm).
+// Formatter widths are character columns; stored profile widths are millimeters.
 // The separator lines, text wrapping, padding, and alignment all use this width.
 
 const printerService = {
-  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle, width = DEFAULT_PRINTER_WIDTH) => {
+  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle, width = DEFAULT_PRINTER_COLUMNS) => {
     const sep = separator(width);
     const timestamp = formatDateTime(new Date());
     let ticket = "\n";
@@ -414,7 +460,7 @@ const printerService = {
     itemsToPrint.forEach(item => {
       // Wrap item name to fit width (leave room for "2x " prefix = 4 chars)
       const nameMax = width - 4;
-      const nameLines = wrapText(item.item_name, nameMax);
+      const nameLines = wrapReceiptText(item.item_name, nameMax);
       const qtyStr = `${item.quantity}x`.padEnd(4, ' ');
       
       nameLines.forEach((line, idx) => {
@@ -426,7 +472,7 @@ const printerService = {
       });
 
       if (item.notes) {
-        const noteLines = wrapText(`Note: ${item.notes}`, width - 5);
+        const noteLines = wrapReceiptText(`Note: ${item.notes}`, width - 5);
         noteLines.forEach(line => ticket += `     ${line}\n`);
       }
 
@@ -436,7 +482,7 @@ const printerService = {
           opts.forEach(opt => {
             const suffix = opt.delta > 0 ? ` (+${parseFloat(opt.delta).toFixed(2)})` : '';
             const optText = `> ${opt.option}${suffix}`;
-            const optLines = wrapText(optText, width - 5);
+            const optLines = wrapReceiptText(optText, width - 5);
             optLines.forEach(line => ticket += `     ${line}\n`);
           });
         } catch { /* ignore malformed JSON */ }
@@ -450,7 +496,7 @@ const printerService = {
     return ticket;
   },
 
-  formatFinalReceipt: (order, cashierName, width = DEFAULT_PRINTER_WIDTH) => {
+  formatFinalReceipt: (order, cashierName, width = DEFAULT_PRINTER_COLUMNS) => {
     const sep = separator(width);
     const timestamp = formatDateTime(new Date());
     let ticket = "\n";
@@ -490,12 +536,16 @@ const printerService = {
       const qtyStr = item.quantity.toString().padEnd(3, ' ');
       const lineTotal = (item.quantity * item.price_at_order_time).toFixed(2);
       
-      // Item name truncated to fit
+      // Keep the full item name while reserving space for the amount on the first line.
       const nameMax = width - 15; // room for "3 xxx...xxx  RM12.50"
-      const nameStr = item.item_name.substring(0, nameMax).padEnd(nameMax, ' ');
+      const nameLines = wrapReceiptText(item.item_name, nameMax);
+      const nameStr = nameLines[0].padEnd(nameMax, ' ');
       const priceStr = lineTotal.padStart(8, ' ');
       
       ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
+      nameLines.slice(1).forEach(line => {
+        ticket += `    ${line}\n`;
+      });
       
       let deltasSum = 0;
       let hasPriceDelta = false;
@@ -519,15 +569,17 @@ const printerService = {
           const opts = JSON.parse(item.options_json);
           opts.forEach(opt => {
             const suffix = opt.delta > 0 ? `+RM ${parseFloat(opt.delta).toFixed(2)}` : '';
-            ticket += `    > ${opt.option}${suffix}\n`.substring(0, width);
-            ticket += '\n';
+            const optionLines = wrapReceiptText(`> ${opt.option}${suffix}`, width - 4);
+            optionLines.forEach(line => {
+              ticket += `    ${line}\n`;
+            });
           });
         } catch { /* ignore */ }
       }
 
       if (item.notes) {
         const noteText = `Note: ${item.notes}`;
-        const noteLines = wrapText(noteText, width - 4);
+        const noteLines = wrapReceiptText(noteText, width - 4);
         noteLines.forEach(line => ticket += `    ${line}\n`);
       }
     });
@@ -571,27 +623,35 @@ const printerService = {
   printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {
     const copyTitle = copyNum === 1 ? "CUSTOMER COPY" : "KITCHEN COPY";
     const printerName = await getSelectedPrinter();
+    if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
     const settings = await getPrinterSettings(printerName);
-    const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-    const w = effectiveWidth > 0 ? effectiveWidth : settings.width;
+    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
     const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle, w);
-    return await executePrint(ticket, `order_${order.id}_checklist`);
+    const copyType = copyNum === 1 ? "customer" : "kitchen";
+    const jobType = `${isAddOn ? "addon" : "order"}_${copyType}`;
+    return await executePrintWithPrinter(ticket, `order_${order.id}_checklist`, printerName, {
+      orderId: order.id,
+      jobType
+    });
   },
 
   printFinalReceipt: async (order, cashierName) => {
     const printerName = await getSelectedPrinter();
+    if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
     const settings = await getPrinterSettings(printerName);
-    const effectiveWidth = settings.width - settings.marginLeft - settings.marginRight;
-    const w = effectiveWidth > 0 ? effectiveWidth : settings.width;
+    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
     const ticket = printerService.formatFinalReceipt(order, cashierName, w);
-    return await executePrint(ticket, `order_${order.id}_final`);
+    return await executePrintWithPrinter(ticket, `order_${order.id}_final`, printerName, {
+      orderId: order.id,
+      jobType: "final_receipt"
+    });
   },
 
   printDailySalesReport: async (todayOrders) => {
     const printerName = await getSelectedPrinter();
+    if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
     const settings = await getPrinterSettings(printerName);
-    const width = settings.width - settings.marginLeft - settings.marginRight;
-    const w = width > 0 ? width : DEFAULT_PRINTER_WIDTH;
+    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
     const sep = separator(w);
     const timestamp = formatDateTime(new Date());
     const todayDateStr = new Date().toLocaleDateString('en-GB');
@@ -622,15 +682,21 @@ const printerService = {
     ticket += `${sep}\n`;
     ticket += "\n\n";
     
-    return await executePrint(ticket, `daily_sales_report`);
+    return await executePrintWithPrinter(ticket, `daily_sales_report`, printerName, {
+      jobType: "daily_sales_report"
+    });
   },
 
   printTestTicket: async (printerName) => {
-    const ticket = `TEST PRINT OK\nBP Dragonfly Garden\nWidth: ${DEFAULT_PRINTER_WIDTH}\n`;
-    if (printerName) {
-      return await executePrintWithPrinter(ticket, `printer_test`, printerName);
+    if (!printerName || !String(printerName).trim()) {
+      throw new Error("Choose an installed printer queue before testing it.");
     }
-    return await executePrint(ticket, `printer_test`);
+    const settings = await getPrinterSettings(printerName);
+    const columns = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
+    const ticket = `TEST PRINT OK\nBP Dragonfly Garden\nPaper: ${settings.width} mm\nColumns: ${columns}\n`;
+    return executeTicketPrint(ticket, "printer_test", printerName, false, {
+      jobType: "test"
+    });
   }
 };
 

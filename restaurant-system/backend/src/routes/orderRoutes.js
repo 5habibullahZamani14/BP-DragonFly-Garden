@@ -143,7 +143,20 @@ const orderRoutes = (broadcast) => {
             }
           }
         } catch (err) {
-          console.error("Printer failed:", err);
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Printer failed for order ${order.id}:`, message);
+          try {
+            broadcast({
+              type: "PRINT_JOB_REVIEW_REQUIRED",
+              payload: {
+                orderId: order.id,
+                message,
+                submissionStarted: err?.printerSubmissionStarted === true
+              }
+            });
+          } catch (broadcastError) {
+            console.error("Could not notify managers about the printer failure:", broadcastError);
+          }
         }
       })();
     }
@@ -246,6 +259,19 @@ const orderRoutes = (broadcast) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Receipt print failed after payment completed:", message);
+      try {
+        broadcast({
+          type: "PRINT_JOB_REVIEW_REQUIRED",
+          payload: {
+            orderId: order.id,
+            message,
+            paymentCompleted: true,
+            submissionStarted: err?.printerSubmissionStarted === true
+          }
+        });
+      } catch (broadcastError) {
+        console.error("Could not notify managers about the printer failure:", broadcastError);
+      }
       return res.status(503).json({
         success: false,
         paymentCompleted: true,

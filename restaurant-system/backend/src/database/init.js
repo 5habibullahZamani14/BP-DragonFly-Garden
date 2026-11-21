@@ -26,6 +26,7 @@
  *   payment_logs        Audit trail of payment-related actions
  *   archived_orders     Completed orders moved out of the live orders table
  *   restaurant_settings Key-value table for configurable settings
+ *   printer_jobs       Durable status history for submitted printer jobs
  *   employees           Staff records managed through the management dashboard
  *   inventory_items     Ingredient / supply stock levels
  *   grand_archive_logs  System-wide audit log for all significant actions
@@ -38,6 +39,7 @@
  * constant named "db" so it can be used throughout this file.
  */
 const db = require("./db");
+let printerJobsReconciled = false;
 
 /*
  * Define a function named "run" that accepts an SQL statement as its parameter.
@@ -368,6 +370,30 @@ const initializeDatabase = async () => {
       value TEXT NOT NULL
     )
   `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS printer_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER,
+      job_type TEXT NOT NULL,
+      printer_name TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('submitting', 'submitted', 'uncertain', 'reviewed')),
+      error_message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME
+    )
+  `);
+  if (!printerJobsReconciled) {
+    await run(`
+      UPDATE printer_jobs
+      SET status = 'uncertain',
+          error_message = COALESCE(error_message, 'The application stopped before confirming print submission. Check the printer before reprinting.'),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'submitting'
+    `);
+    printerJobsReconciled = true;
+  }
 
   /* Employees are the staff members who can log into the payment counter. */
   await run(`

@@ -122,7 +122,8 @@ export type WSEventType =
   | "TABLE_UPDATE"
   | "EMPLOYEE_UPDATE"
   | "SETTINGS_UPDATE"
-  | "FEEDBACK_RESPONSE";
+  | "FEEDBACK_RESPONSE"
+  | "PRINT_JOB_REVIEW_REQUIRED";
 
 interface WSEvent {
   type: WSEventType;

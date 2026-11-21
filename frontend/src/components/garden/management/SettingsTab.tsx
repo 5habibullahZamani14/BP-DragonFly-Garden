@@ -69,10 +69,18 @@ type PrinterPlatformInfo = {
   platform: string;
   arch: string;
   hostname: string;
-  discoveryMethods?: { mDNS?: boolean; SNMP?: boolean; USB?: boolean };
 };
 
 type PrinterApiResponse = { success: boolean; message?: string };
+type PrinterJobReview = {
+  id: number;
+  orderId: number | null;
+  jobType: string;
+  printerName: string;
+  status: "submitting" | "uncertain";
+  errorMessage: string | null;
+  createdAt: string;
+};
 type PrinterDiscoveryResponse = PrinterApiResponse & {
   printers?: DiscoveredPrinter[];
   platform?: PrinterPlatformInfo;
@@ -162,7 +170,6 @@ export const SettingsTab = () => {
   // Printer management state
   const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
   const [printersLoading, setPrintersLoading] = useState(false);
-  const [discoveryCountdown, setDiscoveryCountdown] = useState(0);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [defaultPrinter, setDefaultPrinter] = useState("");
   const [printerPreferences, setPrinterPreferences] = useState<PrinterPreferences>({});
@@ -177,6 +184,7 @@ export const SettingsTab = () => {
   const [printerSettingsSaved, setPrinterSettingsSaved] = useState(false);
   const [platformInfo, setPlatformInfo] = useState<PrinterPlatformInfo | null>(null);
   const [printDelaySeconds, setPrintDelaySeconds] = useState(0);
+  const [hasAutoCutter, setHasAutoCutter] = useState(false);
   const [emptyLinesBefore, setEmptyLinesBefore] = useState(2);
   const [emptyLinesAfter, setEmptyLinesAfter] = useState(3);
   const [selectedPrinterProfile, setSelectedPrinterProfile] = useState<PrinterProfile | null>(null);
@@ -236,8 +244,9 @@ export const SettingsTab = () => {
   }, []);
 
   // WebSocket listener for real-time settings updates
-  useWebSocket(["SETTINGS_UPDATE"], (event) => {
-    loadAll();
+  useWebSocket(["SETTINGS_UPDATE", "PRINT_JOB_REVIEW_REQUIRED"], (event) => {
+    if (event.type === "SETTINGS_UPDATE") loadAll();
+    if (event.type === "PRINT_JOB_REVIEW_REQUIRED") void loadPrinterJobs();
   });
 
   const loadAll = async () => {
@@ -437,17 +446,56 @@ export const SettingsTab = () => {
 
   // Printer management functions
   const [printerError, setPrinterError] = useState<string | null>(null);
+  const [printerJobs, setPrinterJobs] = useState<PrinterJobReview[]>([]);
+  const [printerJobsLoading, setPrinterJobsLoading] = useState(false);
+
+  const loadPrinterJobs = useCallback(async () => {
+    setPrinterJobsLoading(true);
+    try {
+      const response = await fetch("/management/printers/jobs/review", {
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data: { success: boolean; jobs?: PrinterJobReview[]; message?: string } = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
+      }
+      setPrinterJobs(data.jobs || []);
+    } catch (error: unknown) {
+      safeConsoleError("Failed to load printer jobs needing review", error);
+      toast.error(`Could not load printer job status: ${getErrorMessage(error)}`);
+    } finally {
+      setPrinterJobsLoading(false);
+    }
+  }, []);
+
+  const acknowledgePrinterJob = async (jobId: number) => {
+    if (!window.confirm("Have you checked the printer and verified whether this ticket printed? This only marks the alert reviewed; it will not reprint the ticket.")) return;
+    try {
+      const response = await fetch(`/management/printers/jobs/${jobId}/acknowledge`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data: PrinterApiResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
+      }
+      toast.success(data.message || "Printer job reviewed.");
+      await loadPrinterJobs();
+    } catch (error: unknown) {
+      safeConsoleError(`Failed to acknowledge printer job ${jobId}`, error);
+      toast.error(`Could not update printer job: ${getErrorMessage(error)}`);
+    }
+  };
 
   const discoverPrinters = useCallback(async () => {
     setPrinterError(null);
     setPrintersLoading(true);
-    setDiscoveryCountdown(30); // Start countdown at 30 seconds
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
-      // Add timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      const response = await fetch("/management/printers/discover", {
+      const response = await fetch("/management/printers/discover?refresh=true", {
         credentials: "include",
         headers: {
           "Content-Type": "application/json"
@@ -455,11 +503,9 @@ export const SettingsTab = () => {
         signal: controller.signal
       });
       
-      clearTimeout(timeoutId);
       if (response.status === 401) {
         setPrinterError("Authentication failed. Your session may have expired. Please log in again.");
         setPrintersLoading(false);
-        setDiscoveryCountdown(0);
         return;
       }
       
@@ -481,8 +527,8 @@ export const SettingsTab = () => {
         safeConsoleError("Printer discovery failed", err);
       }
     } finally {
+      clearTimeout(timeoutId);
       setPrintersLoading(false);
-      setDiscoveryCountdown(0);
     }
   }, []);
 
@@ -507,6 +553,7 @@ export const SettingsTab = () => {
           const profile = data.printerProfiles[data.selectedPrinter];
           setSelectedPrinterProfile(profile);
           setPrintDelaySeconds(profile.print_delay_seconds || 0);
+          setHasAutoCutter(profile.has_auto_cutter ?? false);
           setEmptyLinesBefore(profile.empty_lines_before !== undefined ? profile.empty_lines_before : 0);
           setEmptyLinesAfter(profile.empty_lines_after !== undefined ? profile.empty_lines_after : 0);
           setPaperWidth(profile.width || 80);
@@ -517,6 +564,7 @@ export const SettingsTab = () => {
         } else {
           // Fallback to defaults if no profile
           setPrintDelaySeconds(0);
+          setHasAutoCutter(false);
           setEmptyLinesBefore(0);
           setEmptyLinesAfter(0);
           setPaperWidth(80);
@@ -557,11 +605,16 @@ export const SettingsTab = () => {
       const data: PrinterApiResponse = await response.json();
       if (!data.success) {
         safeConsoleError("Failed to print daily sales report", data.message);
+        toast.error(`Failed to print daily sales report: ${data.message || "Unknown error"}`);
+      } else {
+        toast.success(data.message || "Daily sales report submitted.");
       }
     } catch (err: unknown) {
       safeConsoleError("Failed to print daily sales report", err);
+      toast.error(`Failed to print daily sales report: ${getErrorMessage(err)}`);
     } finally {
       setPrintingDailyReport(false);
+      void loadPrinterJobs();
     }
   };
 
@@ -579,11 +632,16 @@ export const SettingsTab = () => {
       const data: PrinterApiResponse = await response.json();
       if (!data.success) {
         safeConsoleError("Failed to print test ticket", data.message);
+        toast.error(`Test print failed: ${data.message || "Unknown error"}`);
+      } else {
+        toast.success(data.message || "Test print submitted.");
       }
     } catch (err: unknown) {
       safeConsoleError("Failed to print test ticket", err);
+      toast.error(`Test print failed: ${getErrorMessage(err)}`);
     } finally {
       setPrintingTestTicket(false);
+      void loadPrinterJobs();
     }
   };
 
@@ -593,13 +651,14 @@ export const SettingsTab = () => {
       // Update printer profile for selected printer
       const updatedProfiles = { ...printerProfiles };
       if (selectedPrinter) {
+        const selectedPrinterInfo = printers.find(printer => printer.name === selectedPrinter);
         updatedProfiles[selectedPrinter] = {
           width: paperWidth,
           print_delay_seconds: printDelaySeconds,
           empty_lines_before: emptyLinesBefore,
           empty_lines_after: emptyLinesAfter,
-          has_auto_cutter: printDelaySeconds === 0,
-          connection_type: "USB",
+          has_auto_cutter: hasAutoCutter,
+          connection_type: selectedPrinterInfo?.connectionType || printerProfiles[selectedPrinter]?.connection_type || "unknown",
           notes: `Printer profile for ${selectedPrinter}`,
           margin_left: marginLeft,
           margin_right: marginRight,
@@ -607,9 +666,6 @@ export const SettingsTab = () => {
           margin_bottom: marginBottom,
         };
       }
-      
-      // Update local state immediately so it persists during the session
-      setPrinterProfiles(updatedProfiles);
       
       // Update receipt copy counts
       const updatedPrefs = { ...printerPreferences };
@@ -641,13 +697,16 @@ export const SettingsTab = () => {
       if (data.success) {
         setPrinterProfiles(updatedProfiles);
         setPrinterPreferences(updatedPrefs);
+        toast.success("Printer settings saved.");
         setPrinterSettingsSaved(true);
         setTimeout(() => setPrinterSettingsSaved(false), 2500);
       } else {
         safeConsoleError("Failed to save printer settings", data.message);
+        toast.error(`Failed to save printer settings: ${data.message || "Unknown error"}`);
       }
     } catch (err: unknown) {
       safeConsoleError("Failed to save printer settings", err);
+      toast.error(`Failed to save printer settings: ${getErrorMessage(err)}`);
     } finally {
       setPrinterSettingsLoading(false);
     }
@@ -664,7 +723,7 @@ export const SettingsTab = () => {
       print_delay_seconds: profile.print_delay_seconds || 0,
       empty_lines_before: profile.empty_lines_before || 2,
       empty_lines_after: profile.empty_lines_after || 3,
-      has_auto_cutter: profile.has_auto_cutter || false
+      has_auto_cutter: profile.has_auto_cutter ?? false
     });
     setEditProfileDialog({
       open: true,
@@ -872,36 +931,16 @@ export const SettingsTab = () => {
     loadPrinterSettings();
   }, []);
 
-  // Countdown timer for printer discovery
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (discoveryCountdown > 0) {
-      interval = setInterval(() => {
-        setDiscoveryCountdown((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [discoveryCountdown]);
-
   // Don't reload printer settings when switching printers - use local state
   // Only reload on initial mount
 
   // Auto-discover printers when printer accordion opens
   useEffect(() => {
-    if (activeAccordion === "printers") void discoverPrinters();
-  }, [activeAccordion, discoverPrinters]);
-
-  useEffect(() => {
-    if (activeAccordion !== "printers") return;
-
-    const refreshInterval = window.setInterval(() => {
-      if (!printersLoading) void discoverPrinters();
-    }, 60_000);
-
-    return () => window.clearInterval(refreshInterval);
-  }, [activeAccordion, discoverPrinters, printersLoading]);
+    if (activeAccordion === "printers") {
+      void discoverPrinters();
+      void loadPrinterJobs();
+    }
+  }, [activeAccordion, discoverPrinters, loadPrinterJobs]);
 
   const handleCreateBackup = async (overwrite: boolean = false) => {
     if (!backupName.trim()) return;
@@ -1029,6 +1068,18 @@ export const SettingsTab = () => {
           <div className="flex items-center gap-3">
             <Power className="h-6 w-6 text-amber-700" />
             <CardTitle className="text-xl text-amber-950">Server shutdown requested</CardTitle>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div>
+              <Label htmlFor="printer-auto-cutter">Printer has an auto-cutter</Label>
+              <p className="text-xs text-muted-foreground">Set this from the printer’s documented features; it is not inferred from print delay.</p>
+            </div>
+            <Switch
+              id="printer-auto-cutter"
+              checked={hasAutoCutter}
+              onCheckedChange={setHasAutoCutter}
+            />
           </div>
           <CardDescription className="text-amber-900">
             New requests are blocked and connected sessions are closing. The backend is finishing active background work before closing the database.
@@ -1410,35 +1461,13 @@ export const SettingsTab = () => {
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-4">
-                  {/* Platform Info with Discovery Methods */}
+                  {/* Platform Info */}
                   {platformInfo && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <p className="text-sm font-medium text-blue-800 mb-2">
                         Platform: {platformInfo.platform} ({platformInfo.arch}) | Host: {platformInfo.hostname}
                       </p>
-                      {platformInfo.discoveryMethods && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          <span className="text-xs text-blue-600">Discovery Methods:</span>
-                          {platformInfo.discoveryMethods.mDNS && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">mDNS/Bonjour ✓</span>
-                          )}
-                          {platformInfo.discoveryMethods.SNMP && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">SNMP ✓</span>
-                          )}
-                          {platformInfo.discoveryMethods.USB && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">USB Enumeration ✓</span>
-                          )}
-                          {!platformInfo.discoveryMethods.mDNS && (
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">mDNS/Bonjour ✗</span>
-                          )}
-                          {!platformInfo.discoveryMethods.SNMP && (
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">SNMP ✗</span>
-                          )}
-                          {!platformInfo.discoveryMethods.USB && (
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">USB Enumeration ✗</span>
-                          )}
-                        </div>
-                      )}
+                      <p className="text-xs text-blue-700">Printer choices come from queues installed in this operating system.</p>
                     </div>
                   )}
 
@@ -1454,7 +1483,7 @@ export const SettingsTab = () => {
                     {printersLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        {discoveryCountdown > 0 ? `Discovering... ${discoveryCountdown}s` : "Discovering..."}
+                        Discovering installed queues...
                       </>
                     ) : (
                       <>
@@ -1464,7 +1493,7 @@ export const SettingsTab = () => {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Printer discovery refreshes automatically every 60 seconds while this section is open.
+                    Only installed operating-system print queues are listed. Use Discover Printers to refresh the list.
                   </p>
 
                   {/* Error Message */}
@@ -1711,6 +1740,50 @@ export const SettingsTab = () => {
                     : printerSettingsSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
                     : "Save Printer Settings"}
                 </Button>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="printer-job-review" className="border rounded-lg bg-card mb-4">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="text-left flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <h4 className="font-semibold text-sm">Print Jobs Needing Review ({printerJobs.length})</h4>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    If submission was interrupted, the ticket may or may not have printed. Check the printer and its queue before arranging a manual reprint. The system never retries these jobs automatically.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => void loadPrinterJobs()} disabled={printerJobsLoading}>
+                    {printerJobsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh job status
+                  </Button>
+                  {printerJobs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No print jobs currently need review.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {printerJobs.map(job => (
+                        <div key={job.id} className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1 text-sm">
+                              <p className="font-medium">
+                                {job.jobType.replace(/_/g, " ")}{job.orderId ? ` · Order #${job.orderId}` : ""}
+                              </p>
+                              <p>Printer: {job.printerName}</p>
+                              <p>Status: {job.status === "submitting" ? "Submission not confirmed" : "Outcome uncertain"}</p>
+                              <p className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</p>
+                              {job.errorMessage && <p className="text-xs text-red-700">{job.errorMessage}</p>}
+                            </div>
+                            <Button size="sm" variant="outline" onClick={() => void acknowledgePrinterJob(job.id)}>
+                              Mark reviewed
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </AccordionContent>
             </AccordionItem>
 
@@ -2312,6 +2385,18 @@ export const SettingsTab = () => {
               max="60"
               value={editProfileData.print_delay_seconds}
               onChange={(e) => setEditProfileData(prev => ({ ...prev, print_delay_seconds: parseInt(e.target.value) || 0 }))}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div>
+              <Label htmlFor="edit-printer-auto-cutter">Printer has an auto-cutter</Label>
+              <p className="text-xs text-muted-foreground">This is independent of the print delay setting.</p>
+            </div>
+            <Switch
+              id="edit-printer-auto-cutter"
+              checked={editProfileData.has_auto_cutter}
+              onCheckedChange={(checked) => setEditProfileData(prev => ({ ...prev, has_auto_cutter: checked }))}
             />
           </div>
 
