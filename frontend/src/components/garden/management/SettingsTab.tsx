@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -27,20 +28,6 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
-
-type PrinterProfile = {
-  width?: number;
-  margin_left?: number;
-  margin_right?: number;
-  margin_top?: number;
-  margin_bottom?: number;
-  print_delay_seconds?: number;
-  empty_lines_before?: number;
-  empty_lines_after?: number;
-  has_auto_cutter?: boolean;
-  connection_type?: string;
-  notes?: string;
-};
 
 type ReceiptCopies = {
   order_customer?: number;
@@ -62,13 +49,6 @@ type DiscoveredPrinter = {
   status?: string;
   driver?: string;
   port?: string;
-  discoveredBy?: string;
-};
-
-type PrinterPlatformInfo = {
-  platform: string;
-  arch: string;
-  hostname: string;
 };
 
 type PrinterApiResponse = { success: boolean; message?: string };
@@ -83,15 +63,20 @@ type PrinterJobReview = {
 };
 type PrinterDiscoveryResponse = PrinterApiResponse & {
   printers?: DiscoveredPrinter[];
-  platform?: PrinterPlatformInfo;
 };
 type PrinterSettingsResponse = PrinterApiResponse & {
   selectedPrinter?: string;
   defaultPrinter?: string;
   printerPreferences?: PrinterPreferences;
-  printerProfiles?: Record<string, PrinterProfile>;
 };
 
+const DEFAULT_TEST_TICKET = [
+  "BP DRAGONFLY GARDEN",
+  "PRINTER TEST",
+  "--------------------------------",
+  "This is a printer test ticket.",
+  "Thank you!"
+].join("\n");
 const getErrorMessage = (error: unknown, fallback = "Unknown error") =>
   error instanceof Error ? error.message : fallback;
 
@@ -173,7 +158,6 @@ export const SettingsTab = () => {
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [defaultPrinter, setDefaultPrinter] = useState("");
   const [printerPreferences, setPrinterPreferences] = useState<PrinterPreferences>({});
-  const [printerProfiles, setPrinterProfiles] = useState<Record<string, PrinterProfile>>({});
   const [testPrintLoading, setTestPrintLoading] = useState<string | null>(null);
   const [testPrintResult, setTestPrintResult] = useState<{
     printerName: string;
@@ -181,22 +165,18 @@ export const SettingsTab = () => {
     message: string;
   } | null>(null);
   const [printerSettingsLoading, setPrinterSettingsLoading] = useState(false);
-  const [printerSettingsSaved, setPrinterSettingsSaved] = useState(false);
-  const [platformInfo, setPlatformInfo] = useState<PrinterPlatformInfo | null>(null);
-  const [printDelaySeconds, setPrintDelaySeconds] = useState(0);
-  const [hasAutoCutter, setHasAutoCutter] = useState(false);
-  const [emptyLinesBefore, setEmptyLinesBefore] = useState(2);
-  const [emptyLinesAfter, setEmptyLinesAfter] = useState(3);
-  const [selectedPrinterProfile, setSelectedPrinterProfile] = useState<PrinterProfile | null>(null);
+  const [printerChoiceSaving, setPrinterChoiceSaving] = useState<{
+    printerName: string;
+    choice: "active" | "default";
+  } | null>(null);
 
-  // Paper width and margin settings
-  const [paperWidth, setPaperWidth] = useState(80);
-  const [customWidth, setCustomWidth] = useState("");
-  const [marginLeft, setMarginLeft] = useState(0);
-  const [marginRight, setMarginRight] = useState(0);
-  const [marginTop, setMarginTop] = useState(0);
-  const [marginBottom, setMarginBottom] = useState(0);
   const [ticketPreview, setTicketPreview] = useState("");
+  const [savedTicketPreview, setSavedTicketPreview] = useState("");
+  const [editingTicketPreview, setEditingTicketPreview] = useState(false);
+  const [ticketPreviewSaving, setTicketPreviewSaving] = useState(false);
+  const [ticketPreviewHasBeenSaved, setTicketPreviewHasBeenSaved] = useState(false);
+  const [receiptCopiesSaving, setReceiptCopiesSaving] = useState(false);
+  const [receiptCopiesSaved, setReceiptCopiesSaved] = useState(false);
   
   // Receipt copy counts
   const [orderCustomerCopies, setOrderCustomerCopies] = useState(1);
@@ -218,26 +198,6 @@ export const SettingsTab = () => {
     onConfirm: () => Promise<void>;
     pending: boolean;
   }>({ open: false, title: "", description: "", onConfirm: async () => {}, pending: false });
-
-  // Printer profile edit dialog state
-  const [editProfileDialog, setEditProfileDialog] = useState<{
-    open: boolean;
-    printerName: string;
-    profile: PrinterProfile | null;
-    pending: boolean;
-  }>({ open: false, printerName: "", profile: null, pending: false });
-
-  const [editProfileData, setEditProfileData] = useState({
-    width: 80,
-    margin_left: 0,
-    margin_right: 0,
-    margin_top: 0,
-    margin_bottom: 0,
-    print_delay_seconds: 0,
-    empty_lines_before: 2,
-    empty_lines_after: 3,
-    has_auto_cutter: false
-  });
 
   useEffect(() => {
     loadAll();
@@ -513,7 +473,6 @@ export const SettingsTab = () => {
       
       if (data.success) {
         setPrinters(data.printers ?? []);
-        setPlatformInfo(data.platform ?? null);
       } else {
         setPrinterError(`Failed to discover printers: ${data.message}`);
         safeConsoleError("Failed to discover printers", data.message);
@@ -542,51 +501,29 @@ export const SettingsTab = () => {
         }
       });
       const data: PrinterSettingsResponse = await response.json();
-      if (data.success) {
-        setSelectedPrinter(data.selectedPrinter || "");
-        setDefaultPrinter(data.defaultPrinter || "");
-        setPrinterPreferences(data.printerPreferences || {});
-        setPrinterProfiles(data.printerProfiles || {});
-        
-        // Load settings from selected printer profile
-        if (data.selectedPrinter && data.printerProfiles?.[data.selectedPrinter]) {
-          const profile = data.printerProfiles[data.selectedPrinter];
-          setSelectedPrinterProfile(profile);
-          setPrintDelaySeconds(profile.print_delay_seconds || 0);
-          setHasAutoCutter(profile.has_auto_cutter ?? false);
-          setEmptyLinesBefore(profile.empty_lines_before !== undefined ? profile.empty_lines_before : 0);
-          setEmptyLinesAfter(profile.empty_lines_after !== undefined ? profile.empty_lines_after : 0);
-          setPaperWidth(profile.width || 80);
-          setMarginLeft(profile.margin_left || 0);
-          setMarginRight(profile.margin_right || 0);
-          setMarginTop(profile.margin_top || 0);
-          setMarginBottom(profile.margin_bottom || 0);
-        } else {
-          // Fallback to defaults if no profile
-          setPrintDelaySeconds(0);
-          setHasAutoCutter(false);
-          setEmptyLinesBefore(0);
-          setEmptyLinesAfter(0);
-          setPaperWidth(80);
-          setMarginLeft(0);
-          setMarginRight(0);
-          setMarginTop(0);
-          setMarginBottom(0);
-        }
-        
-        // Load receipt copy counts
-        const copies = data.printerPreferences?.receipt_copies?.global;
-        if (copies) {
-          setOrderCustomerCopies(copies.order_customer || 1);
-          setOrderKitchenCopies(copies.order_kitchen || 1);
-          setAddonCustomerCopies(copies.addon_customer || 1);
-          setAddonKitchenCopies(copies.addon_kitchen || 1);
-          setFinalReceiptCopies(copies.final_receipt || 1);
-          setDailySalesReportCopies(copies.daily_sales_report || 1);
-        }
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
+      setSelectedPrinter(data.selectedPrinter || "");
+      setDefaultPrinter(data.defaultPrinter || "");
+      setPrinterPreferences(data.printerPreferences || {});
+      const savedTestTicket = data.printerPreferences?.test_ticket;
+      const testTicket = typeof savedTestTicket === "string" ? savedTestTicket : DEFAULT_TEST_TICKET;
+      setTicketPreview(testTicket);
+      setSavedTicketPreview(testTicket);
+      setTicketPreviewHasBeenSaved(typeof savedTestTicket === "string");
+      setEditingTicketPreview(false);
+
+      const copies = data.printerPreferences?.receipt_copies?.global;
+      setOrderCustomerCopies(copies?.order_customer ?? 1);
+      setOrderKitchenCopies(copies?.order_kitchen ?? 1);
+      setAddonCustomerCopies(copies?.addon_customer ?? 1);
+      setAddonKitchenCopies(copies?.addon_kitchen ?? 1);
+      setFinalReceiptCopies(copies?.final_receipt ?? 1);
+      setDailySalesReportCopies(copies?.daily_sales_report ?? 1);
     } catch (err: unknown) {
       safeConsoleError("Failed to load printer settings", err);
+      toast.error(`Could not load printer settings: ${getErrorMessage(err)}`);
     } finally {
       setPrinterSettingsLoading(false);
     }
@@ -619,6 +556,14 @@ export const SettingsTab = () => {
   };
 
   const printTestTicket = async () => {
+    if (!selectedPrinter) {
+      toast.error("Select an active printer before testing.");
+      return;
+    }
+    if (!ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview) {
+      toast.error("Save the ticket preview before printing it.");
+      return;
+    }
     setPrintingTestTicket(true);
     try {
       const response = await fetch("/management/printers/test", {
@@ -630,9 +575,9 @@ export const SettingsTab = () => {
         body: JSON.stringify({ printerName: selectedPrinter })
       });
       const data: PrinterApiResponse = await response.json();
-      if (!data.success) {
+      if (!response.ok || !data.success) {
         safeConsoleError("Failed to print test ticket", data.message);
-        toast.error(`Test print failed: ${data.message || "Unknown error"}`);
+        toast.error(`Test print failed: ${data.message || `Request failed (HTTP ${response.status})`}`);
       } else {
         toast.success(data.message || "Test print submitted.");
       }
@@ -645,158 +590,134 @@ export const SettingsTab = () => {
     }
   };
 
-  const savePrinterSettings = async () => {
-    setPrinterSettingsLoading(true);
+  const savePrinterChoice = async (printerName: string, choice: "active" | "default") => {
+    if (printerChoiceSaving) return;
+    if (choice === "active" ? selectedPrinter === printerName : defaultPrinter === printerName) return;
+
+    setPrinterChoiceSaving({ printerName, choice });
     try {
-      // Update printer profile for selected printer
-      const updatedProfiles = { ...printerProfiles };
-      if (selectedPrinter) {
-        const selectedPrinterInfo = printers.find(printer => printer.name === selectedPrinter);
-        updatedProfiles[selectedPrinter] = {
-          width: paperWidth,
-          print_delay_seconds: printDelaySeconds,
-          empty_lines_before: emptyLinesBefore,
-          empty_lines_after: emptyLinesAfter,
-          has_auto_cutter: hasAutoCutter,
-          connection_type: selectedPrinterInfo?.connectionType || printerProfiles[selectedPrinter]?.connection_type || "unknown",
-          notes: `Printer profile for ${selectedPrinter}`,
-          margin_left: marginLeft,
-          margin_right: marginRight,
-          margin_top: marginTop,
-          margin_bottom: marginBottom,
-        };
+      const response = await fetch("/management/printers/settings", {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(choice === "active" ? { selectedPrinter: printerName } : { defaultPrinter: printerName })
+      });
+      const data: PrinterSettingsResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
-      
-      // Update receipt copy counts
-      const updatedPrefs = { ...printerPreferences };
-      updatedPrefs.receipt_copies = {
-        global: {
-          order_customer: orderCustomerCopies,
-          order_kitchen: orderKitchenCopies,
-          addon_customer: addonCustomerCopies,
-          addon_kitchen: addonKitchenCopies,
-          final_receipt: finalReceiptCopies,
-          daily_sales_report: dailySalesReportCopies
+      if (choice === "active") setSelectedPrinter(printerName);
+      else setDefaultPrinter(printerName);
+      setPrinterPreferences(data.printerPreferences || {});
+      toast.success(choice === "active" ? "Active printer selected." : "Default printer saved.");
+    } catch (err: unknown) {
+      safeConsoleError(`Failed to update ${choice} printer`, err);
+      toast.error(`Failed to update ${choice} printer: ${getErrorMessage(err)}`);
+    } finally {
+      setPrinterChoiceSaving(null);
+    }
+  };
+
+  const saveReceiptCopyCounts = async () => {
+    const requestedCounts = {
+      order_customer: orderCustomerCopies,
+      order_kitchen: orderKitchenCopies,
+      addon_customer: addonCustomerCopies,
+      addon_kitchen: addonKitchenCopies,
+      final_receipt: finalReceiptCopies,
+      daily_sales_report: dailySalesReportCopies
+    };
+    if (Object.values(requestedCounts).some(count => !Number.isInteger(count) || count < 1 || count > 5)) {
+      toast.error("Every receipt copy count must be a whole number from 1 to 5.");
+      return;
+    }
+
+    setReceiptCopiesSaving(true);
+    try {
+      const updatedPreferences = {
+        receipt_copies: {
+          global: requestedCounts
         }
       };
-      
       const response = await fetch("/management/printers/settings", {
         method: "PUT",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          selectedPrinter,
-          defaultPrinter,
-          printerProfiles: updatedProfiles,
-          printerPreferences: updatedPrefs
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ printerPreferences: updatedPreferences })
       });
-      const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        setPrinterProfiles(updatedProfiles);
-        setPrinterPreferences(updatedPrefs);
-        toast.success("Printer settings saved.");
-        setPrinterSettingsSaved(true);
-        setTimeout(() => setPrinterSettingsSaved(false), 2500);
-      } else {
-        safeConsoleError("Failed to save printer settings", data.message);
-        toast.error(`Failed to save printer settings: ${data.message || "Unknown error"}`);
+      const data: PrinterSettingsResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
-    } catch (err: unknown) {
-      safeConsoleError("Failed to save printer settings", err);
-      toast.error(`Failed to save printer settings: ${getErrorMessage(err)}`);
+      const savedCopies = data.printerPreferences?.receipt_copies?.global;
+      if (!savedCopies) {
+        throw new Error("The server did not confirm the saved receipt copy counts.");
+      }
+      const expectedCopies: ReceiptCopies = updatedPreferences.receipt_copies.global;
+      for (const [type, expected] of Object.entries(expectedCopies)) {
+        if (savedCopies[type as keyof ReceiptCopies] !== expected) {
+          throw new Error(`The server did not confirm the saved ${type.replace(/_/g, " ")} copy count.`);
+        }
+      }
+      setPrinterPreferences(data.printerPreferences || {});
+      setOrderCustomerCopies(savedCopies.order_customer ?? 1);
+      setOrderKitchenCopies(savedCopies.order_kitchen ?? 1);
+      setAddonCustomerCopies(savedCopies.addon_customer ?? 1);
+      setAddonKitchenCopies(savedCopies.addon_kitchen ?? 1);
+      setFinalReceiptCopies(savedCopies.final_receipt ?? 1);
+      setDailySalesReportCopies(savedCopies.daily_sales_report ?? 1);
+      setReceiptCopiesSaved(true);
+      setTimeout(() => setReceiptCopiesSaved(false), 2500);
+      toast.success("Receipt copy counts saved.");
+    } catch (error: unknown) {
+      safeConsoleError("Failed to save receipt copy counts", error);
+      toast.error(`Failed to save receipt copy counts: ${getErrorMessage(error)}`);
     } finally {
-      setPrinterSettingsLoading(false);
+      setReceiptCopiesSaving(false);
     }
   };
 
-  const editPrinterProfile = (printerName: string, profile: PrinterProfile) => {
-    // Open the edit dialog with the profile data
-    setEditProfileData({
-      width: profile.width || 80,
-      margin_left: profile.margin_left || 0,
-      margin_right: profile.margin_right || 0,
-      margin_top: profile.margin_top || 0,
-      margin_bottom: profile.margin_bottom || 0,
-      print_delay_seconds: profile.print_delay_seconds || 0,
-      empty_lines_before: profile.empty_lines_before || 2,
-      empty_lines_after: profile.empty_lines_after || 3,
-      has_auto_cutter: profile.has_auto_cutter ?? false
-    });
-    setEditProfileDialog({
-      open: true,
-      printerName,
-      profile,
-      pending: false
-    });
-  };
-
-  const saveEditedProfile = async () => {
-    setEditProfileDialog(prev => ({ ...prev, pending: true }));
-
-    try {
-      const updatedProfiles = { ...printerProfiles };
-      updatedProfiles[editProfileDialog.printerName] = editProfileData;
-
-      const response = await fetch("/management/printers/settings", {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          printerProfiles: updatedProfiles
-        })
-      });
-
-      const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        setPrinterProfiles(updatedProfiles);
-        toast.success(`Updated profile for ${editProfileDialog.printerName}`);
-        setEditProfileDialog({ open: false, printerName: "", profile: null, pending: false });
-      } else {
-        toast.error(`Failed to update profile: ${data.message}`);
-      }
-    } catch (err: unknown) {
-      safeConsoleError("Failed to update printer profile", err);
-      toast.error("Failed to update printer profile");
-    } finally {
-      setEditProfileDialog(prev => ({ ...prev, pending: false }));
+  const saveTicketPreview = async () => {
+    if (!ticketPreview.trim()) {
+      toast.error("The test ticket cannot be empty.");
+      return;
     }
-  };
-
-  const deletePrinterProfile = async (printerName: string) => {
+    if (ticketPreview.length > 4000) {
+      toast.error("The test ticket must be 4,000 characters or fewer.");
+      return;
+    }
+    setTicketPreviewSaving(true);
     try {
-      const updatedProfiles = { ...printerProfiles };
-      delete updatedProfiles[printerName];
-      
       const response = await fetch("/management/printers/settings", {
         method: "PUT",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          printerProfiles: updatedProfiles
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testTicket: ticketPreview })
       });
-      
-      const data: PrinterApiResponse = await response.json();
-      if (data.success) {
-        setPrinterProfiles(updatedProfiles);
-        toast.success(`Deleted profile for ${printerName}`);
-      } else {
-        toast.error(`Failed to delete profile: ${data.message}`);
+      const data: PrinterSettingsResponse = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
-    } catch (err: unknown) {
-      safeConsoleError("Failed to delete printer profile", err);
-      toast.error("Failed to delete printer profile");
+      setPrinterPreferences(data.printerPreferences || {});
+      setSavedTicketPreview(ticketPreview);
+      setTicketPreviewHasBeenSaved(true);
+      setEditingTicketPreview(false);
+      toast.success("Test ticket preview saved.");
+    } catch (error: unknown) {
+      safeConsoleError("Failed to save test ticket preview", error);
+      toast.error(`Failed to save test ticket preview: ${getErrorMessage(error)}`);
+    } finally {
+      setTicketPreviewSaving(false);
     }
   };
 
   const testPrinter = async (printerName: string) => {
+    if (!ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview) {
+      toast.error("Save the ticket preview before printing it.");
+      return;
+    }
     setTestPrintLoading(printerName);
     setTestPrintResult(null);
     try {
@@ -1045,22 +966,6 @@ export const SettingsTab = () => {
     setUploadError(null);
   };
 
-  const handlePrinterSelection = (printerName: string) => {
-    setSelectedPrinter(printerName);
-    const profile = printerProfiles[printerName];
-    if (!profile) return;
-
-    setSelectedPrinterProfile(profile);
-    setPrintDelaySeconds(profile.print_delay_seconds || 0);
-    setEmptyLinesBefore(profile.empty_lines_before || 2);
-    setEmptyLinesAfter(profile.empty_lines_after || 3);
-    setPaperWidth(profile.width || 80);
-    setMarginLeft(profile.margin_left || 0);
-    setMarginRight(profile.margin_right || 0);
-    setMarginTop(profile.margin_top || 0);
-    setMarginBottom(profile.margin_bottom || 0);
-  };
-
   if (shutdownRequested) return (
     <div className="p-6" role="status" aria-live="polite">
       <Card className="mx-auto max-w-2xl border-2 border-amber-300 bg-amber-50">
@@ -1070,17 +975,6 @@ export const SettingsTab = () => {
             <CardTitle className="text-xl text-amber-950">Server shutdown requested</CardTitle>
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div>
-              <Label htmlFor="printer-auto-cutter">Printer has an auto-cutter</Label>
-              <p className="text-xs text-muted-foreground">Set this from the printer’s documented features; it is not inferred from print delay.</p>
-            </div>
-            <Switch
-              id="printer-auto-cutter"
-              checked={hasAutoCutter}
-              onCheckedChange={setHasAutoCutter}
-            />
-          </div>
           <CardDescription className="text-amber-900">
             New requests are blocked and connected sessions are closing. The backend is finishing active background work before closing the database.
           </CardDescription>
@@ -1394,63 +1288,6 @@ export const SettingsTab = () => {
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <Accordion type="multiple" className="w-full">
-            {/* ── Printer Profiles Management ───────────────────────────────────────────── */}
-            <AccordionItem value="printer-profiles" className="border rounded-lg bg-card mb-4">
-              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-                <div className="text-left flex items-center gap-2">
-                  <Printer className="h-4 w-4" />
-                  <h4 className="font-semibold text-sm">Printer Profiles Management</h4>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">View, edit, and delete printer profiles saved in the database.</p>
-                  
-                  {Object.keys(printerProfiles).length === 0 ? (
-                    <div className="text-center py-8 text-sm text-muted-foreground">
-                      No printer profiles found. Configure printer settings to create profiles.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {Object.entries(printerProfiles).map(([printerName, profile]) => (
-                        <div key={printerName} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <h5 className="font-medium text-sm mb-2">{printerName}</h5>
-                              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                <div><span className="font-medium">Width:</span> {profile.width || 80}mm</div>
-                                <div><span className="font-medium">Margins:</span> L:{profile.margin_left || 0} R:{profile.margin_right || 0} T:{profile.margin_top || 0} B:{profile.margin_bottom || 0}</div>
-                                <div><span className="font-medium">Empty Lines:</span> Before:{profile.empty_lines_before || 2} After:{profile.empty_lines_after || 3}</div>
-                                <div><span className="font-medium">Delay:</span> {profile.print_delay_seconds || 0}s</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => editPrinterProfile(printerName, profile)}
-                                className="shrink-0"
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => deletePrinterProfile(printerName)}
-                                className="shrink-0"
-                              >
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-
             {/* ── Printer Settings ───────────────────────────────────────────── */}
             <AccordionItem value="printer-settings" className="border rounded-lg bg-card mb-4">
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
@@ -1461,16 +1298,6 @@ export const SettingsTab = () => {
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-4">
-                  {/* Platform Info */}
-                  {platformInfo && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <p className="text-sm font-medium text-blue-800 mb-2">
-                        Platform: {platformInfo.platform} ({platformInfo.arch}) | Host: {platformInfo.hostname}
-                      </p>
-                      <p className="text-xs text-blue-700">Printer choices come from queues installed in this operating system.</p>
-                    </div>
-                  )}
-
                   {/* Discover Printers Button */}
                   <div className="flex gap-3">
                     <Button 
@@ -1492,10 +1319,6 @@ export const SettingsTab = () => {
                     )}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Only installed operating-system print queues are listed. Use Discover Printers to refresh the list.
-                  </p>
-
                   {/* Error Message */}
                   {printerError && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -1527,16 +1350,43 @@ export const SettingsTab = () => {
                                   <p><span className="font-medium">Driver:</span> {printer.driver || 'N/A'}</p>
                                   <p><span className="font-medium">Connection:</span> {printer.connectionType?.toUpperCase() || 'N/A'}</p>
                                   {printer.port && <p><span className="font-medium">Port:</span> {printer.port}</p>}
-                                  {printer.discoveredBy && (
-                                    <p><span className="font-medium">Discovered via:</span> {printer.discoveredBy}</p>
-                                  )}
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={selectedPrinter === printer.name ? "default" : "outline"}
+                                    className={selectedPrinter === printer.name ? "bg-green-700 text-white hover:bg-green-800" : ""}
+                                    aria-pressed={selectedPrinter === printer.name}
+                                    onClick={() => void savePrinterChoice(printer.name, "active")}
+                                    disabled={printerSettingsLoading || printerChoiceSaving !== null || selectedPrinter === printer.name}
+                                  >
+                                    {printerChoiceSaving?.printerName === printer.name && printerChoiceSaving.choice === "active"
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>
+                                      : selectedPrinter === printer.name ? "Selected (Active)" : "Select Active"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={defaultPrinter === printer.name ? "default" : "outline"}
+                                    className={defaultPrinter === printer.name ? "bg-indigo-700 text-white hover:bg-indigo-800" : ""}
+                                    aria-pressed={defaultPrinter === printer.name}
+                                    onClick={() => void savePrinterChoice(printer.name, "default")}
+                                    disabled={printerSettingsLoading || printerChoiceSaving !== null || defaultPrinter === printer.name}
+                                  >
+                                    {printerChoiceSaving?.printerName === printer.name && printerChoiceSaving.choice === "default"
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>
+                                      : defaultPrinter === printer.name ? "Default" : "Set as Default"}
+                                  </Button>
                                 </div>
                               </div>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => testPrinter(printer.name)}
-                                disabled={testPrintLoading === printer.name}
+                                disabled={
+                                  testPrintLoading === printer.name ||
+                                  !ticketPreviewHasBeenSaved ||
+                                  ticketPreview !== savedTicketPreview
+                                }
                                 className="shrink-0"
                               >
                                 {testPrintLoading === printer.name ? (
@@ -1563,183 +1413,7 @@ export const SettingsTab = () => {
                     </div>
                   )}
 
-                  {/* Printer Configuration */}
-                  <div className="pt-4 border-t space-y-4">
-                    <h4 className="font-semibold text-sm">Printer Configuration</h4>
-                  
-                    <div className="space-y-2">
-                      <Label>Selected Printer (Active)</Label>
-                      <Select value={selectedPrinter} onValueChange={handlePrinterSelection}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a printer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {printers.map((printer, index) => (
-                            <SelectItem key={index} value={printer.name}>
-                              {printer.name} ({printer.connectionType})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">This printer will be used for all printing operations.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Default Printer</Label>
-                      <Select value={defaultPrinter} onValueChange={(value) => {
-                        setDefaultPrinter(value);
-                        handlePrinterSelection(value);
-                      }}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select default printer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {printers.map((printer, index) => (
-                            <SelectItem key={index} value={printer.name}>
-                              {printer.name} ({printer.connectionType})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">The default is also made the active printer and saved for future print jobs.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Print Delay (seconds)</Label>
-                      <Input 
-                        type="number" 
-                        min="0" 
-                        max="60"
-                        value={printDelaySeconds}
-                        onChange={(e) => setPrintDelaySeconds(parseInt(e.target.value) || 0)}
-                      />
-                      <p className="text-xs text-muted-foreground">Delay between receipts (0 = no delay). Useful for printers without auto-cutter.</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Empty Lines Before Receipt</Label>
-                        <Input 
-                          type="number" 
-                          min="0" 
-                          max="10"
-                          value={emptyLinesBefore}
-                          onChange={(e) => setEmptyLinesBefore(parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-xs text-muted-foreground">Spacing before printing.</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Empty Lines After Receipt</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={emptyLinesAfter}
-                          onChange={(e) => setEmptyLinesAfter(parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-xs text-muted-foreground">Spacing after printing.</p>
-                      </div>
-                    </div>
-
-                    {/* Paper Width Configuration */}
-                    <div className="space-y-2 pt-4 border-t">
-                      <Label>Paper Width (mm)</Label>
-                      <div className="flex gap-2">
-                        <Select value={paperWidth.toString()} onValueChange={(value) => {
-                          if (value === "custom") {
-                            setPaperWidth(parseInt(customWidth) || 80);
-                          } else {
-                            setPaperWidth(parseInt(value));
-                            setCustomWidth("");
-                          }
-                        }}>
-                          <SelectTrigger className="w-40">
-                            <SelectValue placeholder="Select width" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="45">45mm</SelectItem>
-                            <SelectItem value="50">50mm</SelectItem>
-                            <SelectItem value="58">58mm</SelectItem>
-                            <SelectItem value="80">80mm</SelectItem>
-                            <SelectItem value="custom">Custom</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {paperWidth.toString() === "custom" && (
-                          <Input
-                            type="number"
-                            placeholder="Custom mm"
-                            value={customWidth}
-                            onChange={(e) => {
-                              setCustomWidth(e.target.value);
-                              setPaperWidth(parseInt(e.target.value) || 80);
-                            }}
-                            className="flex-1"
-                          />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Select standard thermal paper width or enter custom width in millimeters.</p>
-                    </div>
-
-                    {/* Margin Configuration */}
-                    <div className="space-y-2 pt-4 border-t">
-                      <Label>Paper Margins</Label>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Left Margin (characters)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={marginLeft}
-                            onChange={(e) => setMarginLeft(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Right Margin (characters)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={marginRight}
-                            onChange={(e) => setMarginRight(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Top Margin (lines)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="10"
-                            value={marginTop}
-                            onChange={(e) => setMarginTop(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Bottom Margin (lines)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="10"
-                            value={marginBottom}
-                            onChange={(e) => setMarginBottom(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Adjust margins to fine-tune print positioning. Left/right margins are in characters, top/bottom in lines.</p>
-                  </div>
                 </div>
-                
-                <Button 
-                  onClick={savePrinterSettings} 
-                  disabled={printerSettingsLoading}
-                  className="w-full bg-green-700 hover:bg-green-800 text-white flex gap-2 mt-4"
-                >
-                  {printerSettingsLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                    : printerSettingsSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
-                    : "Save Printer Settings"}
-                </Button>
               </AccordionContent>
             </AccordionItem>
 
@@ -1806,7 +1480,10 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={orderCustomerCopies}
-                        onChange={(e) => setOrderCustomerCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setOrderCustomerCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1816,7 +1493,10 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={orderKitchenCopies}
-                        onChange={(e) => setOrderKitchenCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setOrderKitchenCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1826,7 +1506,10 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={addonCustomerCopies}
-                        onChange={(e) => setAddonCustomerCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setAddonCustomerCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1836,7 +1519,10 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={addonKitchenCopies}
-                        onChange={(e) => setAddonKitchenCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setAddonKitchenCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1846,7 +1532,10 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={finalReceiptCopies}
-                        onChange={(e) => setFinalReceiptCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setFinalReceiptCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1856,10 +1545,22 @@ export const SettingsTab = () => {
                         min="1"
                         max="5"
                         value={dailySalesReportCopies}
-                        onChange={(e) => setDailySalesReportCopies(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          setDailySalesReportCopies(Number.parseInt(e.target.value, 10));
+                          setReceiptCopiesSaved(false);
+                        }}
                       />
                     </div>
                   </div>
+                  <Button
+                    onClick={() => void saveReceiptCopyCounts()}
+                    disabled={receiptCopiesSaving}
+                    className="w-full bg-green-700 hover:bg-green-800 text-white flex gap-2"
+                  >
+                    {receiptCopiesSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                      : receiptCopiesSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
+                      : "Save Receipt Copy Counts"}
+                  </Button>
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -1875,74 +1576,64 @@ export const SettingsTab = () => {
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-4">
                   <div className="bg-gray-50 border rounded-lg p-4">
-                    <h4 className="font-semibold text-sm mb-3">Ticket Preview</h4>
-                    
-                    <div className="flex items-start gap-4 justify-center">
-                      {/* Ticket content with margins */}
-                      <div className="relative">
-                        {/* Top ruler attached to paper */}
-                        <div className="absolute -top-5 left-0 right-0 h-5 border-b border-gray-300 flex justify-between text-[6px] text-gray-500 font-mono" style={{ width: `${paperWidth * 3.78}px` }}>
-                          {[...Array(Math.ceil(paperWidth / 5) + 1)].map((_, i) => (
-                            <div key={i} className="flex flex-col items-center whitespace-nowrap">
-                              <span className="leading-none">{i * 5}</span>
-                              <span className={`w-px bg-gray-400 ${i % 2 === 0 ? 'h-2' : 'h-1'}`}></span>
-                            </div>
-                          ))}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="font-semibold text-sm">Test Ticket Preview</h4>
+                      {!editingTicketPreview ? (
+                        <Button variant="outline" size="sm" onClick={() => setEditingTicketPreview(true)}>
+                          Edit
+                        </Button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setTicketPreview(savedTicketPreview || DEFAULT_TEST_TICKET);
+                              setEditingTicketPreview(false);
+                            }}
+                            disabled={ticketPreviewSaving}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => void saveTicketPreview()}
+                            disabled={ticketPreviewSaving || !ticketPreview.trim() || ticketPreview.length > 4000}
+                          >
+                            {ticketPreviewSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Preview"}
+                          </Button>
                         </div>
-                        
-                        <div className="bg-white border rounded p-3 text-xs font-mono relative" style={{ maxWidth: `${paperWidth * 3.78}px`, margin: "0 auto", paddingLeft: `${marginLeft * 3.78}px`, paddingRight: `${marginRight * 3.78}px` }}>
-                          {/* Top margin */}
-                          {marginTop > 0 && [...Array(marginTop)].map((_, i) => (
-                            <div key={`top-${i}`} className="h-4 bg-blue-50 border-t border-blue-200 text-blue-400 text-center leading-4">&nbsp;</div>
-                          ))}
-                          
-                          {/* Empty lines before */}
-                          {emptyLinesBefore > 0 && [...Array(emptyLinesBefore)].map((_, i) => (
-                            <div key={`before-${i}`} className="h-4 bg-yellow-50 border-t border-yellow-200 text-yellow-600 text-center leading-4">&nbsp;</div>
-                          ))}
-                          
-                          <div className="text-center font-bold mb-2">BP DRAGONFLY GARDEN</div>
-                          <div className="text-center text-gray-600 mb-2">Test Receipt</div>
-                          <div className="border-t border-dashed my-2 mx-0" style={{ marginLeft: `-${marginLeft * 3.78}px`, marginRight: `-${marginRight * 3.78}px` }}></div>
-                          <div className="flex justify-between">
-                            <span>Item 1</span>
-                            <span>$10.00</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Item 2</span>
-                            <span>$15.00</span>
-                          </div>
-                          <div className="border-t border-dashed my-2 mx-0" style={{ marginLeft: `-${marginLeft * 3.78}px`, marginRight: `-${marginRight * 3.78}px` }}></div>
-                          <div className="flex justify-between font-bold">
-                            <span>Total</span>
-                            <span>$25.00</span>
-                          </div>
-                          <div className="text-center text-gray-600 mt-2">Thank you!</div>
-                          
-                          {/* Empty lines after */}
-                          {emptyLinesAfter > 0 && [...Array(emptyLinesAfter)].map((_, i) => (
-                            <div key={`after-${i}`} className="h-4 bg-yellow-50 border-t border-yellow-200 text-yellow-600 text-center leading-4">&nbsp;</div>
-                          ))}
-                          
-                          {/* Bottom margin */}
-                          {marginBottom > 0 && [...Array(marginBottom)].map((_, i) => (
-                            <div key={`bottom-${i}`} className="h-4 bg-blue-50 border-t border-blue-200 text-blue-400 text-center leading-4">&nbsp;</div>
-                          ))}
-                        </div>
-                        
-                        {/* Right ruler attached to paper */}
-                        <div className="absolute -right-5 top-0 bottom-0 w-5 border-l border-gray-300 text-[6px] text-gray-500 font-mono" style={{ height: `${(marginTop + emptyLinesBefore + 10 + emptyLinesAfter + marginBottom) * 3.78}px` }}>
-                          {[...Array(Math.ceil((marginTop + emptyLinesBefore + 10 + emptyLinesAfter + marginBottom) / 5) + 1)].map((_, i) => (
-                            <div key={i} className="flex items-center whitespace-nowrap" style={{ position: 'absolute', top: `${i * 5 * 3.78}px` }}>
-                              <span className={`h-px bg-gray-400 ${i % 2 === 0 ? 'w-2' : 'w-1'}`}></span>
-                              <span className="ml-1 leading-none">{i * 5}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      )}
                     </div>
-                    
-                    <p className="text-xs text-muted-foreground mt-2">Preview based on {paperWidth}mm width and current margins. Blue = margins, Yellow = empty lines.</p>
+
+                    {editingTicketPreview ? (
+                      <Textarea
+                        value={ticketPreview}
+                        onChange={(event) => setTicketPreview(event.target.value)}
+                        maxLength={4000}
+                        rows={12}
+                        className="mt-3 font-mono text-sm"
+                        aria-label="Editable test ticket text"
+                      />
+                    ) : (
+                      <pre className="mt-3 max-h-96 min-h-40 overflow-auto whitespace-pre bg-white border rounded p-4 font-mono text-sm leading-5">
+                        {ticketPreview}
+                      </pre>
+                    )}
+                    {ticketPreviewHasBeenSaved && ticketPreview !== savedTicketPreview && (
+                      <p role="status" className="mt-2 text-sm text-amber-700">Preview changed; save it before printing the test ticket.</p>
+                    )}
+                    {!ticketPreviewHasBeenSaved && (
+                      <p role="status" className="mt-2 text-sm text-amber-700">Save this preview once before printing a test ticket.</p>
+                    )}
+                    <Button
+                      onClick={() => void printTestTicket()}
+                      disabled={printingTestTicket || !selectedPrinter || !ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview}
+                      className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
+                    >
+                      {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
+                        : <><Printer className="h-4 w-4" /> Print Test Ticket</>}
+                    </Button>
                     
                     {/* Daily Sales Report Button */}
                     <div className="space-y-4 pt-4 border-t mt-4">
@@ -2343,149 +2034,6 @@ export const SettingsTab = () => {
       </AccordionItem>
     </Accordion>
     </div>
-
-    {/* Printer Profile Edit Dialog */}
-    <Dialog open={editProfileDialog.open} onOpenChange={(open) => setEditProfileDialog(prev => ({ ...prev, open }))}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Printer Profile: {editProfileDialog.printerName}</DialogTitle>
-          <DialogDescription>
-            Modify the printer settings for this profile. Changes will be saved to the database.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Paper Width (mm)</Label>
-            <div className="flex gap-2">
-              <Select value={editProfileData.width.toString()} onValueChange={(value) => {
-                if (value === "custom") {
-                  setEditProfileData(prev => ({ ...prev, width: parseInt(customWidth) || 80 }));
-                } else {
-                  setEditProfileData(prev => ({ ...prev, width: parseInt(value) }));
-                }
-              }}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Select width" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="45">45mm</SelectItem>
-                  <SelectItem value="50">50mm</SelectItem>
-                  <SelectItem value="58">58mm</SelectItem>
-                  <SelectItem value="80">80mm</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Print Delay (seconds)</Label>
-            <Input 
-              type="number" 
-              min="0" 
-              max="60"
-              value={editProfileData.print_delay_seconds}
-              onChange={(e) => setEditProfileData(prev => ({ ...prev, print_delay_seconds: parseInt(e.target.value) || 0 }))}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div>
-              <Label htmlFor="edit-printer-auto-cutter">Printer has an auto-cutter</Label>
-              <p className="text-xs text-muted-foreground">This is independent of the print delay setting.</p>
-            </div>
-            <Switch
-              id="edit-printer-auto-cutter"
-              checked={editProfileData.has_auto_cutter}
-              onCheckedChange={(checked) => setEditProfileData(prev => ({ ...prev, has_auto_cutter: checked }))}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Empty Lines Before Receipt</Label>
-              <Input 
-                type="number" 
-                min="0" 
-                max="10"
-                value={editProfileData.empty_lines_before}
-                onChange={(e) => setEditProfileData(prev => ({ ...prev, empty_lines_before: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Empty Lines After Receipt</Label>
-              <Input
-                type="number"
-                min="0"
-                max="10"
-                value={editProfileData.empty_lines_after}
-                onChange={(e) => setEditProfileData(prev => ({ ...prev, empty_lines_after: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2 pt-4 border-t">
-            <Label>Paper Margins</Label>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Left Margin (characters)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="20"
-                  value={editProfileData.margin_left}
-                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_left: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Right Margin (characters)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="20"
-                  value={editProfileData.margin_right}
-                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_right: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Top Margin (lines)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={editProfileData.margin_top}
-                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_top: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Bottom Margin (lines)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={editProfileData.margin_bottom}
-                  onChange={(e) => setEditProfileData(prev => ({ ...prev, margin_bottom: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setEditProfileDialog({ open: false, printerName: "", profile: null, pending: false })}
-            disabled={editProfileDialog.pending}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={saveEditedProfile}
-            disabled={editProfileDialog.pending}
-          >
-            {editProfileDialog.pending ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</> : "Save Changes"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
 
       <Dialog
         open={confirmationDialog.open}

@@ -728,19 +728,8 @@ const initializeDatabase = async () => {
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('selected_printer', 'BP_DragonFly_Garden_Confirmed')`);
   await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('default_printer', 'BP_DragonFly_Garden_Confirmed')`);
   
-  /* Printer profiles - stores per-printer settings as JSON */
-  const defaultPrinterProfiles = {
-    printer_profiles: {
-      "BP_DragonFly_Garden_Confirmed": {
-        width: 80,
-        print_delay_seconds: 0,
-        empty_lines_before: 2,
-        empty_lines_after: 3,
-        has_auto_cutter: true,
-        connection_type: "USB",
-        notes: "Default 80mm thermal printer with auto-cutter"
-      }
-    },
+  /* Receipt copy counts are the only app-managed printer preferences. */
+  const defaultPrinterPreferences = {
     receipt_copies: {
       global: {
         order_customer: 1,
@@ -752,12 +741,7 @@ const initializeDatabase = async () => {
       }
     }
   };
-  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('printer_preferences', '${JSON.stringify(defaultPrinterProfiles)}')`);
-
-  /* Global print settings (fallback when printer-specific settings not available) */
-  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('print_delay_seconds', '0')`);
-  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('empty_lines_before_receipt', '2')`);
-  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('empty_lines_after_receipt', '3')`);
+  await run(`INSERT OR IGNORE INTO restaurant_settings (key, value) VALUES ('printer_preferences', '${JSON.stringify(defaultPrinterPreferences)}')`);
 
   try {
     const categories = await all("SELECT id, name FROM categories");

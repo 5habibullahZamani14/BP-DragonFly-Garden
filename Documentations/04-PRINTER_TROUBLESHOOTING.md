@@ -37,9 +37,9 @@ Windows print-queue path.
 ### Width, margins, or cutting are wrong
 
 - Check the manufacturer's driver settings and selected paper size.
-- Adjust the application printer profile and print a test ticket.
-- Cutter operation depends on the driver/printer. The app's Windows queue submission does
-  not itself guarantee that a cut command is sent or that paper was cut.
+- The app has no paper-width or margin controls and sends no cutter command. Windows,
+  the driver, and the printer determine the printable edges and cutter behavior.
+- Print a Windows test page, then submit an app test ticket and inspect the physical output.
 
 ## Raspberry Pi / Linux
 
@@ -54,7 +54,7 @@ Windows print-queue path.
 - Print a test ticket from the app.
 - Confirm the text is readable and fits the paper.
 - Verify physical output and, if applicable, the cutter.
-- Repeat the test after changing the driver, printer queue, or printer profile.
+- Repeat the test after changing the driver, printer queue, or printer settings.
 
 For platform-specific setup, see
 [03.2-PRINTER_SETUP.md](03.2-PRINTER_SETUP.md) (Windows) and

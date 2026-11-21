@@ -40,6 +40,14 @@ test("Windows print job succeeds only after the spooler command confirms submiss
     assert.equal(command, "powershell.exe");
     assert.ok(argumentsList[4].includes("System.Drawing.Printing.PrintDocument"));
     assert.ok(argumentsList[4].includes("DrawString"));
+    assert.ok(argumentsList[4].includes("$document.DefaultPageSettings.Margins = $margins"));
+    assert.ok(argumentsList[4].includes("$margins.Left = 0; $margins.Right = 0"));
+    assert.ok(argumentsList[4].includes("$printableArea = $eventArgs.PageSettings.PrintableArea"));
+    assert.ok(argumentsList[4].includes("$format.Alignment = $alignment"));
+    assert.ok(argumentsList[4].includes("MeasureString($line, $font"));
+    assert.ok(argumentsList[4].includes("$script:interpretAlignmentTags = $false"));
+    assert.ok(!argumentsList[4].includes("$maxCharacters"));
+    assert.ok(!argumentsList[4].includes("$line.Substring($offset, $length)"));
     assert.ok(!argumentsList[4].includes("Out-Printer"));
     assert.ok(argumentsList[4].includes("Owner''s Printer"));
     assert.deepEqual(fs.readdirSync(tempDirectory), []);
@@ -68,6 +76,50 @@ test("Windows print job rejects spooler errors and success without confirmation"
       /Windows print submission failed/
     );
     assert.deepEqual(fs.readdirSync(tempDirectory), []);
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test("Windows receipt jobs interpret only alignment markers", async () => {
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-print-test-"));
+  let script;
+  try {
+    await submitWindowsPrintJob("[CENTER]Title\n[RIGHT]Total: RM 5.00\n", "USB Printer", "receipt.txt", {
+      interpretAlignmentTags: true,
+      tempDirectory,
+      spawnProcess: (_executable, args) => {
+        script = args[4];
+        return createChildProcess(0, "DRAGONFLY_PRINT_JOB_SUBMITTED\r\n");
+      }
+    });
+
+    assert.ok(script.includes("$script:interpretAlignmentTags = $true"));
+    assert.ok(script.includes("$line.StartsWith('[CENTER]')"));
+    assert.ok(script.includes("$line.StartsWith('[RIGHT]')"));
+    assert.ok(script.includes("System.Drawing.StringAlignment]::Center"));
+    assert.ok(script.includes("System.Drawing.StringAlignment]::Far"));
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test("Windows submission preserves source text and does not add custom wrapping", async () => {
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-print-test-"));
+  const ticket = "BP DRAGONFLY GARDEN\n\nLine two  \n";
+  let submittedText;
+
+  try {
+    await submitWindowsPrintJob(ticket, "USB Printer", "test.txt", {
+      tempDirectory,
+      spawnProcess: () => {
+        const [filename] = fs.readdirSync(tempDirectory);
+        submittedText = fs.readFileSync(path.join(tempDirectory, filename), "utf8");
+        return createChildProcess(0, "DRAGONFLY_PRINT_JOB_SUBMITTED\r\n");
+      }
+    });
+
+    assert.equal(submittedText, ticket.replace(/\n/g, "\r\n"));
   } finally {
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   }

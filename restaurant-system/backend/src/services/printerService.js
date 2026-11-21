@@ -1,15 +1,6 @@
 /*
- * printerService.js — Thermal printer integration for order tickets.
- * Sends Windows jobs through the installed printer driver and uses CUPS on Linux.
- * 
- * Updated with circuit breaker pattern for resilience.
- * 
- * Width handling:
- * - 80mm paper = ~48 characters per line
- * - 58mm / 50mm paper = ~32 characters per line
- * - Width is set per-printer in the printer profile (stored in DB)
- * - The ticket formatters dynamically use the configured width
- * - Hardcoded fallback: 48 chars (80mm paper)
+ * printerService.js — Renders plain receipt text through the installed printer queue.
+ * The printer driver controls paper size; the app only applies text alignment.
  */
 
 const fs = require("fs");
@@ -18,10 +9,16 @@ const { spawn } = require("child_process");
 const db = require("../database/db");
 const { withCircuitBreaker } = require("./circuitBreaker");
 const { submitWindowsPrintJob } = require("./windowsPrintJob");
-const { getPrintableCharacterColumns, wrapReceiptText } = require("./printerFormatting");
+const { normalizeReceiptCopyCounts } = require("./receiptCopies");
 
-const DEFAULT_PAPER_WIDTH_MM = 80;
 const DEFAULT_PRINTER_COLUMNS = 48;
+const DEFAULT_TEST_TICKET = [
+  "BP DRAGONFLY GARDEN",
+  "PRINTER TEST",
+  "--------------------------------",
+  "This is a printer test ticket.",
+  "Thank you!"
+].join("\n");
 
 const centerText = (text, width = DEFAULT_PRINTER_COLUMNS) => {
   const pad = Math.max(0, Math.floor((width - text.length) / 2));
@@ -29,24 +26,10 @@ const centerText = (text, width = DEFAULT_PRINTER_COLUMNS) => {
 };
 
 /**
- * Draw a separator line using the configured width
- */
-const separator = (width = DEFAULT_PRINTER_COLUMNS) => '='.repeat(Math.max(10, width));
-
-/**
- * Get receipt copy counts from printer preferences
+ * Read and validate receipt copy counts from persisted printer preferences.
  */
 const getReceiptCopyCounts = () => {
   return new Promise((resolve, reject) => {
-    const defaultCopies = {
-      order_customer: 1,
-      order_kitchen: 1,
-      addon_customer: 1,
-      addon_kitchen: 1,
-      final_receipt: 1,
-      daily_sales_report: 1
-    };
-    
     db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
       if (err) {
         reject(err);
@@ -54,84 +37,15 @@ const getReceiptCopyCounts = () => {
       }
       
       if (!row) {
-        resolve(defaultCopies);
+        resolve(normalizeReceiptCopyCounts({}));
         return;
       }
       
       try {
         const prefs = JSON.parse(row.value);
-        const receiptCopies = prefs.receipt_copies || {};
-        const globalCopies = receiptCopies.global || {};
-        
-        resolve({
-          order_customer: globalCopies.order_customer ?? 1,
-          order_kitchen: globalCopies.order_kitchen ?? 1,
-          addon_customer: globalCopies.addon_customer ?? 1,
-          addon_kitchen: globalCopies.addon_kitchen ?? 1,
-          final_receipt: globalCopies.final_receipt ?? 1,
-          daily_sales_report: globalCopies.daily_sales_report ?? 1
-        });
-      } catch (e) {
-        console.error("Error parsing receipt copy counts:", e);
-        resolve(defaultCopies);
-      }
-    });
-  });
-};
-
-/**
- * Get printer-specific settings from printer profiles
- * Falls back to global settings if printer-specific settings not found
- */
-const getPrinterSettings = (printerName) => {
-  return new Promise((resolve, reject) => {
-    const defaultSettings = {
-      width: DEFAULT_PAPER_WIDTH_MM,
-      marginLeft: 0,
-      marginRight: 0,
-      marginTop: 0,
-      marginBottom: 0,
-      delaySeconds: 0,
-      emptyLinesBefore: 2,
-      emptyLinesAfter: 3,
-      hasAutoCutter: false
-    };
-    
-    db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      
-      if (!row) {
-        resolve(defaultSettings);
-        return;
-      }
-      
-      try {
-        const prefs = JSON.parse(row.value);
-        const printerProfiles = prefs && typeof prefs.printer_profiles === "object" && prefs.printer_profiles
-          ? prefs.printer_profiles
-          : {};
-        const printerProfile = printerProfiles[printerName];
-        
-        if (printerProfile) {
-          resolve({
-            width: printerProfile.width ?? DEFAULT_PAPER_WIDTH_MM,
-            marginLeft: printerProfile.margin_left ?? 0,
-            marginRight: printerProfile.margin_right ?? 0,
-            marginTop: printerProfile.margin_top ?? 0,
-            marginBottom: printerProfile.margin_bottom ?? 0,
-            delaySeconds: printerProfile.print_delay_seconds ?? 0,
-            emptyLinesBefore: printerProfile.empty_lines_before ?? 0,
-            emptyLinesAfter: printerProfile.empty_lines_after ?? 0,
-            hasAutoCutter: printerProfile.has_auto_cutter === true
-          });
-        } else {
-          resolve(defaultSettings);
-        }
-      } catch (e) {
-        reject(new Error(`Could not read printer settings: ${e.message}`));
+        resolve(normalizeReceiptCopyCounts(prefs));
+      } catch (error) {
+        reject(new Error(`Could not read receipt copy counts: ${error.message}`));
       }
     });
   });
@@ -187,30 +101,32 @@ const formatTableNumber = (tableNumber) => {
   return `Table: ${trimmed}`;
 };
 
-/* Strips ticket markup and applies alignment for the Windows and CUPS text paths. */
+/* CUPS accepts plain text; translate alignment markers without wrapping or styling. */
 const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
   return ticket
     .split('\n')
     .map(line => {
-      let isCenter = false;
-      let isRight = false;
+      let alignment = "left";
       let isSquare = false;
-      let cleanLine = line.trimEnd();
+      let cleanLine = line;
 
       while (cleanLine.startsWith("[")) {
         if (cleanLine.startsWith("[H1]")) {
-          cleanLine = cleanLine.substring(4).trim();
+          cleanLine = cleanLine.substring(4).replace(/^\s+/, "");
         } else if (cleanLine.startsWith("[BOLD]")) {
-          cleanLine = cleanLine.substring(6).trim();
+          cleanLine = cleanLine.substring(6).replace(/^\s+/, "");
         } else if (cleanLine.startsWith("[CENTER]")) {
-          isCenter = true;
-          cleanLine = cleanLine.substring(8).trim();
+          alignment = "center";
+          cleanLine = cleanLine.substring(8).replace(/^\s+/, "");
         } else if (cleanLine.startsWith("[RIGHT]")) {
-          isRight = true;
-          cleanLine = cleanLine.substring(7).trim();
+          alignment = "right";
+          cleanLine = cleanLine.substring(7).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[LEFT]")) {
+          alignment = "left";
+          cleanLine = cleanLine.substring(6).replace(/^\s+/, "");
         } else if (cleanLine.startsWith("[SQUARE]")) {
           isSquare = true;
-          cleanLine = cleanLine.substring(8).trim();
+          cleanLine = cleanLine.substring(8).replace(/^\s+/, "");
         } else {
           break;
         }
@@ -220,58 +136,22 @@ const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
         cleanLine = "[ ] " + cleanLine;
       }
 
-      const wrappedLines = wrapReceiptText(cleanLine, width);
-      if (isCenter) {
-        return wrappedLines.map(wrappedLine => centerText(wrappedLine, width)).join('\n');
-      }
-      if (isRight) {
-        return wrappedLines.map(wrappedLine => wrappedLine.padStart(width, ' ')).join('\n');
-      }
-      if (cleanLine.length <= width) return cleanLine;
-      const indent = cleanLine.match(/^\s*/)[0];
-      return wrapReceiptText(cleanLine.trimStart(), Math.max(1, width - indent.length))
-        .map(wrappedLine => indent + wrappedLine)
-        .join('\n');
+      if (cleanLine.length > width) return cleanLine;
+      if (alignment === "center") return centerText(cleanLine, width);
+      if (alignment === "right") return cleanLine.padStart(width, ' ');
+      return cleanLine;
     })
     .join('\n');
 };
 
-// ── Dynamic width helper ─────────────────────────────────────────────
-// Formatter widths are character columns; stored profile widths are millimeters.
-
-const formatTicketForPrinter = (ticket, settings, skipMargins = false) => {
-  const width = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
-  for (const { name, value, max, unit } of [
-    { name: "Top margin", value: settings.marginTop, max: 20, unit: "lines" },
-    { name: "Bottom margin", value: settings.marginBottom, max: 20, unit: "lines" },
-    { name: "Empty lines before", value: settings.emptyLinesBefore, max: 20, unit: "lines" },
-    { name: "Empty lines after", value: settings.emptyLinesAfter, max: 20, unit: "lines" },
-    { name: "Print delay", value: settings.delaySeconds, max: 60, unit: "seconds" }
-  ]) {
-    if (!Number.isInteger(value) || value < 0 || value > max) {
-      throw new Error(`${name} must be a whole number between 0 and ${max} ${unit}.`);
-    }
-  }
-  if (skipMargins) return stripGdiTags(ticket, width);
-
-  const leftMargin = ' '.repeat(settings.marginLeft);
-  const topMargin = '\n'.repeat(settings.marginTop);
-  const bottomMargin = '\n'.repeat(settings.marginBottom);
-  const cleanTicket = stripGdiTags(ticket, width);
-  const ticketWithMargins = cleanTicket.split('\n').map(line => leftMargin + line).join('\n');
-  const beforeLines = topMargin + '\n'.repeat(settings.emptyLinesBefore);
-  const afterLines = '\n'.repeat(settings.emptyLinesAfter) + bottomMargin;
-  return beforeLines + ticketWithMargins + afterLines;
-};
-
-const submitPrintJob = async (ticket, printerName, filename, settings) => {
+const submitPrintJob = async (ticket, printerName, filename, options = {}) => {
   if (!printerName || !String(printerName).trim()) {
     throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
   }
   const selectedPrinterName = String(printerName).trim();
   let result;
   if (process.platform === 'win32') {
-    result = await submitWindowsPrintJob(ticket, selectedPrinterName, filename);
+    result = await submitWindowsPrintJob(ticket, selectedPrinterName, filename, options);
   } else {
     const os = require("os");
     const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-print-"));
@@ -349,15 +229,22 @@ const updatePrinterJob = (jobId, status, errorMessage = null) => new Promise((re
   );
 });
 
-const executeTicketPrint = async (ticket, filenamePrefix, printerName, isTestPrint = false, metadata = {}) => {
-  const settings = await getPrinterSettings(printerName);
+const executeTicketPrint = async (
+  ticket,
+  filenamePrefix,
+  printerName,
+  metadata = {},
+  preserveTicketText = false
+) => {
   const filename = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
-  const finalTicket = formatTicketForPrinter(ticket, settings, isTestPrint);
+  const finalTicket = preserveTicketText || process.platform === "win32" ? ticket : stripGdiTags(ticket);
   console.log(`Submitting ${filenamePrefix} print job to ${printerName}`);
   const jobId = await createPrinterJob(printerName, metadata);
   let result;
   try {
-    result = await submitPrintJob(finalTicket, printerName, filename, settings);
+    result = await submitPrintJob(finalTicket, printerName, filename, {
+      interpretAlignmentTags: !preserveTicketText
+    });
   } catch (error) {
     const submissionError = error instanceof Error ? error : new Error(String(error));
     submissionError.printerSubmissionStarted = true;
@@ -373,9 +260,6 @@ const executeTicketPrint = async (ticket, filenamePrefix, printerName, isTestPri
   } catch (error) {
     console.error(`Print job ${jobId} was submitted, but its status could not be recorded:`, error.message);
   }
-  if (settings.delaySeconds > 0 && !settings.hasAutoCutter) {
-    await new Promise(resolve => setTimeout(resolve, settings.delaySeconds * 1000));
-  }
   return result;
 };
 
@@ -383,7 +267,7 @@ const _executePrintWithPrinter = async (ticket, filenamePrefix, printerName, met
   if (!printerName || !String(printerName).trim()) {
     throw new Error('A printer must be selected before printing');
   }
-  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test', metadata);
+  return executeTicketPrint(ticket, filenamePrefix, printerName, metadata, filenamePrefix === 'printer_test');
 };
 
 const _executePrint = async (ticket, filenamePrefix, metadata) => {
@@ -391,7 +275,7 @@ const _executePrint = async (ticket, filenamePrefix, metadata) => {
   if (!printerName || !String(printerName).trim()) {
     throw new Error('No default printer is selected');
   }
-  return executeTicketPrint(ticket, filenamePrefix, printerName, filenamePrefix === 'printer_test', metadata);
+  return executeTicketPrint(ticket, filenamePrefix, printerName, metadata, filenamePrefix === 'printer_test');
 };
 const executePrintWithPrinter = async (ticket, filenamePrefix, printerName, metadata = {}) => {
   const breaker = withCircuitBreaker('printer', _executePrintWithPrinter, {
@@ -414,38 +298,40 @@ const executePrint = async (ticket, filenamePrefix, metadata = {}) => {
   return breaker(ticket, filenamePrefix, metadata);
 };
 
-// ── Ticket Formatting Functions ──────────────────────────────────────────
-// Formatter widths are character columns; stored profile widths are millimeters.
-// The separator lines, text wrapping, padding, and alignment all use this width.
+const parseItemOptions = (item) => {
+  if (!item.options_json) return [];
+  let options;
+  try {
+    options = JSON.parse(item.options_json);
+  } catch (error) {
+    throw new Error(`Could not read options for "${item.item_name}": ${error.message}`);
+  }
+  if (!Array.isArray(options)) {
+    throw new Error(`Options for "${item.item_name}" must be a list.`);
+  }
+  return options;
+};
 
 const printerService = {
-  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle, width = DEFAULT_PRINTER_COLUMNS) => {
-    const sep = separator(width);
+  formatChecklistTicket: (order, itemsToPrint, isAddOn, copyTitle) => {
     const timestamp = formatDateTime(new Date());
-    let ticket = "\n";
-    
+    let ticket = "";
+
     let orderTypeStr = isAddOn ? "ADD-ON" : "NEW ORDER";
     if (order.order_type === 'PICKUP') orderTypeStr = isAddOn ? "ADD-ON (PICKUP)" : "PICKUP";
     else if (order.order_type === 'DELIVERY') orderTypeStr = isAddOn ? "ADD-ON (DELIVERY)" : "DELIVERY";
     else if (order.order_type === 'TAKEAWAY') orderTypeStr = isAddOn ? "ADD-ON (TAKEAWAY)" : "TAKEAWAY";
     else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON (COUNTER)" : "COUNTER ORDER";
 
-    if (copyTitle) {
-      ticket += `[CENTER][H1] ${copyTitle}\n`;
-      ticket += `[CENTER][BOLD](${orderTypeStr})\n`;
-    } else {
-      ticket += `[CENTER][H1] ${orderTypeStr}\n`;
-    }
-    
-    // Header row: timestamp left, ticket number right, within width
-    const leftHeader = `${timestamp}`;
-    const rightHeader = `#${order.daily_ticket_number || order.id}`;
-    const headerPad = Math.max(0, width - leftHeader.length - rightHeader.length);
-    ticket += `${leftHeader}${' '.repeat(headerPad)}${rightHeader}\n`;
-    ticket += `Send by: Cashier\n`;
-    
+    if (copyTitle) ticket += `[CENTER]${copyTitle}\n`;
+    ticket += `[CENTER]${orderTypeStr}\n`;
+    ticket += `${timestamp}\n`;
+    ticket += `[RIGHT]#${order.daily_ticket_number || order.id}\n`;
+    ticket += "Send by: Cashier\n";
+
     if (!order.order_type || order.order_type === 'DINE_IN') {
-      ticket += `${formatTableNumber(order.table_number)}\n`;
+      const table = formatTableNumber(order.table_number);
+      if (table) ticket += `${table}\n`;
     } else {
       if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
         ticket += `${formatTableNumber(order.table_number)}\n`;
@@ -455,60 +341,30 @@ const printerService = {
       if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup At: ${order.collection_time}\n`;
       if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Address: ${order.delivery_address}\n`;
     }
-    ticket += `${sep}\n`;
-    
+
+    ticket += "Items:\n";
     itemsToPrint.forEach(item => {
-      // Wrap item name to fit width (leave room for "2x " prefix = 4 chars)
-      const nameMax = width - 4;
-      const nameLines = wrapReceiptText(item.item_name, nameMax);
-      const qtyStr = `${item.quantity}x`.padEnd(4, ' ');
-      
-      nameLines.forEach((line, idx) => {
-        if (idx === 0) {
-          ticket += `${qtyStr} ${line}\n`;
-        } else {
-          ticket += `     ${line}\n`;
-        }
-      });
-
-      if (item.notes) {
-        const noteLines = wrapReceiptText(`Note: ${item.notes}`, width - 5);
-        noteLines.forEach(line => ticket += `     ${line}\n`);
+      ticket += `${item.quantity} x ${item.item_name || ""}\n`;
+      if (item.notes) ticket += `Note: ${item.notes}\n`;
+      for (const option of parseItemOptions(item)) {
+        const suffix = option.delta > 0 ? ` (+${parseFloat(option.delta).toFixed(2)})` : '';
+        ticket += `> ${option.option}${suffix}\n`;
       }
-
-      if (item.options_json) {
-        try {
-          const opts = JSON.parse(item.options_json);
-          opts.forEach(opt => {
-            const suffix = opt.delta > 0 ? ` (+${parseFloat(opt.delta).toFixed(2)})` : '';
-            const optText = `> ${opt.option}${suffix}`;
-            const optLines = wrapReceiptText(optText, width - 5);
-            optLines.forEach(line => ticket += `     ${line}\n`);
-          });
-        } catch { /* ignore malformed JSON */ }
-      }
-
-      ticket += "[RIGHT][SQUARE]\n";
-      ticket += `${sep}\n`;
     });
-    
-    ticket += "\n\n";
+
     return ticket;
   },
 
-  formatFinalReceipt: (order, cashierName, width = DEFAULT_PRINTER_COLUMNS) => {
-    const sep = separator(width);
+  formatFinalReceipt: (order, cashierName) => {
     const timestamp = formatDateTime(new Date());
-    let ticket = "\n";
-    
-    ticket += `[CENTER][H1] BP DRAGONFLY\n`;
-    ticket += `[CENTER]GARDEN\n`;
+    let ticket = "";
+
+    ticket += `[CENTER]BP DRAGONFLY GARDEN\n`;
     ticket += `[CENTER]Solok Pondok Upih\n`;
     ticket += `[CENTER]Taman Kristal\n`;
     ticket += `[CENTER]11020 Balik Pulau\n`;
     ticket += `[CENTER]Pulau Pinang\n`;
-    ticket += `${sep}\n`;
-    
+
     ticket += `Invoice: ${order.id}\n`;
     ticket += `Date: ${timestamp}\n`;
     ticket += `Cashier: ${cashierName}\n`;
@@ -523,70 +379,27 @@ const printerService = {
       if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `Addr: ${order.delivery_address}\n`;
       if (order.order_type === 'PICKUP' && order.collection_time) ticket += `Pickup: ${order.collection_time}\n`;
     }
-    ticket += "\n";
-    ticket += `[H1] ORDER #${order.daily_ticket_number || order.id}\n`;
-    ticket += `${sep}\n`;
-    ticket += `Qty Item${' '.repeat(Math.max(1, width - 15))}Total\n`;
-    ticket += `${sep}\n`;
-    
+
+    ticket += `Order #${order.daily_ticket_number || order.id}\n`;
+    ticket += "Items:\n";
     let totalQty = 0;
-    
+
     order.items.forEach(item => {
       totalQty += item.quantity;
-      const qtyStr = item.quantity.toString().padEnd(3, ' ');
-      const lineTotal = (item.quantity * item.price_at_order_time).toFixed(2);
-      
-      // Keep the full item name while reserving space for the amount on the first line.
-      const nameMax = width - 15; // room for "3 xxx...xxx  RM12.50"
-      const nameLines = wrapReceiptText(item.item_name, nameMax);
-      const nameStr = nameLines[0].padEnd(nameMax, ' ');
-      const priceStr = lineTotal.padStart(8, ' ');
-      
-      ticket += `${qtyStr} ${nameStr}${priceStr}\n`;
-      nameLines.slice(1).forEach(line => {
-        ticket += `    ${line}\n`;
-      });
-      
-      let deltasSum = 0;
-      let hasPriceDelta = false;
-      if (item.options_json) {
-        try {
-          const opts = JSON.parse(item.options_json);
-          opts.forEach(opt => {
-            if (opt.delta) { deltasSum += parseFloat(opt.delta); hasPriceDelta = true; }
-          });
-        } catch {}
+      ticket += `${item.quantity} x ${item.item_name || ""}\n`;
+      ticket += `[RIGHT]RM ${(item.quantity * item.price_at_order_time).toFixed(2)}\n`;
+      if (item.price_at_order_time > 0) {
+        ticket += `Price each: RM ${item.price_at_order_time.toFixed(2)}\n`;
       }
-      
-      if (hasPriceDelta) {
-        ticket += `    (RM ${item.price_at_order_time.toFixed(2)}/ea)\n`;
-      } else if (item.price_at_order_time > 0) {
-        ticket += `    (RM ${item.price_at_order_time.toFixed(2)}/ea)\n`;
+      for (const option of parseItemOptions(item)) {
+        const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
+        ticket += `> ${option.option}${suffix}\n`;
       }
-      
-      if (item.options_json) {
-        try {
-          const opts = JSON.parse(item.options_json);
-          opts.forEach(opt => {
-            const suffix = opt.delta > 0 ? `+RM ${parseFloat(opt.delta).toFixed(2)}` : '';
-            const optionLines = wrapReceiptText(`> ${opt.option}${suffix}`, width - 4);
-            optionLines.forEach(line => {
-              ticket += `    ${line}\n`;
-            });
-          });
-        } catch { /* ignore */ }
-      }
-
-      if (item.notes) {
-        const noteText = `Note: ${item.notes}`;
-        const noteLines = wrapReceiptText(noteText, width - 4);
-        noteLines.forEach(line => ticket += `    ${line}\n`);
-      }
+      if (item.notes) ticket += `Note: ${item.notes}\n`;
     });
-    
-    ticket += `${sep}\n`;
+
     ticket += `Qty: ${totalQty}\n`;
-    
+
     const subtotal = Number(order.total_price || 0);
     const serviceChargeRate = order.service_charge_rate || 0;
     const vatRate = order.vat_rate || 0;
@@ -595,28 +408,20 @@ const printerService = {
     const rawTotal = subtotal + sst + serviceCharge;
     const roundedTotal = Math.round(rawTotal * 20) / 20;
     const rounding = roundedTotal - rawTotal;
-    
-    const fmtMoney = (v) => v.toFixed(2).padStart(10, ' ');
-    
-    ticket += `Subtotal${' '.repeat(Math.max(0, width - 20))}${fmtMoney(subtotal)}\n`;
+
+    ticket += `[RIGHT]Subtotal: RM ${subtotal.toFixed(2)}\n`;
     if (serviceChargeRate > 0) {
-      ticket += `Svc Chg${' '.repeat(Math.max(0, width - 23))}${fmtMoney(serviceCharge)}\n`;
+      ticket += `[RIGHT]Service charge: RM ${serviceCharge.toFixed(2)}\n`;
     }
     if (vatRate > 0) {
-      ticket += `SST${' '.repeat(Math.max(0, width - 20))}${fmtMoney(sst)}\n`;
+      ticket += `[RIGHT]SST: RM ${sst.toFixed(2)}\n`;
     }
-    ticket += `Rounding${' '.repeat(Math.max(0, width - 20))}${fmtMoney(rounding)}\n`;
-    ticket += `${sep}\n`;
-    
-    ticket += `[BOLD]TOTAL (MYR)${' '.repeat(Math.max(0, width - 21))}${fmtMoney(roundedTotal)}\n`;
-    ticket += `${sep}\n`;
-    
-    ticket += "\n";
+    ticket += `[RIGHT]Rounding: RM ${rounding.toFixed(2)}\n`;
+    ticket += `[RIGHT]TOTAL: RM ${roundedTotal.toFixed(2)}\n`;
     ticket += "[CENTER]~ Official Receipt ~\n";
     ticket += "[CENTER]Thank you!\n";
     ticket += "[CENTER]Visit us again\n";
-    ticket += "\n\n";
-    
+
     return ticket;
   },
 
@@ -624,9 +429,7 @@ const printerService = {
     const copyTitle = copyNum === 1 ? "CUSTOMER COPY" : "KITCHEN COPY";
     const printerName = await getSelectedPrinter();
     if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
-    const settings = await getPrinterSettings(printerName);
-    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
-    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle, w);
+    const ticket = printerService.formatChecklistTicket(order, itemsToPrint, isAddOn, copyTitle);
     const copyType = copyNum === 1 ? "customer" : "kitchen";
     const jobType = `${isAddOn ? "addon" : "order"}_${copyType}`;
     return await executePrintWithPrinter(ticket, `order_${order.id}_checklist`, printerName, {
@@ -638,9 +441,7 @@ const printerService = {
   printFinalReceipt: async (order, cashierName) => {
     const printerName = await getSelectedPrinter();
     if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
-    const settings = await getPrinterSettings(printerName);
-    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
-    const ticket = printerService.formatFinalReceipt(order, cashierName, w);
+    const ticket = printerService.formatFinalReceipt(order, cashierName);
     return await executePrintWithPrinter(ticket, `order_${order.id}_final`, printerName, {
       orderId: order.id,
       jobType: "final_receipt"
@@ -650,38 +451,27 @@ const printerService = {
   printDailySalesReport: async (todayOrders) => {
     const printerName = await getSelectedPrinter();
     if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
-    const settings = await getPrinterSettings(printerName);
-    const w = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
-    const sep = separator(w);
     const timestamp = formatDateTime(new Date());
     const todayDateStr = new Date().toLocaleDateString('en-GB');
-    
-    let ticket = "\n";
-    ticket += "[CENTER][H1] DAILY SALES\n";
+
+    let ticket = "";
+    ticket += "[CENTER]DAILY SALES\n";
     ticket += "[CENTER]BP DRAGONFLY\n";
-    ticket += `${sep}\n`;
     ticket += `Date: ${todayDateStr}\n`;
     ticket += `At: ${timestamp}\n`;
-    ticket += `${sep}\n`;
-    
+
     let totalSales = 0;
     todayOrders.forEach((order, index) => {
       const orderNum = order.daily_ticket_number || order.id;
       const price = Number(order.total_price || 0);
       totalSales += price;
-      
-      const label = `${index + 1}. #${orderNum}`;
-      const priceStr = price.toFixed(2).padStart(10, ' ');
-      ticket += `${label}${' '.repeat(Math.max(0, w - label.length - 10))}${priceStr}\n`;
+
+      ticket += `${index + 1}. #${orderNum}\n`;
+      ticket += `[RIGHT]RM ${price.toFixed(2)}\n`;
     });
-    
-    ticket += `${sep}\n`;
-    const totalLabel = "Total:";
-    const totalValStr = totalSales.toFixed(2).padStart(10, ' ');
-    ticket += `[BOLD]${totalLabel}${' '.repeat(Math.max(0, w - totalLabel.length - 10))}${totalValStr}\n`;
-    ticket += `${sep}\n`;
-    ticket += "\n\n";
-    
+
+    ticket += `[RIGHT]Total: RM ${totalSales.toFixed(2)}\n`;
+
     return await executePrintWithPrinter(ticket, `daily_sales_report`, printerName, {
       jobType: "daily_sales_report"
     });
@@ -691,13 +481,28 @@ const printerService = {
     if (!printerName || !String(printerName).trim()) {
       throw new Error("Choose an installed printer queue before testing it.");
     }
-    const settings = await getPrinterSettings(printerName);
-    const columns = getPrintableCharacterColumns(settings.width, settings.marginLeft, settings.marginRight);
-    const ticket = `TEST PRINT OK\nBP Dragonfly Garden\nPaper: ${settings.width} mm\nColumns: ${columns}\n`;
-    return executeTicketPrint(ticket, "printer_test", printerName, false, {
-      jobType: "test"
+    const ticket = await new Promise((resolve, reject) => {
+      db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (error, row) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        try {
+          const preferences = row ? JSON.parse(row.value) : {};
+          const savedTicket = preferences && preferences.test_ticket;
+          resolve(typeof savedTicket === "string" ? savedTicket : DEFAULT_TEST_TICKET);
+        } catch (error) {
+          reject(new Error(`Could not read the saved test ticket: ${error.message}`));
+        }
+      });
     });
+    if (!ticket.trim()) {
+      throw new Error("The saved test ticket is empty. Edit and save the preview before printing.");
+    }
+    return executeTicketPrint(ticket, "printer_test", printerName, {
+      jobType: "test"
+    }, true);
   }
 };
 
-module.exports = { ...printerService, getReceiptCopyCounts, getPrinterSettings };
+module.exports = { ...printerService, getReceiptCopyCounts };

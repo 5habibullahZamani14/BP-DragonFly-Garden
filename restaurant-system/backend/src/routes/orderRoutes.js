@@ -40,6 +40,7 @@ const { requirePaymentCounter, ROLES } = require("../middleware/role-based-acces
 const { verifyJwtToken, requirePaymentToken } = require("../middleware/jwt-auth");
 const { createHttpError } = require("../middleware/validation");
 const printerService = require("../services/printerService");
+const { printCopies } = require("../services/receiptCopies");
 
 const run = (sql, params = []) =>
   new Promise((resolve, reject) => {
@@ -127,21 +128,12 @@ const orderRoutes = (broadcast) => {
           const customerCopies = isAddOn ? copyCounts.addon_customer : copyCounts.order_customer;
           const kitchenCopies = isAddOn ? copyCounts.addon_kitchen : copyCounts.order_kitchen;
           
-          // Print customer copies
-          for (let i = 0; i < customerCopies; i++) {
-            await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 1);
-            if (i < customerCopies - 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          }
-          
-          // Print kitchen copies
-          for (let i = 0; i < kitchenCopies; i++) {
-            await printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 2);
-            if (i < kitchenCopies - 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          }
+          await printCopies(customerCopies, () =>
+            printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 1)
+          );
+          await printCopies(kitchenCopies, () =>
+            printerService.printChecklistTicket(order, itemsToPrint, isAddOn, 2)
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error(`Printer failed for order ${order.id}:`, message);
@@ -244,18 +236,15 @@ const orderRoutes = (broadcast) => {
     
     try {
       const copyCounts = await printerService.getReceiptCopyCounts();
-      const finalReceiptCopies = copyCounts.final_receipt || 1;
+      const finalReceiptCopies = copyCounts.final_receipt;
       
-      // Print final receipt according to configured copy count
-      for (let i = 0; i < finalReceiptCopies; i++) {
+      await printCopies(finalReceiptCopies, async () => {
         const printResult = await printerService.printFinalReceipt(order, cashierName || "Cashier");
         if (!printResult || printResult.success !== true) {
           throw new Error(printResult?.message || "The printer did not accept the receipt print job");
         }
-        if (i < finalReceiptCopies - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
+        return printResult;
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Receipt print failed after payment completed:", message);

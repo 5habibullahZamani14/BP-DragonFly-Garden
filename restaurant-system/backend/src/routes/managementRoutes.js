@@ -468,6 +468,14 @@ router.post("/promotions/apply-all", applyPromotionToAll);
 // ── Printer Management ───────────────────────────────────────────────────────
 
 const printerDiscoveryService = require("../services/printerDiscoveryService");
+const {
+  getStoredPrinterPreferences,
+  updateStoredPrinterPreferences
+} = require("../services/printerPreferences");
+const {
+  DEFAULT_RECEIPT_COPY_COUNTS,
+  MAX_RECEIPT_COPIES
+} = require("../services/receiptCopies");
 
 /*
  * GET /management/printers/discover
@@ -544,32 +552,13 @@ router.get("/printers/settings", requireManagerToken, async (req, res) => {
 
     const selectedPrinter = await getSetting("selected_printer");
     const defaultPrinter = await getSetting("default_printer");
-    const printerPreferences = await getSetting("printer_preferences");
-
-    let parsedPrefs = {};
-    try {
-      parsedPrefs = printerPreferences ? JSON.parse(printerPreferences) : {};
-    } catch (e) {
-      console.error("Error parsing printer preferences:", e);
-    }
-
-    // Get empty lines from the selected printer's profile, not from separate settings
-    let emptyLinesBefore = 0;
-    let emptyLinesAfter = 0;
-    if (selectedPrinter && parsedPrefs.printer_profiles && parsedPrefs.printer_profiles[selectedPrinter]) {
-      const profile = parsedPrefs.printer_profiles[selectedPrinter];
-      emptyLinesBefore = profile.empty_lines_before !== undefined ? profile.empty_lines_before : 0;
-      emptyLinesAfter = profile.empty_lines_after !== undefined ? profile.empty_lines_after : 0;
-    }
+    const printerPreferences = await getStoredPrinterPreferences(db);
 
     res.json({
       success: true,
       selectedPrinter,
       defaultPrinter,
-      printerPreferences: parsedPrefs,
-      printerProfiles: parsedPrefs.printer_profiles || {},
-      emptyLinesBefore,
-      emptyLinesAfter
+      printerPreferences
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -579,15 +568,51 @@ router.get("/printers/settings", requireManagerToken, async (req, res) => {
 /*
  * PUT /management/printers/settings
  * Updates printer settings
- * Body: { selectedPrinter?, defaultPrinter?, printerPreferences?, printerProfiles?, printDelaySeconds?, emptyLinesBefore?, emptyLinesAfter? }
+ * Body: { selectedPrinter?, defaultPrinter?, printerPreferences?, testTicket? }
  * Returns: { success: true, message: string }
  */
 router.put("/printers/settings", requireManagerToken, async (req, res) => {
   try {
     const db = require("../database/db");
-    const { selectedPrinter, defaultPrinter, printerPreferences, printerProfiles } = req.body;
+    const { selectedPrinter, defaultPrinter, printerPreferences, testTicket } = req.body;
 
-    console.log("Received printer settings update:", JSON.stringify({ selectedPrinter, defaultPrinter, printerProfiles }, null, 2));
+    if (printerPreferences !== undefined && (!printerPreferences || typeof printerPreferences !== "object" || Array.isArray(printerPreferences))) {
+      return res.status(400).json({ success: false, message: "Printer preferences must be an object." });
+    }
+    if (Object.prototype.hasOwnProperty.call(printerPreferences || {}, "receipt_copies")) {
+      const receiptCopies = printerPreferences.receipt_copies;
+      if (!receiptCopies || typeof receiptCopies !== "object" || Array.isArray(receiptCopies)) {
+        return res.status(400).json({ success: false, message: "Receipt copy settings must be an object." });
+      }
+      const globalCopies = receiptCopies.global;
+      if (!globalCopies || typeof globalCopies !== "object" || Array.isArray(globalCopies)) {
+        return res.status(400).json({ success: false, message: "Receipt copy counts must be provided as an object." });
+      }
+      for (const [type, rawCount] of Object.entries(globalCopies)) {
+        const count = typeof rawCount === "number"
+          ? rawCount
+          : typeof rawCount === "string" && rawCount.trim()
+            ? Number(rawCount)
+            : NaN;
+        if (!Object.prototype.hasOwnProperty.call(DEFAULT_RECEIPT_COPY_COUNTS, type) ||
+            !Number.isInteger(count) || count < 1 || count > MAX_RECEIPT_COPIES) {
+          return res.status(400).json({
+            success: false,
+            message: `Each receipt copy count must be a whole number between 1 and ${MAX_RECEIPT_COPIES}.`
+          });
+        }
+      }
+    }
+    if (testTicket !== undefined && (
+      typeof testTicket !== "string" ||
+      !testTicket.trim() ||
+      testTicket.length > 4000 ||
+      testTicket.includes("\0")
+    )) {
+      return res.status(400).json({ success: false, message: "Test ticket must contain 1–4,000 printable characters." });
+    }
+
+    console.log("Received printer settings update:", JSON.stringify({ selectedPrinter, defaultPrinter }, null, 2));
 
     const run = (sql, params = []) =>
       new Promise((resolve, reject) => {
@@ -598,57 +623,28 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
       });
 
     if (selectedPrinter !== undefined) {
-      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [selectedPrinter]);
+      await run(
+        "INSERT INTO restaurant_settings (key, value) VALUES ('selected_printer', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [selectedPrinter]
+      );
     }
     if (defaultPrinter !== undefined) {
-      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'default_printer'", [defaultPrinter]);
-      if (defaultPrinter && selectedPrinter === undefined) {
-        await run("UPDATE restaurant_settings SET value = ? WHERE key = 'selected_printer'", [defaultPrinter]);
-      }
-    }
-    
-    // Handle printer profiles - if printerProfiles is provided, update the entire structure
-    if (printerProfiles !== undefined) {
-      const currentPrefs = await new Promise((resolve, reject) => {
-        db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
-          if (err) reject(err);
-          else resolve(row ? row.value : null);
-        });
-      });
-      
-      let parsedPrefs = {};
-      try {
-        parsedPrefs = currentPrefs ? JSON.parse(currentPrefs) : {};
-      } catch (e) {
-        console.error("Error parsing current printer preferences:", e);
-      }
-      
-      parsedPrefs.printer_profiles = printerProfiles;
-      // Only update receipt_copies if printerPreferences is provided
-      if (printerPreferences && printerPreferences.receipt_copies) {
-        parsedPrefs.receipt_copies = printerPreferences.receipt_copies;
-      }
-      
-      console.log("Saving updated printer preferences:", JSON.stringify(parsedPrefs, null, 2));
-      
-      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'printer_preferences'", [JSON.stringify(parsedPrefs)]);
-      
-      // Verify the save
-      const savedPrefs = await new Promise((resolve, reject) => {
-        db.get("SELECT value FROM restaurant_settings WHERE key = 'printer_preferences'", (err, row) => {
-          if (err) reject(err);
-          else resolve(row ? row.value : null);
-        });
-      });
-      console.log("Verified saved preferences:", savedPrefs);
-    }
-    
-    // Legacy support - if printerPreferences is provided (old format)
-    if (printerPreferences !== undefined && printerProfiles === undefined) {
-      await run("UPDATE restaurant_settings SET value = ? WHERE key = 'printer_preferences'", [JSON.stringify(printerPreferences)]);
+      await run(
+        "INSERT INTO restaurant_settings (key, value) VALUES ('default_printer', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [defaultPrinter]
+      );
     }
 
-    res.json({ success: true, message: "Printer settings updated successfully" });
+    const preferencesUpdated = printerPreferences !== undefined || testTicket !== undefined;
+    const savedPreferences = preferencesUpdated
+      ? await updateStoredPrinterPreferences(db, { printerPreferences, testTicket })
+      : await getStoredPrinterPreferences(db);
+
+    res.json({
+      success: true,
+      message: "Printer settings updated successfully",
+      printerPreferences: savedPreferences
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -663,6 +659,7 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
   try {
     const db = require("../database/db");
     const printerService = require("../services/printerService");
+    const { printCopies } = require("../services/receiptCopies");
     
     // Get today's orders
     const today = new Date();
@@ -694,8 +691,10 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
       });
     }
     
-    // Print the report
-    await printerService.printDailySalesReport(orders);
+    const copyCounts = await printerService.getReceiptCopyCounts();
+    await printCopies(copyCounts.daily_sales_report, () =>
+      printerService.printDailySalesReport(orders)
+    );
     
     res.json({ success: true, message: "Daily sales report printed successfully" });
   } catch (error) {
@@ -705,7 +704,7 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
 
 /*
  * POST /management/printers/test
- * Submits a minimal test ticket to the selected printer queue
+ * Submits the saved test ticket text to the selected printer queue
  * Returns: { success: true, message: string }
  */
 router.post("/printers/test", requireManagerToken, async (req, res) => {

@@ -27,6 +27,7 @@ const { getAuthCookieValue } = require("./middleware/authCookies");
 const { verifyJwtToken } = require("./middleware/jwt-auth");
 const { redactSensitiveData, redactText } = require("./middleware/secretRedaction");
 const { isTrustedOrigin, createTrustedOriginMiddleware } = require("./middleware/trustedOrigin");
+const { printCopies } = require("./services/receiptCopies");
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const retryAsync = async (work, attempts = 3, initialDelayMs = 5000) => {
@@ -723,15 +724,9 @@ const startServer = async () => {
 
               // Get configured copy count for daily sales report
               const copyCounts = await printerService.getReceiptCopyCounts();
-              const dailyReportCopies = copyCounts.daily_sales_report || 1;
-
-              // Print according to configured copy count
-              for (let i = 0; i < dailyReportCopies; i++) {
-                await printerService.printDailySalesReport(todayOrders);
-                if (i < dailyReportCopies - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-              }
+              await printCopies(copyCounts.daily_sales_report, () =>
+                printerService.printDailySalesReport(todayOrders)
+              );
 
               lastPrintedDay = currentDay;
               console.log(`[Scheduler] Daily sales report printed successfully for ${currentDay}.`);
