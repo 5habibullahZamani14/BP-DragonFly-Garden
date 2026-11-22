@@ -33,6 +33,7 @@ const { requireManagerToken, requirePaymentToken, verifyJwtToken } = require("..
 const { ROLES } = require("../middleware/role-based-access");
 const { clearAuthCookie } = require("../middleware/authCookies");
 const { revokeStoredSession } = require("../services/sessionRevocation");
+const { RECEIPT_LAYOUT } = require("../services/receiptLayout");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const fs = require("fs");
@@ -634,7 +635,8 @@ router.get("/printers/settings", requireManagerToken, async (req, res) => {
       success: true,
       selectedPrinter,
       defaultPrinter,
-      printerPreferences
+      printerPreferences,
+      receiptLayout: RECEIPT_LAYOUT
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -738,7 +740,7 @@ router.get("/printers/sample-ticket", requireManagerToken, (req, res) => {
   try {
     const printerService = require("../services/printerService");
     const ticket = printerService.formatSampleTicket(type);
-    res.json({ success: true, ticket });
+    res.json({ success: true, ticket, receiptLayout: RECEIPT_LAYOUT });
   } catch (error) {
     if (error.code === "INVALID_SAMPLE_TICKET_TYPE") {
       return res.status(400).json({ success: false, message: error.message });

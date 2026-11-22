@@ -41,12 +41,14 @@ test("Windows print job succeeds only after the spooler command confirms submiss
     assert.ok(argumentsList[4].includes("System.Drawing.Printing.PrintDocument"));
     assert.ok(argumentsList[4].includes("DrawString"));
     assert.ok(argumentsList[4].includes("$document.DefaultPageSettings.Margins = $margins"));
-    assert.ok(argumentsList[4].includes("$margins.Left = 0; $margins.Right = 0"));
+    assert.ok(argumentsList[4].includes("$margins.Left = 8; $margins.Right = 8; $margins.Top = 0; $margins.Bottom = 8"));
     assert.ok(argumentsList[4].includes("$printableArea = $eventArgs.PageSettings.PrintableArea"));
+    assert.ok(argumentsList[4].includes("$contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)"));
+    assert.ok(argumentsList[4].includes("$contentHeight = [single]($printableArea.Height - $margins.Bottom)"));
     assert.ok(argumentsList[4].includes("$content.Trim([char[]]\"`r`n\")"));
     assert.ok(argumentsList[4].includes("$script:columnCount = 44"));
     assert.ok(argumentsList[4].includes("$script:baseFontSize = 10"));
-    assert.ok(argumentsList[4].includes("$script:baseFontSize * $printableArea.Width / $probeWidth"));
+    assert.ok(argumentsList[4].includes("$script:baseFontSize * $contentWidth / $probeWidth"));
     assert.ok(argumentsList[4].includes("$format.Alignment = $alignment"));
     assert.ok(argumentsList[4].includes("MeasureString($line, $script:font"));
     assert.ok(argumentsList[4].includes("$script:interpretAlignmentTags = $false"));

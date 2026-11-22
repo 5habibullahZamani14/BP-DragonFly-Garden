@@ -2,6 +2,10 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const {
+  RECEIPT_LAYOUT,
+  RECEIPT_MARGIN_HUNDREDTHS_INCH,
+} = require("./receiptLayout");
 
 const SUBMITTED_MARKER = "DRAGONFLY_PRINT_JOB_SUBMITTED";
 const quotePowerShellLiteral = value => String(value).replace(/'/g, "''");
@@ -18,7 +22,9 @@ const submitWindowsPrintJob = (ticket, printerName, filename, options = {}) => n
 
   const spawnProcess = options.spawnProcess || spawn;
   const tempDirectory = options.tempDirectory || os.tmpdir();
-  const columns = Number.isInteger(options.columns) && options.columns > 0 ? options.columns : 44;
+  const columns = Number.isInteger(options.columns) && options.columns > 0
+    ? options.columns
+    : RECEIPT_LAYOUT.columns;
   const tempFilePath = path.join(
     tempDirectory,
     `dragonfly-print-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
@@ -36,27 +42,31 @@ const submitWindowsPrintJob = (ticket, printerName, filename, options = {}) => n
     "  $document.DocumentName = 'Dragonfly Garden receipt'",
     "  $document.PrintController = New-Object System.Drawing.Printing.StandardPrintController",
     "  $margins = New-Object System.Drawing.Printing.Margins",
-    "  $margins.Left = 0; $margins.Right = 0; $margins.Top = 0; $margins.Bottom = 0",
+    `  $margins.Left = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}; $margins.Right = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}; $margins.Top = 0; $margins.Bottom = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
     "  $document.DefaultPageSettings.Margins = $margins",
     "  $document.OriginAtMargins = $false",
     "  $script:sourceLines = @($content.Trim([char[]]\"`r`n\") -split \"`r?`n\")",
     "  $script:printLineIndex = 0",
     `  $script:columnCount = ${columns}`,
-    "  $script:baseFontSize = 10",
-    "  $script:font = New-Object System.Drawing.Font('Consolas', $script:baseFontSize)",
+    `  $script:baseFontSize = ${RECEIPT_LAYOUT.baseFontSizePt}`,
+    `  $script:font = New-Object System.Drawing.Font('${RECEIPT_LAYOUT.fontFamily}', $script:baseFontSize)`,
     `  $script:interpretAlignmentTags = $${options.interpretAlignmentTags === true ? "true" : "false"}`,
     "  $document.add_PrintPage({",
     "    param($sender, $eventArgs)",
     "    $printableArea = $eventArgs.PageSettings.PrintableArea",
-    "    $probeFont = New-Object System.Drawing.Font('Consolas', $script:baseFontSize)",
+    "    $contentX = [single]($printableArea.X + $margins.Left)",
+    "    $contentY = [single]$printableArea.Y",
+    "    $contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)",
+    "    $contentHeight = [single]($printableArea.Height - $margins.Bottom)",
+    `    $probeFont = New-Object System.Drawing.Font('${RECEIPT_LAYOUT.fontFamily}', $script:baseFontSize)`,
     "    try { $probeWidth = $eventArgs.Graphics.MeasureString(('M' * $script:columnCount), $probeFont).Width } finally { $probeFont.Dispose() }",
-    "    if ($printableArea.Width -le 0 -or $printableArea.Height -le 0) { throw 'The printer driver did not report a printable page area' }",
+    "    if ($contentWidth -le 0 -or $contentHeight -le 0) { throw 'The printer driver did not report a usable printable area after margins' }",
     "    if ($probeWidth -le 0) { throw 'Could not measure the receipt font against the printable page width' }",
-    "    $fontSize = [single]($script:baseFontSize * $printableArea.Width / $probeWidth)",
-    "    if ($script:font.Size -ne $fontSize) { $script:font.Dispose(); $script:font = New-Object System.Drawing.Font('Consolas', $fontSize) }",
+    "    $fontSize = [single]($script:baseFontSize * $contentWidth / $probeWidth)",
+    `    if ($script:font.Size -ne $fontSize) { $script:font.Dispose(); $script:font = New-Object System.Drawing.Font('${RECEIPT_LAYOUT.fontFamily}', $fontSize) }`,
     "    $lineHeight = $script:font.GetHeight($eventArgs.Graphics)",
-    "    if ($lineHeight -le 0 -or $lineHeight -gt $printableArea.Height) { throw 'The printer page is too small for the selected font' }",
-    "    $y = [single]$printableArea.Y",
+    "    if ($lineHeight -le 0 -or $lineHeight -gt $contentHeight) { throw 'The printer page is too small for the selected font' }",
+    "    $y = $contentY",
     "    while ($script:printLineIndex -lt $script:sourceLines.Length) {",
     "      $line = [string]$script:sourceLines[$script:printLineIndex]",
     "      $alignment = [System.Drawing.StringAlignment]::Near",
@@ -75,15 +85,15 @@ const submitWindowsPrintJob = (ticket, printerName, filename, options = {}) => n
     "      $format = New-Object System.Drawing.StringFormat",
     "      $format.Alignment = $alignment",
     "      $format.Trimming = [System.Drawing.StringTrimming]::None",
-    "      $lineSize = $eventArgs.Graphics.MeasureString($line, $script:font, [single]$printableArea.Width, $format)",
+    "      $lineSize = $eventArgs.Graphics.MeasureString($line, $script:font, $contentWidth, $format)",
     "      $drawHeight = [single][Math]::Max($lineHeight, $lineSize.Height)",
-    "      if ($drawHeight -gt $printableArea.Height) { $format.Dispose(); throw 'A receipt line is taller than the driver-reported printable page area' }",
-    "      if ($y + $drawHeight -gt ($printableArea.Y + $printableArea.Height)) {",
+    "      if ($drawHeight -gt $contentHeight) { $format.Dispose(); throw 'A receipt line is taller than the printable area after margins' }",
+    "      if ($y + $drawHeight -gt ($contentY + $contentHeight)) {",
     "        $format.Dispose()",
     "        $eventArgs.HasMorePages = $true",
     "        return",
     "      }",
-    "      $layout = [System.Drawing.RectangleF]::new([single]$printableArea.X, $y, [single]$printableArea.Width, $drawHeight)",
+    "      $layout = [System.Drawing.RectangleF]::new($contentX, $y, $contentWidth, $drawHeight)",
     "      try { $eventArgs.Graphics.DrawString($line, $script:font, [System.Drawing.Brushes]::Black, $layout, $format) } finally { $format.Dispose() }",
     "      $y += $drawHeight",
     "      $script:printLineIndex++",

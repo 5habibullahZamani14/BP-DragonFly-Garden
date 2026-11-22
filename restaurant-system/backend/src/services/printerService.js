@@ -1,6 +1,6 @@
 /*
- * printerService.js — Renders plain receipt text through the installed printer queue.
- * The printer driver controls paper size; the app only applies text alignment.
+ * printerService.js — Formats receipt text for the installed printer queue.
+ * Windows applies the shared receipt layout; CUPS delegates text rendering to its driver.
  */
 
 const fs = require("fs");
@@ -10,8 +10,9 @@ const db = require("../database/db");
 const { withCircuitBreaker } = require("./circuitBreaker");
 const { submitWindowsPrintJob } = require("./windowsPrintJob");
 const { normalizeReceiptCopyCounts } = require("./receiptCopies");
+const { RECEIPT_LAYOUT } = require("./receiptLayout");
 
-const DEFAULT_PRINTER_COLUMNS = 44;
+const DEFAULT_PRINTER_COLUMNS = RECEIPT_LAYOUT.columns;
 const TICKET_RULE = "-".repeat(DEFAULT_PRINTER_COLUMNS);
 const TICKET_TOTAL_RULE = "=".repeat(DEFAULT_PRINTER_COLUMNS);
 const DEFAULT_TEST_TICKET = [

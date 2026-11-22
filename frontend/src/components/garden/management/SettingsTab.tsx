@@ -11,7 +11,7 @@
  * reflected instantly in the UI via optimistic updates.
  */
 import { useTranslation } from "react-i18next";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,13 @@ type DiscoveredPrinter = {
 };
 
 type PrinterApiResponse = { success: boolean; message?: string };
+type ReceiptLayout = {
+  columns: number;
+  fontFamily: string;
+  baseFontSizePt: number;
+  fontWeight: number;
+  marginsMm: { left: number; right: number; top: number; bottom: number };
+};
 type PrinterJobReview = {
   id: number;
   orderId: number | null;
@@ -69,8 +76,9 @@ type PrinterSettingsResponse = PrinterApiResponse & {
   selectedPrinter?: string;
   defaultPrinter?: string;
   printerPreferences?: PrinterPreferences;
+  receiptLayout?: ReceiptLayout;
 };
-type SampleTicketResponse = PrinterApiResponse & { ticket?: string };
+type SampleTicketResponse = PrinterApiResponse & { ticket?: string; receiptLayout?: ReceiptLayout };
 type SampleTicketType = "order_customer" | "order_kitchen" | "addon_customer" | "addon_kitchen" | "final_receipt" | "daily_sales_report";
 type SampleTicketLine = { text: string; alignment: "left" | "center" | "right" };
 
@@ -93,6 +101,36 @@ const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
     if (line.startsWith("[LEFT]")) return { text: line.slice(6), alignment: "left" };
     return { text: line, alignment: "left" };
   });
+
+const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
+  if (!value || typeof value !== "object") return false;
+  const layout = value as Partial<ReceiptLayout>;
+  const margins = layout.marginsMm;
+  return typeof layout.columns === "number" && Number.isInteger(layout.columns) &&
+    layout.columns > 0 &&
+    typeof layout.fontFamily === "string" &&
+    typeof layout.baseFontSizePt === "number" &&
+    typeof layout.fontWeight === "number" &&
+    !!margins &&
+    ["left", "right", "top", "bottom"].every((side) =>
+      typeof margins[side as keyof typeof margins] === "number"
+    );
+};
+
+const getReceiptContentStyle = (layout: ReceiptLayout): CSSProperties => ({
+  containerType: "inline-size",
+  marginLeft: `${layout.marginsMm.left}mm`,
+  marginRight: `${layout.marginsMm.right}mm`,
+  marginBottom: `${layout.marginsMm.bottom}mm`,
+});
+
+const getReceiptTextStyle = (layout: ReceiptLayout): CSSProperties => ({
+  fontFamily: layout.fontFamily,
+  fontSize: `${100 / (layout.columns * 0.6)}cqi`,
+  fontWeight: layout.fontWeight,
+  lineHeight: 1.2,
+  overflowWrap: "anywhere",
+});
 
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
@@ -193,6 +231,8 @@ export const SettingsTab = () => {
 
   const [ticketPreview, setTicketPreview] = useState("");
   const [savedTicketPreview, setSavedTicketPreview] = useState("");
+  const [receiptLayout, setReceiptLayout] = useState<ReceiptLayout | null>(null);
+  const [receiptLayoutError, setReceiptLayoutError] = useState<string | null>(null);
   const [editingTicketPreview, setEditingTicketPreview] = useState(false);
   const [ticketPreviewSaving, setTicketPreviewSaving] = useState(false);
   const [ticketPreviewHasBeenSaved, setTicketPreviewHasBeenSaved] = useState(false);
@@ -234,7 +274,7 @@ export const SettingsTab = () => {
     if (!preview) return;
     preview.textContent = ticketPreviewValueRef.current;
     if (editingTicketPreview) preview.focus();
-  }, [editingTicketPreview]);
+  }, [editingTicketPreview, receiptLayout]);
 
   useEffect(() => {
     loadAll();
@@ -601,6 +641,12 @@ export const SettingsTab = () => {
       setSelectedPrinter(data.selectedPrinter || "");
       setDefaultPrinter(data.defaultPrinter || "");
       setPrinterPreferences(data.printerPreferences || {});
+      if (isReceiptLayout(data.receiptLayout)) {
+        setReceiptLayout(data.receiptLayout);
+        setReceiptLayoutError(null);
+      } else {
+        setReceiptLayoutError("The server did not provide the current receipt layout.");
+      }
       const savedTestTicket = data.printerPreferences?.test_ticket;
       const testTicket = typeof savedTestTicket === "string" ? savedTestTicket : DEFAULT_TEST_TICKET;
       setTicketPreview(testTicket);
@@ -997,6 +1043,12 @@ export const SettingsTab = () => {
           throw new Error(data.message || `Request failed (HTTP ${response.status})`);
         }
         setSampleTicket(data.ticket);
+        if (isReceiptLayout(data.receiptLayout)) {
+          setReceiptLayout(data.receiptLayout);
+          setReceiptLayoutError(null);
+        } else {
+          setReceiptLayoutError("The server did not provide the current receipt layout.");
+        }
       } catch (error) {
         if (controller.signal.aborted) return;
         safeConsoleError("Failed to load sample ticket preview", error);
@@ -1771,38 +1823,43 @@ export const SettingsTab = () => {
                         )}
                       </div>
 
-                      <pre
-                        ref={ticketPreviewContentRef}
-                        contentEditable={editingTicketPreview}
-                        suppressContentEditableWarning
-                        role={editingTicketPreview ? "textbox" : undefined}
-                        aria-label={editingTicketPreview ? "Editable test ticket text" : undefined}
-                        aria-multiline={editingTicketPreview || undefined}
-                        spellCheck={false}
-                        onInput={(event) => {
-                          const enteredText = event.currentTarget.innerText.replace(/\r\n?/g, "\n");
-                          const nextText = enteredText.slice(0, 4000);
-                          if (nextText !== enteredText) {
-                            event.currentTarget.textContent = nextText;
-                            const range = document.createRange();
-                            range.selectNodeContents(event.currentTarget);
-                            range.collapse(false);
-                            const selection = window.getSelection();
-                            selection?.removeAllRanges();
-                            selection?.addRange(range);
-                          }
-                          setTicketPreview(nextText);
-                        }}
-                        className="mt-3 min-h-40 w-full whitespace-pre-wrap break-all bg-white border font-mono focus:outline-none"
-                        style={{
-                          fontSize: "calc(3.472222cqi - 0.069444px)",
-                          lineHeight: 1.2,
-                          padding: 0,
-                          overflowWrap: "anywhere"
-                        }}
-                      >
-                        {editingTicketPreview ? null : ticketPreview}
-                      </pre>
+                      <div className="mt-3 w-full border bg-white">
+                        {receiptLayout ? (
+                          <div style={getReceiptContentStyle(receiptLayout)}>
+                            <pre
+                              ref={ticketPreviewContentRef}
+                              contentEditable={editingTicketPreview}
+                              suppressContentEditableWarning
+                              role={editingTicketPreview ? "textbox" : undefined}
+                              aria-label={editingTicketPreview ? "Editable test ticket text" : undefined}
+                              aria-multiline={editingTicketPreview || undefined}
+                              spellCheck={false}
+                              onInput={(event) => {
+                                const enteredText = event.currentTarget.innerText.replace(/\r\n?/g, "\n");
+                                const nextText = enteredText.slice(0, 4000);
+                                if (nextText !== enteredText) {
+                                  event.currentTarget.textContent = nextText;
+                                  const range = document.createRange();
+                                  range.selectNodeContents(event.currentTarget);
+                                  range.collapse(false);
+                                  const selection = window.getSelection();
+                                  selection?.removeAllRanges();
+                                  selection?.addRange(range);
+                                }
+                                setTicketPreview(nextText);
+                              }}
+                              className="m-0 w-full whitespace-pre-wrap break-all bg-white font-mono focus:outline-none"
+                              style={getReceiptTextStyle(receiptLayout)}
+                            >
+                              {editingTicketPreview ? null : ticketPreview}
+                            </pre>
+                          </div>
+                        ) : (
+                          <p role={receiptLayoutError ? "alert" : "status"} className="p-3 text-sm text-muted-foreground">
+                            {receiptLayoutError || "Loading printer layout..."}
+                          </p>
+                        )}
+                      </div>
                       {ticketPreviewHasBeenSaved && ticketPreview !== savedTicketPreview && (
                         <p role="status" className="mt-2 text-sm text-amber-700">Preview changed; save it before printing the test ticket.</p>
                       )}
@@ -1840,24 +1897,27 @@ export const SettingsTab = () => {
                         </Select>
                       </div>
 
-                      <div className="mt-3 min-h-40 w-full whitespace-pre-wrap break-all border bg-white font-mono">
+                      <div className="mt-3 w-full border bg-white">
                         {sampleTicketLoading ? (
                           <p role="status" className="p-3 text-sm text-muted-foreground">Loading sample...</p>
                         ) : sampleTicketError ? (
                           <p role="alert" className="p-3 text-sm text-destructive">{sampleTicketError}</p>
+                        ) : !receiptLayout ? (
+                          <p role={receiptLayoutError ? "alert" : "status"} className="p-3 text-sm text-muted-foreground">
+                            {receiptLayoutError || "Loading printer layout..."}
+                          </p>
                         ) : (
-                          <div
-                            style={{
-                              fontSize: "calc(3.472222cqi - 0.069444px)",
-                              lineHeight: 1.2,
-                              overflowWrap: "anywhere"
-                            }}
-                          >
-                            {parseSampleTicketLines(sampleTicket).map((line, index) => (
-                              <div key={index} style={{ textAlign: line.alignment }}>
-                                {line.text || "\u00a0"}
-                              </div>
-                            ))}
+                          <div style={getReceiptContentStyle(receiptLayout)}>
+                            <div
+                              className="font-mono"
+                              style={getReceiptTextStyle(receiptLayout)}
+                            >
+                              {parseSampleTicketLines(sampleTicket).map((line, index) => (
+                                <div key={index} style={{ textAlign: line.alignment }}>
+                                  {line.text || "\u00a0"}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>

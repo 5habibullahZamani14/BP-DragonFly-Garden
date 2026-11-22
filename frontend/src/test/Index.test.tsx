@@ -10,7 +10,9 @@ vi.mock("@/components/garden/LandingView", () => ({
   LandingView: () => <div data-testid="landing-view" />,
 }));
 vi.mock("@/components/garden/CustomerView", () => ({
-  CustomerView: () => <div data-testid="customer-view" />,
+  CustomerView: ({ qrCode }: { qrCode: string }) => (
+    <div data-testid="customer-view" data-qr-code={qrCode} />
+  ),
 }));
 vi.mock("@/components/garden/PaymentCounterView", () => ({
   PaymentCounterView: () => <div data-testid="payment-view" />,
@@ -53,4 +55,22 @@ describe("Index server outage coverage", () => {
       expect(screen.queryByTestId(view)).not.toBeInTheDocument();
     },
   );
+});
+
+describe("Index customer QR routing", () => {
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState({}, "", "/");
+    vi.clearAllMocks();
+  });
+
+  it("uses a valid QR credential when the URL also contains a customer view and table ID", () => {
+    const qrCode = `table-${"a".repeat(64)}`;
+    window.history.replaceState({}, "", `/?view=customer&table=5&qr=${qrCode}`);
+    vi.mocked(useServerConnectionNotice).mockReturnValue(null);
+
+    render(<Index />);
+
+    expect(screen.getByTestId("customer-view")).toHaveAttribute("data-qr-code", qrCode);
+  });
 });

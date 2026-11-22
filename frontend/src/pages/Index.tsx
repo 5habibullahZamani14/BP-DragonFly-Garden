@@ -42,9 +42,6 @@ const detectRole = (): { role: Role; qrCode: string; tableStorageKey: string } =
 
   if (view === "manager") return { role: "manager", qrCode: "", tableStorageKey: "" };
   if (view === "payment") return { role: "payment", qrCode: "", tableStorageKey: "" };
-  if (view === "customer" && tableStorageKey) {
-    return { role: "customer", qrCode: tableStorageKey, tableStorageKey };
-  }
 
   if (LEGACY_PRIVILEGED_QR_PATTERN.test(qr)) {
     return { role: "landing", qrCode: "", tableStorageKey: "" };
@@ -52,6 +49,10 @@ const detectRole = (): { role: Role; qrCode: string; tableStorageKey: string } =
 
   if (TABLE_QR_PATTERN.test(qr)) {
     return { role: "customer", qrCode: qr, tableStorageKey: tableStorageKey || qr };
+  }
+
+  if (view === "customer" && tableStorageKey) {
+    return { role: "customer", qrCode: tableStorageKey, tableStorageKey };
   }
 
   if (!qr && !view) {
