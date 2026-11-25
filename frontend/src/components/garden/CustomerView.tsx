@@ -37,6 +37,7 @@ import {
   Search, Home, UtensilsCrossed, Receipt, ArrowRight, Soup, Coffee, Salad, IceCream2, ChevronRight, Bell, Smile, MessageSquare
 } from "lucide-react";
 import { CustomerFeedbackPanel } from "./customer/CustomerFeedbackPanel";
+import { formatTimestampTime12Hour } from "@/lib/timeFormat";
 import { PetalButton } from "./PetalButton";
 import { DragonflyMark } from "./GardenAtmosphere";
 import { WingedAccent } from "./WingedAccent";
@@ -1898,7 +1899,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
               {orders.map((o) => {
                 const RC = "hsl(44,70%,97%)";
                 const timeStr = o.created_at
-                  ? new Date(o.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })
+                  ? formatTimestampTime12Hour(o.created_at)
                   : null;
                 return (
                   <div key={o.id} className="relative animate-scale-in">

@@ -32,6 +32,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatDateTime12Hour, formatTime12Hour, formatTimestampTime12Hour } from "@/lib/timeFormat";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -216,7 +217,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   const formatAssistanceTime = (value: string) => {
     const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
     const normalized = hasTimezone ? value : `${value.replace(" ", "T")}Z`;
-    return new Date(normalized).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return formatTimestampTime12Hour(new Date(normalized));
   };
 
   const parseTimeToMinutes = (time: string) => {
@@ -358,7 +359,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           setIsWithinWorkHours(inside);
 
           if (!inside) {
-            notify("error", t("payment.systemLockedHours", { start: settings.work_hours.start, end: settings.work_hours.end }));
+            notify("error", t("payment.systemLockedHours", {
+              start: formatTime12Hour(settings.work_hours.start),
+              end: formatTime12Hour(settings.work_hours.end),
+            }));
             handleLogout();
           }
         }
@@ -805,7 +809,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           <div className="flex flex-wrap items-center gap-3 bg-white/60 px-4 py-3 rounded-2xl shadow-sm w-full xl:w-auto">
             <div className="flex flex-wrap items-center gap-3 shrink-0 min-w-0">
               <span className="text-sm font-semibold text-gray-800 min-w-0">
-                {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                {formatDateTime12Hour(currentTime, true)}
               </span>
               <Badge variant="outline" className={
                 operationStatus === "workingTime" ? "bg-green-100 text-green-700 border-green-200" :
@@ -930,7 +934,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                           </span>
                           {order.order_type && order.order_type !== 'DINE_IN' && (
                             <div className="flex gap-2 items-center flex-wrap mt-1">
-                              {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">{t("payment.pickup")} {order.collection_time && `@ ${order.collection_time}`}</Badge>}
+                              {order.order_type === 'PICKUP' && <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-0">{t("payment.pickup")} {order.collection_time && `@ ${formatTimestampTime12Hour(order.collection_time)}`}</Badge>}
                               {order.order_type === 'DELIVERY' && <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-0">{t("payment.delivery")}</Badge>}
                               {order.order_type === 'TAKEAWAY' && <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-0">{t("payment.takeawayBadge")}</Badge>}
                               {order.order_type === 'COUNTER' && (
@@ -1281,7 +1285,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                       <CardContent className="py-0 pb-4">
                         <div className="flex justify-between items-center mb-2">
                           <p className="font-medium text-gray-900">RM {order.total_with_vat.toFixed(2)}</p>
-                          <p className="text-sm text-gray-500">{new Date(order.created_at).toLocaleTimeString()}</p>
+                          <p className="text-sm text-gray-500">{formatTimestampTime12Hour(order.created_at)}</p>
                         </div>
                         <div className="flex flex-col gap-1 text-xs text-gray-600">
                           {order.order_type && order.order_type !== 'DINE_IN' && (
@@ -1294,7 +1298,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                             <span>{t("payment.phone", "Phone")}: {order.customer_phone}</span>
                           )}
                           {order.collection_time && (
-                            <span>{t("payment.collectionTime", "Collection")}: {order.collection_time}</span>
+                            <span>{t("payment.collectionTime", "Collection")}: {formatTimestampTime12Hour(order.collection_time)}</span>
                           )}
                           {order.delivery_address && (
                             <span className="truncate">{t("payment.deliveryAddress", "Delivery")}: {order.delivery_address}</span>

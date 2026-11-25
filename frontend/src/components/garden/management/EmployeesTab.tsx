@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TimeInput12Hour } from "@/components/ui/TimeInput12Hour";
 import { fetchEmployees, createEmployee, updateEmployee } from "@/lib/api";
 import type { EmployeeRecord } from "@/lib/api";
 import { UserPlus, Briefcase, DollarSign, Clock, Users, Calendar, Phone } from "lucide-react";
@@ -43,6 +44,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DEPT_LABEL_KEYS, EMP_TYPE_LABEL_KEYS, labelForStoredValue } from "@/lib/i18nLabels";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
+import { formatTime12Hour } from "@/lib/timeFormat";
 
 export const EmployeesTab = () => {
   const { t } = useTranslation();
@@ -302,11 +304,33 @@ export const EmployeesTab = () => {
               </div>
               <div className="space-y-2">
                 <Label>{t("m.shiftStart")}</Label>
-                <Input type="time" value={formData.shift_start} onChange={(e) => setFormData({...formData, shift_start: e.target.value})} />
+                <TimeInput12Hour
+                  label={t("m.shiftStart")}
+                  value={formData.shift_start}
+                  onChange={(value) => setFormData((current) => ({ ...current, shift_start: value }))}
+                  hourLabel={t("m.scheduleHour")}
+                  minuteLabel={t("m.scheduleMinute")}
+                  cancelLabel={t("m.cancel")}
+                  confirmLabel={t("m.timePickerConfirm")}
+                  description={t("m.timePickerDescription")}
+                  keyboardModeLabel={t("m.timePickerKeyboard")}
+                  clockModeLabel={t("m.timePickerClock")}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t("m.shiftEnd")}</Label>
-                <Input type="time" value={formData.shift_end} onChange={(e) => setFormData({...formData, shift_end: e.target.value})} />
+                <TimeInput12Hour
+                  label={t("m.shiftEnd")}
+                  value={formData.shift_end}
+                  onChange={(value) => setFormData((current) => ({ ...current, shift_end: value }))}
+                  hourLabel={t("m.scheduleHour")}
+                  minuteLabel={t("m.scheduleMinute")}
+                  cancelLabel={t("m.cancel")}
+                  confirmLabel={t("m.timePickerConfirm")}
+                  description={t("m.timePickerDescription")}
+                  keyboardModeLabel={t("m.timePickerKeyboard")}
+                  clockModeLabel={t("m.timePickerClock")}
+                />
               </div>
             </div>
             <div className="flex gap-2 pt-4">
@@ -474,7 +498,7 @@ export const EmployeesTab = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4 mt-4 text-sm text-gray-600">
                             <div className="flex items-center gap-2">
                               <Clock className="h-4 w-4 text-gray-400" />
-                              <span>{emp.shift_start} - {emp.shift_end}</span>
+                              <span>{formatTime12Hour(emp.shift_start || "")} - {formatTime12Hour(emp.shift_end || "")}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <DollarSign className="h-4 w-4 text-gray-400" />

@@ -31,6 +31,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
 import type { TFunction } from "i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -528,7 +529,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 bg-white/60 px-3 py-2 sm:px-4 rounded-2xl sm:rounded-full shadow-sm">
             <span className="text-xs sm:text-sm font-semibold text-gray-800">
-              {currentTime.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+              {formatDateTime12Hour(currentTime, true)}
             </span>
             <span className="text-sm font-medium text-gray-700 hidden sm:inline border-l border-gray-300 pl-4">
               {t("manager.userLabel")} <span className="text-green-700 font-bold">{t("manager.userAdmin")}</span>

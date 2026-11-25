@@ -38,6 +38,8 @@ import {
   type FeedbackAnalysisResponse,
 } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
+import { DateInputPicker } from "@/components/ui/DateInputPicker";
 
 type Notify = (kind: "success" | "error", text: string) => void;
 
@@ -460,7 +462,7 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
     const exportText = `
 ${t("manager.feedback.reportTitle")}
 ========================
-${t("manager.feedback.reportGenerated")}: ${new Date().toLocaleString()}
+${t("manager.feedback.reportGenerated")}: ${formatDateTime12Hour(new Date())}
 ${t("manager.feedback.reportPeriod")}: ${analysis.run?.period_from || t("manager.feedback.allTime")} ${t("manager.feedback.to")} ${analysis.run?.period_to || t("manager.feedback.present")}
 ${t("manager.feedback.reportMethod")}: ${analysis.analysis_method === "ai" ? t("manager.feedback.aiPowered") : t("manager.feedback.ruleBased")}
 ${t("manager.feedback.reportFeedbackCount")}: ${summary.feedback_count || 0}
@@ -519,11 +521,23 @@ ${findings.map(f => `- ${f.title} (${t(`manager.feedback.${f.priority}Priority`)
           <div className="flex flex-wrap gap-3 items-end">
             <div>
               <Label className="text-xs">{t("manager.feedback.from")}</Label>
-              <Input type="date" value={analysisFrom} onChange={(e) => setAnalysisFrom(e.target.value)} className="w-40 mt-1" />
+              <DateInputPicker
+                label={t("manager.feedback.from")}
+                value={analysisFrom}
+                onChange={setAnalysisFrom}
+                className="w-40 mt-1"
+                inputClassName="h-10 px-2 pr-9 text-sm"
+              />
             </div>
             <div>
               <Label className="text-xs">{t("manager.feedback.to")}</Label>
-              <Input type="date" value={analysisTo} onChange={(e) => setAnalysisTo(e.target.value)} className="w-40 mt-1" />
+              <DateInputPicker
+                label={t("manager.feedback.to")}
+                value={analysisTo}
+                onChange={setAnalysisTo}
+                className="w-40 mt-1"
+                inputClassName="h-10 px-2 pr-9 text-sm"
+              />
             </div>
             <Button onClick={handleAnalyze} disabled={analyzing} className="bg-violet-700 hover:bg-violet-800">
               {analyzing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
@@ -613,7 +627,7 @@ ${findings.map(f => `- ${f.title} (${t(`manager.feedback.${f.priority}Priority`)
           {analysis?.run && (
             <p className="text-xs text-gray-500 flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {t("manager.feedback.lastRun")}: {new Date(analysis.run.created_at).toLocaleString()}
+              {t("manager.feedback.lastRun")}: {formatDateTime12Hour(analysis.run.created_at)}
               {analysis.run.period_from && ` · ${analysis.run.period_from} → ${analysis.run.period_to || "now"}`}
             </p>
           )}
@@ -671,7 +685,7 @@ ${findings.map(f => `- ${f.title} (${t(`manager.feedback.${f.priority}Priority`)
                       <p className="font-medium truncate">{fb.sender_name}</p>
                       <p className="text-sm text-gray-500 truncate">{fb.comment}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {fb.table_number || "—"} · {new Date(fb.created_at).toLocaleString()}
+                        {fb.table_number || "—"} · {formatDateTime12Hour(fb.created_at)}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />

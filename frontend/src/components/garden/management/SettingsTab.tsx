@@ -11,7 +11,7 @@
  * reflected instantly in the UI via optimistic updates.
  */
 import { useTranslation } from "react-i18next";
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
+import { TimeInput12Hour } from "@/components/ui/TimeInput12Hour";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, requestSystemShutdown, VersionCheckResult } from "@/lib/api";
 import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, X, FileText, Power } from "lucide-react";
@@ -29,6 +30,9 @@ import { useWebSocket } from "@/lib/useWebSocket";
 import { notifyServerShutdownRequested } from "@/lib/useServerConnectionNotice";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { DataCleanupTab } from "./DataCleanupTab";
+import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
+import { QRCodeSVG } from "qrcode.react";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
 
 type ReceiptCopies = {
   order_customer?: number;
@@ -56,8 +60,18 @@ type PrinterApiResponse = { success: boolean; message?: string };
 type ReceiptLayout = {
   columns: number;
   fontFamily: string;
+  brandFontFamily: string;
+  numericFontFamily: string;
   baseFontSizePt: number;
+  brandFontSizePt: number;
+  totalFontSizePt: number;
+  logoSizeMm: number;
+  qrCodeSizeMm: number;
   fontWeight: number;
+  boldFontWeight: number;
+  brandFontWeight: number;
+  numericFontWeight: number;
+  numericBoldFontWeight: number;
   marginsMm: { left: number; right: number; top: number; bottom: number };
 };
 type PrinterJobReview = {
@@ -80,7 +94,13 @@ type PrinterSettingsResponse = PrinterApiResponse & {
 };
 type SampleTicketResponse = PrinterApiResponse & { ticket?: string; receiptLayout?: ReceiptLayout };
 type SampleTicketType = "order_customer" | "order_kitchen" | "addon_customer" | "addon_kitchen" | "final_receipt" | "daily_sales_report";
-type SampleTicketLine = { text: string; alignment: "left" | "center" | "right" };
+type SampleTicketLine =
+  | { kind: "logo" }
+  | { kind: "qr"; url: string }
+  | { kind: "rule"; weight: "thin" | "thick" }
+  | { kind: "spacer" }
+  | { kind: "text"; text: string; alignment: "left" | "center" | "right"; emphasis?: "bold" | "brand" | "total" }
+  | { kind: "row"; label: string; amount: string; emphasis?: "bold" | "brand" | "total" };
 
 const SAMPLE_TICKET_TYPES: { value: SampleTicketType; labelKey: string }[] = [
   { value: "order_customer", labelKey: "m.orderReceiptCustomer" },
@@ -95,11 +115,52 @@ const isSampleTicketType = (value: string): value is SampleTicketType =>
   SAMPLE_TICKET_TYPES.some((ticketType) => ticketType.value === value);
 
 const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
-  ticket.split(/\r?\n/).map((line) => {
-    if (line.startsWith("[CENTER]")) return { text: line.slice(8), alignment: "center" };
-    if (line.startsWith("[RIGHT]")) return { text: line.slice(7), alignment: "right" };
-    if (line.startsWith("[LEFT]")) return { text: line.slice(6), alignment: "left" };
-    return { text: line, alignment: "left" };
+  ticket.split(/\r?\n/).flatMap((sourceLine): SampleTicketLine[] => {
+    let text = sourceLine;
+    let alignment: "left" | "center" | "right" = "left";
+    let emphasis: "bold" | "brand" | "total" | undefined;
+    let isRow = false;
+
+    while (text.startsWith("[")) {
+      if (text.startsWith("[LOGO]")) return [{ kind: "logo" }];
+      if (text.startsWith("[QRCODE]")) return [{ kind: "qr", url: text.slice(8).trim() }];
+      if (text.startsWith("[THIN_RULE]")) return [{ kind: "rule", weight: "thin" }];
+      if (text.startsWith("[THICK_RULE]")) return [{ kind: "rule", weight: "thick" }];
+      if (text.startsWith("[SPACER]")) return [{ kind: "spacer" }];
+      if (text.startsWith("[CENTER]")) {
+        alignment = "center";
+        text = text.slice(8).trimStart();
+      } else if (text.startsWith("[RIGHT]")) {
+        alignment = "right";
+        text = text.slice(7).trimStart();
+      } else if (text.startsWith("[LEFT]")) {
+        alignment = "left";
+        text = text.slice(6).trimStart();
+      } else if (text.startsWith("[BRAND]")) {
+        emphasis = "brand";
+        alignment = "center";
+        text = text.slice(7).trimStart();
+      } else if (text.startsWith("[TOTAL]")) {
+        emphasis = "total";
+        text = text.slice(7).trimStart();
+      } else if (text.startsWith("[ROW]")) {
+        isRow = true;
+        text = text.slice(5).trimStart();
+      } else if (text.startsWith("[BOLD]") || text.startsWith("[H1]")) {
+        emphasis = emphasis || "bold";
+        text = text.slice(text.startsWith("[BOLD]") ? 6 : 4).trimStart();
+      } else if (text.startsWith("[SQUARE]")) {
+        text = `[ ] ${text.slice(8).trimStart()}`;
+      } else {
+        break;
+      }
+    }
+
+    if (isRow && text.includes("\t")) {
+      const tabIndex = text.indexOf("\t");
+      return [{ kind: "row", label: text.slice(0, tabIndex), amount: text.slice(tabIndex + 1), emphasis }];
+    }
+    return [{ kind: "text", text, alignment, emphasis }];
   });
 
 const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
@@ -109,8 +170,18 @@ const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
   return typeof layout.columns === "number" && Number.isInteger(layout.columns) &&
     layout.columns > 0 &&
     typeof layout.fontFamily === "string" &&
+    typeof layout.brandFontFamily === "string" &&
+    typeof layout.numericFontFamily === "string" &&
     typeof layout.baseFontSizePt === "number" &&
+    typeof layout.brandFontSizePt === "number" &&
+    typeof layout.totalFontSizePt === "number" &&
+    typeof layout.logoSizeMm === "number" &&
+    typeof layout.qrCodeSizeMm === "number" &&
     typeof layout.fontWeight === "number" &&
+    typeof layout.boldFontWeight === "number" &&
+    typeof layout.brandFontWeight === "number" &&
+    typeof layout.numericFontWeight === "number" &&
+    typeof layout.numericBoldFontWeight === "number" &&
     !!margins &&
     ["left", "right", "top", "bottom"].every((side) =>
       typeof margins[side as keyof typeof margins] === "number"
@@ -121,16 +192,61 @@ const getReceiptContentStyle = (layout: ReceiptLayout): CSSProperties => ({
   containerType: "inline-size",
   marginLeft: `${layout.marginsMm.left}mm`,
   marginRight: `${layout.marginsMm.right}mm`,
+  marginTop: `${layout.marginsMm.top}mm`,
   marginBottom: `${layout.marginsMm.bottom}mm`,
 });
 
-const getReceiptTextStyle = (layout: ReceiptLayout): CSSProperties => ({
-  fontFamily: layout.fontFamily,
-  fontSize: `${100 / (layout.columns * 0.6)}cqi`,
-  fontWeight: layout.fontWeight,
-  lineHeight: 1.2,
-  overflowWrap: "anywhere",
-});
+const getReceiptTextStyle = (
+  layout: ReceiptLayout,
+  emphasis?: "bold" | "brand" | "total"
+): CSSProperties => {
+  const fontSize = emphasis === "brand"
+    ? layout.brandFontSizePt
+    : emphasis === "total"
+      ? layout.totalFontSizePt
+      : layout.baseFontSizePt;
+  return {
+    fontFamily: emphasis === "brand" ? layout.brandFontFamily : layout.fontFamily,
+    fontSize: `${(100 / (layout.columns * 0.6)) * (fontSize / layout.baseFontSizePt)}cqi`,
+    fontWeight: emphasis === "brand"
+      ? layout.brandFontWeight
+      : emphasis
+        ? layout.boldFontWeight
+        : layout.fontWeight,
+    lineHeight: 1.2,
+    overflowWrap: "anywhere",
+  };
+};
+
+const renderReceiptText = (
+  text: string,
+  layout: ReceiptLayout,
+  emphasis?: "bold" | "brand" | "total",
+): ReactNode[] => {
+  const runs: ReactNode[] = [];
+  const numericPattern = /\d+(?:[.,:/-]\d+)*/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = numericPattern.exec(text))) {
+    if (match.index > cursor) runs.push(text.slice(cursor, match.index));
+    runs.push(
+      <span
+        key={`number-${match.index}`}
+        style={{
+          fontFamily: layout.numericFontFamily,
+          fontWeight: emphasis ? layout.numericBoldFontWeight : layout.numericFontWeight,
+        }}
+      >
+        {match[0]}
+      </span>,
+    );
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < text.length) runs.push(text.slice(cursor));
+  return runs;
+};
 
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
@@ -160,7 +276,6 @@ export const SettingsTab = () => {
   });
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaved, setHoursSaved] = useState(false);
-  const [timeInputDrafts, setTimeInputDrafts] = useState<Record<string, string>>({});
 
   const [profile, setProfile] = useState({ name: "", id: "", email: "", phone: "" });
   const [newPassword, setNewPassword] = useState("");
@@ -737,7 +852,7 @@ export const SettingsTab = () => {
       toast.success(t("m.settings.sampleTicketSent", { sample: sampleLabel, printer: printerName }));
     } catch (error: unknown) {
       safeConsoleError("Failed to print sample ticket", error);
-      toast.error(t("m.settings.sampleTicketPrintFailed"));
+      toast.error(`${t("m.settings.sampleTicketPrintFailed")}: ${getErrorMessage(error)}`);
     } finally {
       setPrintingSampleTicket(false);
       void loadPrinterJobs();
@@ -1497,89 +1612,22 @@ export const SettingsTab = () => {
                 { label: t("m.openTime"), field: "start" as const },
                 { label: t("m.closeTime"), field: "end" as const },
               ]).map(({ label, field }) => {
-                const [hour, minute] = hours[field].split(":");
-                const commitTimePart = (part: "hour" | "minute") => {
-                  const key = `${field}-${part}`;
-                  const typed = timeInputDrafts[key];
-                  const value = Number(typed);
-                  const max = part === "hour" ? 23 : 59;
-                  if (typed !== undefined && typed !== "" && Number.isInteger(value) && value >= 0 && value <= max) {
-                    setHours((current) => {
-                      const [currentHour, currentMinute] = current[field].split(":");
-                      const nextTime = part === "hour"
-                        ? `${String(value).padStart(2, "0")}:${currentMinute}`
-                        : `${currentHour}:${String(value).padStart(2, "0")}`;
-                      return { ...current, [field]: nextTime };
-                    });
-                  }
-                  setTimeInputDrafts((drafts) => {
-                    const next = { ...drafts };
-                    delete next[key];
-                    return next;
-                  });
-                };
                 return (
                   <div key={field} className="rounded-xl border bg-muted/20 p-4">
                     <Label className="mb-3 block text-sm font-semibold">{label}</Label>
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                      <Select value={hour} onValueChange={(value) => setHours({ ...hours, [field]: `${value}:${minute || "00"}` })}>
-                        <SelectTrigger className="h-12 rounded-xl border-2 text-lg font-bold shadow-sm">
-                          <SelectValue placeholder={t("m.scheduleHour")} />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {Array.from({ length: 24 }, (_, value) => {
-                            const valueText = String(value).padStart(2, "0");
-                            return <SelectItem key={valueText} value={valueText}>{valueText}</SelectItem>;
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-2xl font-bold text-muted-foreground">:</span>
-                      <Select value={minute} onValueChange={(value) => setHours({ ...hours, [field]: `${hour || "09"}:${value}` })}>
-                        <SelectTrigger className="h-12 rounded-xl border-2 text-lg font-bold shadow-sm">
-                          <SelectValue placeholder={t("m.scheduleMinute")} />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {Array.from({ length: 12 }, (_, value) => {
-                            const valueText = String(value * 5).padStart(2, "0");
-                            return <SelectItem key={valueText} value={valueText}>{valueText}</SelectItem>;
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mt-2">
-                      <Input
-                        aria-label={`${label} ${t("m.scheduleHour")}`}
-                        inputMode="numeric"
-                        type="text"
-                        pattern="[0-9]*"
-                        maxLength={2}
-                        value={timeInputDrafts[`${field}-hour`] ?? hour}
-                        onChange={(event) => {
-                          const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
-                          setTimeInputDrafts((drafts) => ({ ...drafts, [`${field}-hour`]: digits }));
-                        }}
-                        onBlur={() => commitTimePart("hour")}
-                        placeholder={t("m.scheduleHour")}
-                        className="h-9 text-center text-sm tabular-nums"
-                      />
-                      <span className="text-muted-foreground">:</span>
-                      <Input
-                        aria-label={`${label} ${t("m.scheduleMinute")}`}
-                        inputMode="numeric"
-                        type="text"
-                        pattern="[0-9]*"
-                        maxLength={2}
-                        value={timeInputDrafts[`${field}-minute`] ?? minute}
-                        onChange={(event) => {
-                          const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
-                          setTimeInputDrafts((drafts) => ({ ...drafts, [`${field}-minute`]: digits }));
-                        }}
-                        onBlur={() => commitTimePart("minute")}
-                        placeholder={t("m.scheduleMinute")}
-                        className="h-9 text-center text-sm tabular-nums"
-                      />
-                    </div>
-                    <p className="mt-1 text-center text-xs text-muted-foreground">{t("m.scheduleSelectTime")}</p>
+                    <TimeInput12Hour
+                      label={label}
+                      value={hours[field]}
+                      onChange={(value) => setHours((current) => ({ ...current, [field]: value }))}
+                      hourLabel={t("m.scheduleHour")}
+                      minuteLabel={t("m.scheduleMinute")}
+                      cancelLabel={t("m.cancel")}
+                      confirmLabel={t("m.timePickerConfirm")}
+                      description={t("m.timePickerDescription")}
+                      keyboardModeLabel={t("m.timePickerKeyboard")}
+                      clockModeLabel={t("m.timePickerClock")}
+                    />
+                    <p className="mt-2 text-center text-xs text-muted-foreground">{t("m.scheduleSelectTime")}</p>
                   </div>
                 );
               })}
@@ -1834,7 +1882,7 @@ export const SettingsTab = () => {
                               </p>
                               <p>{t("m.printerLabel")}: {job.printerName}</p>
                               <p>{t("m.statusLabel")}: {job.status === "submitting" ? t("m.submissionNotConfirmed") : t("m.outcomeUncertain")}</p>
-                              <p className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground">{formatDateTime12Hour(job.createdAt)}</p>
                               {job.errorMessage && <p className="text-xs text-red-700">{job.errorMessage}</p>}
                             </div>
                             <Button size="sm" variant="outline" onClick={() => void acknowledgePrinterJob(job.id)}>
@@ -2023,7 +2071,24 @@ export const SettingsTab = () => {
                               className="m-0 w-full whitespace-pre-wrap break-all bg-white font-mono focus:outline-none"
                               style={getReceiptTextStyle(receiptLayout)}
                             >
-                              {editingTicketPreview ? null : ticketPreview}
+                              {editingTicketPreview
+                                ? null
+                                : ticketPreview.split(/\r?\n/).map((line, index) => {
+                                    const isBrand = line.trim().toUpperCase() === "BP DRAGONFLY GARDEN";
+                                    const displayLine = isBrand ? "BP DRAGONFLY GARDEN" : line;
+                                    return (
+                                      <span
+                                        key={index}
+                                        style={{
+                                          ...getReceiptTextStyle(receiptLayout, isBrand ? "brand" : undefined),
+                                          display: "block",
+                                          textAlign: isBrand ? "center" : "left",
+                                        }}
+                                      >
+                                        {renderReceiptText(displayLine, receiptLayout, isBrand ? "brand" : undefined)}
+                                      </span>
+                                    );
+                                  })}
                             </pre>
                           </div>
                         ) : (
@@ -2080,15 +2145,81 @@ export const SettingsTab = () => {
                           </p>
                         ) : (
                           <div style={getReceiptContentStyle(receiptLayout)}>
-                            <div
-                              className="font-mono"
-                              style={getReceiptTextStyle(receiptLayout)}
-                            >
-                              {parseSampleTicketLines(sampleTicket).map((line, index) => (
-                                <div key={index} style={{ textAlign: line.alignment }}>
-                                  {line.text || "\u00a0"}
-                                </div>
-                              ))}
+                            <div className="font-mono">
+                              {parseSampleTicketLines(sampleTicket).map((line, index) => {
+                                if (line.kind === "logo") {
+                                  return (
+                                    <div key={index} className="flex justify-center">
+                                      <img
+                                        src={bpDragonflyGardenLogo}
+                                        alt="BP Dragonfly Garden"
+                                        style={{
+                                          width: `${receiptLayout.logoSizeMm}mm`,
+                                          maxWidth: "100%",
+                                          height: "auto",
+                                          display: "block",
+                                          filter: "grayscale(1)",
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                }
+                                if (line.kind === "qr") {
+                                  return (
+                                    <div key={index} className="flex justify-center">
+                                      <QRCodeSVG
+                                        value={line.url}
+                                        size={264}
+                                        level="M"
+                                        title="Facebook page QR code"
+                                        style={{
+                                          width: `${receiptLayout.qrCodeSizeMm}mm`,
+                                          maxWidth: "100%",
+                                          height: "auto",
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                }
+                                if (line.kind === "rule") {
+                                  return (
+                                    <div
+                                      key={index}
+                                      aria-hidden="true"
+                                      style={{
+                                        borderTop: `${line.weight === "thick" ? 2 : 1}px solid #111`,
+                                        margin: `${(receiptLayout.baseFontSizePt * 25.4 * 1.2) / 144}mm 0`,
+                                      }}
+                                    />
+                                  );
+                                }
+                                if (line.kind === "spacer") {
+                                  return <div key={index} style={{ height: "1mm" }} />;
+                                }
+                                if (line.kind === "row") {
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="flex justify-between gap-2"
+                                      style={getReceiptTextStyle(receiptLayout, line.emphasis)}
+                                    >
+                                      <span>{renderReceiptText(line.label, receiptLayout, line.emphasis)}</span>
+                                      <span className="whitespace-nowrap text-right">{renderReceiptText(line.amount, receiptLayout, line.emphasis)}</span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div
+                                    key={index}
+                                    style={{
+                                      ...getReceiptTextStyle(receiptLayout, line.emphasis),
+                                      textAlign: line.alignment,
+                                    }}
+                                  >
+                                    {renderReceiptText(line.text || "\u00a0", receiptLayout, line.emphasis)}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -2400,7 +2531,7 @@ export const SettingsTab = () => {
                             <p className="font-semibold text-gray-800 break-all">{file.filename}</p>
                             <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
                               <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                              <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                              <span>{formatDateTime12Hour(file.created_at)}</span>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -2503,7 +2634,7 @@ export const SettingsTab = () => {
                               <p className="font-semibold text-gray-800 break-all">{file.filename}</p>
                               <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
                                 <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                                <span>{new Date(file.created_at).toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                <span>{formatDateTime12Hour(file.created_at)}</span>
                               </div>
                             </div>
                             <Button 

@@ -40,7 +40,7 @@ const restoreLatestBackup = async () => {
     const backups = data.Contents.sort((a, b) => b.LastModified.getTime() - a.LastModified.getTime());
     const latestBackupKey = backups[0].Key;
     
-    console.log(`✅ Found latest backup: ${latestBackupKey} (Uploaded on ${backups[0].LastModified.toLocaleString()})`);
+    console.log(`✅ Found latest backup: ${latestBackupKey} (Uploaded on ${backups[0].LastModified.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })})`);
 
     // 3. Download the backup
     const dbPath = path.join(__dirname, "database", "database.sqlite");

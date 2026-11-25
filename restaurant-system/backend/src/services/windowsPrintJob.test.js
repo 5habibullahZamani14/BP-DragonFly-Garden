@@ -41,16 +41,24 @@ test("Windows print job succeeds only after the spooler command confirms submiss
     assert.ok(argumentsList[4].includes("System.Drawing.Printing.PrintDocument"));
     assert.ok(argumentsList[4].includes("DrawString"));
     assert.ok(argumentsList[4].includes("$document.DefaultPageSettings.Margins = $margins"));
-    assert.ok(argumentsList[4].includes("$margins.Left = 8; $margins.Right = 8; $margins.Top = 0; $margins.Bottom = 8"));
+    assert.ok(argumentsList[4].includes("$margins.Left = 4; $margins.Right = 4; $margins.Top = 0; $margins.Bottom = 4"));
     assert.ok(argumentsList[4].includes("$printableArea = $eventArgs.PageSettings.PrintableArea"));
     assert.ok(argumentsList[4].includes("$contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)"));
-    assert.ok(argumentsList[4].includes("$contentHeight = [single]($printableArea.Height - $margins.Bottom)"));
+    assert.ok(argumentsList[4].includes("$contentY = [single]$margins.Top"));
+    assert.ok(argumentsList[4].includes("$contentHeight = [single]($printableArea.Height - $margins.Top - $margins.Bottom)"));
     assert.ok(argumentsList[4].includes("$content.Trim([char[]]\"`r`n\")"));
     assert.ok(argumentsList[4].includes("$script:columnCount = 44"));
     assert.ok(argumentsList[4].includes("$script:baseFontSize = 10"));
     assert.ok(argumentsList[4].includes("$script:baseFontSize * $contentWidth / $probeWidth"));
-    assert.ok(argumentsList[4].includes("$format.Alignment = $alignment"));
-    assert.ok(argumentsList[4].includes("MeasureString($line, $script:font"));
+    assert.ok(argumentsList[4].includes("System.Drawing.Text.PrivateFontCollection"));
+    assert.ok(argumentsList[4].includes("RobotoCondensed-Light.ttf"));
+    assert.ok(argumentsList[4].includes("RobotoCondensed-Bold.ttf"));
+    assert.ok(argumentsList[4].includes("Cinzel-Bold.ttf"));
+    assert.ok(argumentsList[4].includes("BodoniModa-Regular.ttf"));
+    assert.ok(argumentsList[4].includes("New-ReceiptTextMetrics"));
+    assert.ok(argumentsList[4].includes("Draw-ReceiptTextMetrics"));
+    assert.ok(argumentsList[4].includes("$format.Alignment = [System.Drawing.StringAlignment]::Near"));
+    assert.ok(argumentsList[4].includes("MeasureString($segment.Text, $font)"));
     assert.ok(argumentsList[4].includes("$script:interpretAlignmentTags = $false"));
     assert.ok(!argumentsList[4].includes("$maxCharacters"));
     assert.ok(!argumentsList[4].includes("$line.Substring($offset, $length)"));
@@ -87,24 +95,58 @@ test("Windows print job rejects spooler errors and success without confirmation"
   }
 });
 
-test("Windows receipt jobs interpret only alignment markers", async () => {
+test("Windows receipt jobs render final-receipt logo, QR, and aligned amount rows", async () => {
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "dragonfly-print-test-"));
   let script;
+  let qrImagePrepared = false;
+  let logoImagePrepared = false;
   try {
-    await submitWindowsPrintJob("[CENTER]Title\n[RIGHT]Total: RM 5.00\n", "USB Printer", "receipt.txt", {
-      interpretAlignmentTags: true,
-      tempDirectory,
-      spawnProcess: (_executable, args) => {
-        script = args[4];
-        return createChildProcess(0, "DRAGONFLY_PRINT_JOB_SUBMITTED\r\n");
+    await submitWindowsPrintJob(
+      "[LOGO]\n[BRAND]BP DRAGONFLY GARDEN\n[BOLD][CENTER]NEW ORDER\n[THIN_RULE]\n[ROW]TOTAL\tRM 5.00\n[TOTAL][ROW]TOTAL DUE\tRM 5.00\n[THICK_RULE]\n[QRCODE]https://www.facebook.com/BPDragonflyGarden/\n",
+      "USB Printer",
+      "receipt.txt",
+      {
+        interpretAlignmentTags: true,
+        tempDirectory,
+        spawnProcess: (_executable, args) => {
+          script = args[4];
+          const imageFiles = fs.readdirSync(tempDirectory).filter(file => file.endsWith(".png"));
+          qrImagePrepared = imageFiles.some(file => file.startsWith("dragonfly-qr-"));
+          logoImagePrepared = imageFiles.some(file => file.startsWith("dragonfly-logo-"));
+          return createChildProcess(0, "DRAGONFLY_PRINT_JOB_SUBMITTED\r\n");
+        }
       }
-    });
+    );
 
     assert.ok(script.includes("$script:interpretAlignmentTags = $true"));
     assert.ok(script.includes("$line.StartsWith('[CENTER]')"));
     assert.ok(script.includes("$line.StartsWith('[RIGHT]')"));
+    assert.ok(script.includes("$line.StartsWith('[LOGO]')"));
+    assert.ok(script.includes("$line.StartsWith('[BRAND]')"));
+    assert.ok(script.includes("$line.StartsWith('[THIN_RULE]')"));
+    assert.ok(script.includes("$line.StartsWith('[THICK_RULE]')"));
+    assert.ok(script.includes("$line.StartsWith('[ROW]')"));
+    assert.ok(script.includes("$line.StartsWith('[TOTAL]')"));
+    assert.ok(script.includes("$line.StartsWith('[QRCODE]')"));
+    assert.ok(script.includes("$line.Trim() -ieq 'BP DRAGONFLY GARDEN'"));
     assert.ok(script.includes("System.Drawing.StringAlignment]::Center"));
     assert.ok(script.includes("System.Drawing.StringAlignment]::Far"));
+    assert.ok(script.includes("System.Drawing.FontStyle]::Bold"));
+    assert.ok(script.includes("$eventArgs.Graphics.DrawImage($logo, $logoBounds, 0, 0"));
+    assert.ok(script.includes("System.Drawing.Imaging.ColorMatrix"));
+    assert.ok(script.includes("$logoAttributes.SetColorMatrix($colorMatrix)"));
+    assert.ok(script.includes("$logoBounds = [System.Drawing.Rectangle]::new"));
+    assert.ok(script.includes("$eventArgs.Graphics.DrawLine($pen"));
+    assert.ok(script.includes("$logoPath = '"));
+    assert.ok(script.includes("$line.IndexOf([char]9)"));
+    assert.ok(script.includes("$eventArgs.Graphics.DrawImage($qrImage, $qrBounds)"));
+    assert.ok(script.includes("InterpolationMode]::NearestNeighbor"));
+    assert.ok(script.includes("InterpolationMode]::HighQualityBicubic"));
+    assert.ok(script.includes("$contentX = [single]$margins.Left"));
+    assert.ok(script.includes("$contentY = [single]$margins.Top"));
+    assert.ok(qrImagePrepared);
+    assert.ok(logoImagePrepared);
+    assert.deepEqual(fs.readdirSync(tempDirectory), []);
   } finally {
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   }

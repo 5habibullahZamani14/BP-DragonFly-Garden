@@ -22,6 +22,7 @@
  */
 
 import { useTranslation } from "react-i18next";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,15 +64,6 @@ export const LogsTab = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(50);
 
-  const TIMESTAMP_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  };
-
   const parseTimestamp = (raw?: string | null) => {
     if (!raw) return null;
     const value = String(raw).trim();
@@ -89,7 +81,7 @@ export const LogsTab = () => {
   const formatTimestamp = (raw?: string | null) => {
     const date = parseTimestamp(raw);
     if (!date) return "—";
-    return date.toLocaleString('en-MY', TIMESTAMP_FORMAT_OPTIONS);
+    return formatDateTime12Hour(date, true);
   };
 
   const formatAction = (action: string) => {

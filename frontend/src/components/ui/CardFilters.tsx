@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateInputPicker } from "@/components/ui/DateInputPicker";
 import type { TimeframeValue } from "@/lib/parseDbTimestamp";
 
 type SelectOption = { value: string; label: string };
@@ -117,18 +117,20 @@ export const CardFilters: React.FC<CardFiltersProps> = ({
 
         {timeframe === "custom" && onStartDateChange && onEndDateChange && (
           <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-            <Input
-              type="date"
-              className="h-8 text-xs bg-white rounded-lg border-gray-200 w-[120px]"
+            <DateInputPicker
+              label={t("m.startDate")}
+              className="w-[150px]"
+              inputClassName="h-8 px-2 pr-9 text-[11px] bg-white rounded-lg border-gray-200"
               value={startDate}
-              onChange={(e) => onStartDateChange(e.target.value)}
+              onChange={onStartDateChange}
             />
             <span className="text-[10px] text-gray-400">{t("ui.dateRangeTo")}</span>
-            <Input
-              type="date"
-              className="h-8 text-xs bg-white rounded-lg border-gray-200 w-[120px]"
+            <DateInputPicker
+              label={t("m.endDate")}
+              className="w-[150px]"
+              inputClassName="h-8 px-2 pr-9 text-[11px] bg-white rounded-lg border-gray-200"
               value={endDate}
-              onChange={(e) => onEndDateChange(e.target.value)}
+              onChange={onEndDateChange}
             />
           </div>
         )}

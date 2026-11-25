@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TimeInput12Hour } from "@/components/ui/TimeInput12Hour";
 import { createCounterOrder, fetchTables, type OrderType, type TableRecord } from "@/lib/api";
 import type { MenuItem, Order } from "@/lib/api";
 import type { ItemOption } from "@/lib/menu-data";
@@ -331,7 +332,18 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                       {orderType === "PICKUP" && (
                         <div className="space-y-2 col-span-2">
                           <Label className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {t("pos.collectionTime")}</Label>
-                          <Input type="time" value={collectionTime} onChange={e => setCollectionTime(e.target.value)} />
+                          <TimeInput12Hour
+                            label={t("pos.collectionTime")}
+                            value={collectionTime}
+                            onChange={setCollectionTime}
+                            hourLabel={t("m.scheduleHour")}
+                            minuteLabel={t("m.scheduleMinute")}
+                            cancelLabel={t("m.cancel")}
+                            confirmLabel={t("m.timePickerConfirm")}
+                            description={t("m.timePickerDescription")}
+                            keyboardModeLabel={t("m.timePickerKeyboard")}
+                            clockModeLabel={t("m.timePickerClock")}
+                          />
                         </div>
                       )}
                       {orderType === "DELIVERY" && (

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Search, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
+import { DateInputPicker } from "@/components/ui/DateInputPicker";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +42,7 @@ const FILTER_LABELS: Record<string, string> = {
 const formatDate = (value: string | null) => {
   if (!value) return "—";
   const parsed = new Date(value.replace(" ", "T"));
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  return Number.isNaN(parsed.getTime()) ? value : formatDateTime12Hour(parsed);
 };
 
 export const DataCleanupTab = () => {
@@ -293,11 +295,21 @@ export const DataCleanupTab = () => {
           <>
             <div className="space-y-1.5">
               <Label htmlFor="cleanup-from">{t("m.dataCleanup.from")}</Label>
-              <Input id="cleanup-from" type="date" value={filters.from || ""} onChange={(event) => updateFilter("from", event.target.value)} />
+              <DateInputPicker
+                id="cleanup-from"
+                label={t("m.dataCleanup.from")}
+                value={filters.from || ""}
+                onChange={(value) => updateFilter("from", value)}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cleanup-to">{t("m.dataCleanup.to")}</Label>
-              <Input id="cleanup-to" type="date" value={filters.to || ""} onChange={(event) => updateFilter("to", event.target.value)} />
+              <DateInputPicker
+                id="cleanup-to"
+                label={t("m.dataCleanup.to")}
+                value={filters.to || ""}
+                onChange={(value) => updateFilter("to", value)}
+              />
             </div>
           </>
         )}

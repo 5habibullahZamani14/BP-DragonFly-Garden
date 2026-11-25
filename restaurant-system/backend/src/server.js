@@ -583,7 +583,7 @@ const startServer = async () => {
           }
         };
 
-        console.log(`Daily archive scheduled for ${nextRun.toLocaleString()}`);
+        console.log(`Daily archive scheduled for ${nextRun.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`);
         scheduledTasks.archiveTimeout = setTimeout(() => {
           if (scheduledTasks.shuttingDown) return;
           trackScheduledTask(runArchive);
@@ -611,7 +611,7 @@ const startServer = async () => {
           }
         };
 
-        console.log(`Cloud backup scheduled for ${nextRun.toLocaleString()}`);
+        console.log(`Cloud backup scheduled for ${nextRun.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}`);
         scheduledTasks.cloudBackupTimeout = setTimeout(() => {
           if (scheduledTasks.shuttingDown) return;
           trackScheduledTask(runCloudBackup);

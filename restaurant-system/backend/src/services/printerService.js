@@ -10,11 +10,16 @@ const db = require("../database/db");
 const { withCircuitBreaker } = require("./circuitBreaker");
 const { submitWindowsPrintJob } = require("./windowsPrintJob");
 const { normalizeReceiptCopyCounts } = require("./receiptCopies");
-const { RECEIPT_LAYOUT } = require("./receiptLayout");
+const { RECEIPT_LAYOUT, RESTAURANT_FACEBOOK_URL } = require("./receiptLayout");
 
 const DEFAULT_PRINTER_COLUMNS = RECEIPT_LAYOUT.columns;
-const TICKET_RULE = "-".repeat(DEFAULT_PRINTER_COLUMNS);
-const TICKET_TOTAL_RULE = "=".repeat(DEFAULT_PRINTER_COLUMNS);
+const formatBrandHeader = (includeLogo = false, includeSeparator = true) => [
+  ...(includeLogo ? ["[LOGO]"] : []),
+  "[BRAND]BP DRAGONFLY GARDEN",
+  "[CENTER]Solok Pondok Upih, Taman Kristal",
+  "[CENTER]11020 Balik Pulau, Pulau Pinang",
+  ...(includeSeparator ? ["[THICK_RULE]"] : [])
+].join("\n");
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
   "PRINTER TEST",
@@ -87,10 +92,26 @@ const formatDateTime = (date) => {
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
-  const hours = String(date.getHours()).padStart(2, '0');
+  const hour = date.getHours();
+  const hours = String(hour % 12 || 12).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${day}/${month}/${year} ${hours}:${minutes}`;
+  const meridiem = hour < 12 ? "AM" : "PM";
+  return `${day}/${month}/${year} ${hours}:${minutes} ${meridiem}`;
 };
+
+const formatStoredTime = (value) => {
+  const match = typeof value === 'string' && value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return value;
+  const hour24 = Number(match[1]);
+  const hour12 = String(hour24 % 12 || 12).padStart(2, '0');
+  return `${hour12}:${match[2]} ${hour24 < 12 ? 'AM' : 'PM'}`;
+};
+
+const compactTicket = ticket =>
+  ticket
+    .split(/\r?\n/)
+    .filter(line => line.trim().length > 0)
+    .join("\n");
 
 const formatTableNumber = (tableNumber) => {
   if (!tableNumber) return "";
@@ -107,14 +128,39 @@ const formatTableNumber = (tableNumber) => {
 /* CUPS accepts plain text; translate alignment markers without wrapping or styling. */
 const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
   return ticket
-    .split('\n')
-    .map(line => {
+    .split(/\r?\n/)
+    .map(sourceLine => {
       let alignment = "left";
       let isSquare = false;
-      let cleanLine = line;
+      let isRow = false;
+      let skipLine = false;
+      let cleanLine = sourceLine;
 
       while (cleanLine.startsWith("[")) {
-        if (cleanLine.startsWith("[H1]")) {
+        if (cleanLine.startsWith("[LOGO]")) {
+          skipLine = true;
+          break;
+        } else if (cleanLine.startsWith("[QRCODE]")) {
+          skipLine = true;
+          break;
+        } else if (cleanLine.startsWith("[THIN_RULE]")) {
+          alignment = "center";
+          cleanLine = "-".repeat(width);
+        } else if (cleanLine.startsWith("[THICK_RULE]")) {
+          alignment = "center";
+          cleanLine = "=".repeat(width);
+        } else if (cleanLine.startsWith("[SPACER]")) {
+          skipLine = true;
+          break;
+        } else if (cleanLine.startsWith("[BRAND]")) {
+          alignment = "center";
+          cleanLine = cleanLine.substring(7).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[ROW]")) {
+          isRow = true;
+          cleanLine = cleanLine.substring(5).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[TOTAL]")) {
+          cleanLine = cleanLine.substring(7).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[H1]")) {
           cleanLine = cleanLine.substring(4).replace(/^\s+/, "");
         } else if (cleanLine.startsWith("[BOLD]")) {
           cleanLine = cleanLine.substring(6).replace(/^\s+/, "");
@@ -139,11 +185,20 @@ const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
         cleanLine = "[ ] " + cleanLine;
       }
 
+      if (skipLine) return null;
+      if (isRow && cleanLine.includes("\t")) {
+        const [label, amount = ""] = cleanLine.split("\t", 2);
+        const availableLabelWidth = width - amount.length - 1;
+        const visibleLabel = label.slice(0, Math.max(0, availableLabelWidth));
+        cleanLine = `${visibleLabel}${" ".repeat(Math.max(1, width - visibleLabel.length - amount.length))}${amount}`;
+      }
+
       if (cleanLine.length > width) return cleanLine;
       if (alignment === "center") return centerText(cleanLine, width);
       if (alignment === "right") return cleanLine.padStart(width, ' ');
       return cleanLine;
     })
+    .filter(line => line !== null)
     .join('\n');
 };
 
@@ -321,15 +376,12 @@ const formatDailySalesReport = (todayOrders, now = new Date(), reportDate = null
   const reportDateObj = reportDate instanceof Date ? reportDate : now;
   const todayDateStr = reportDateObj.toLocaleDateString('en-GB');
 
-  let ticket = "";
-  ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
-  ticket += "[CENTER]DAILY SALES REPORT\n";
-  ticket += "[CENTER]END-OF-DAY SUMMARY\n";
-  ticket += `${TICKET_RULE}\n`;
+  let ticket = `${formatBrandHeader()}\n`;
+  ticket += "[BOLD][CENTER]DAILY SALES REPORT\n";
+  ticket += "[THIN_RULE]\n";
   ticket += `DATE: ${todayDateStr}\n`;
   ticket += `PRINTED: ${timestamp}\n`;
-  ticket += `${TICKET_RULE}\n`;
-  ticket += "SALES BY ORDER\n";
+  ticket += "[THIN_RULE]\n";
 
   let totalSales = 0;
   if (todayOrders.length === 0) {
@@ -340,17 +392,15 @@ const formatDailySalesReport = (todayOrders, now = new Date(), reportDate = null
     const price = Number(order.total_price || 0);
     totalSales += price;
 
-    if (index > 0) ticket += "\n";
-    ticket += `ORDER #${orderNum}\n`;
-    ticket += `[RIGHT]SALES: RM ${price.toFixed(2)}\n`;
+    ticket += `[ROW]ORDER #${orderNum}\tRM ${price.toFixed(2)}\n`;
   });
 
-  ticket += `${TICKET_RULE}\n`;
+  ticket += "[THIN_RULE]\n";
   ticket += `ORDERS RECORDED: ${todayOrders.length}\n`;
-  ticket += `${TICKET_TOTAL_RULE}\n`;
-  ticket += `[RIGHT]TOTAL SALES: RM ${totalSales.toFixed(2)}\n`;
-  ticket += `${TICKET_TOTAL_RULE}\n`;
-  return ticket;
+  ticket += "[THICK_RULE]\n";
+  ticket += `[TOTAL][ROW]TOTAL SALES\tRM ${totalSales.toFixed(2)}\n`;
+  ticket += "[THICK_RULE]\n";
+  return compactTicket(ticket);
 };
 
 const SAMPLE_ORDER_ITEMS = [
@@ -405,12 +455,11 @@ const printerService = {
     else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON ORDER (COUNTER)" : "COUNTER ORDER";
     else if (isAddOn) orderTypeStr = "ADD-ON ORDER";
 
-    ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
-    ticket += `[CENTER]${orderTypeStr}\n`;
+    ticket += `${formatBrandHeader()}\n`;
+    ticket += `[BOLD][CENTER]${orderTypeStr}\n`;
     if (copyTitle) ticket += `[CENTER]${copyTitle}\n`;
-    ticket += `${TICKET_RULE}\n`;
-    ticket += "ORDER DETAILS\n";
-    ticket += `ORDER: #${order.daily_ticket_number || order.id}\n`;
+    ticket += "[THIN_RULE]\n";
+    ticket += `[BOLD]ORDER: #${order.daily_ticket_number || order.id}\n`;
     ticket += `TIME: ${timestamp}\n`;
     ticket += "PLACED BY: Cashier\n";
 
@@ -423,12 +472,11 @@ const printerService = {
       }
       if (order.customer_name) ticket += `CUSTOMER: ${order.customer_name}\n`;
       if (order.customer_phone) ticket += `PHONE: ${order.customer_phone}\n`;
-      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${order.collection_time}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${formatStoredTime(order.collection_time)}\n`;
       if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `DELIVER TO: ${order.delivery_address}\n`;
     }
 
-    ticket += `${TICKET_RULE}\n`;
-    ticket += isAddOn ? "ADDED ITEMS\n" : "ITEMS TO PREPARE\n";
+    ticket += "[THIN_RULE]\n";
     itemsToPrint.forEach(item => {
       ticket += `${item.quantity} x ${item.item_name || ""}\n`;
       if (item.notes) ticket += `  Note: ${item.notes}\n`;
@@ -436,33 +484,29 @@ const printerService = {
         const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
         ticket += `  Option: ${option.option}${suffix}\n`;
       }
-      ticket += "\n";
     });
 
-    ticket += `${TICKET_RULE}\n`;
-    ticket += copyTitle === "KITCHEN COPY"
-      ? isAddOn ? "Please add these items to the existing\norder.\n" : "Please prepare the items listed above.\n"
-      : isAddOn ? "These items have been added to your order.\n" : "Thank you! Your order is being prepared.\n";
-    return ticket;
+    ticket += "[THIN_RULE]\n";
+    if (copyTitle !== "KITCHEN COPY") {
+      ticket += isAddOn ? "These items have been added to your order.\n" : "Thank you! Your order is being prepared.\n";
+    }
+    return compactTicket(ticket);
   },
 
   formatFinalReceipt: (order, cashierName) => {
     const timestamp = formatDateTime(new Date());
     let ticket = "";
 
-    ticket += `[CENTER]BP DRAGONFLY GARDEN\n`;
-    ticket += `[CENTER]Solok Pondok Upih, Taman Kristal\n`;
-    ticket += `[CENTER]11020 Balik Pulau, Pulau Pinang\n`;
-    ticket += `[CENTER]FINAL RECEIPT\n`;
-    ticket += `${TICKET_RULE}\n`;
+    ticket += `${formatBrandHeader(true, false)}\n`;
+    ticket += "[CENTER]CONTACT: 017-488 2220\n";
+    ticket += "[THICK_RULE]\n";
 
-    ticket += "ORDER DETAILS\n";
-    ticket += `RECEIPT: ${order.id}\n`;
+    ticket += `[BOLD]RECEIPT: ${order.id}\n`;
     ticket += `ORDER: #${order.daily_ticket_number || order.id}\n`;
     ticket += `DATE: ${timestamp}\n`;
     ticket += `CASHIER: ${cashierName}\n`;
     if (!order.order_type || order.order_type === 'DINE_IN') {
-      ticket += `${formatTableNumber(order.table_number).toUpperCase()}\n`;
+      ticket += `[BOLD]${formatTableNumber(order.table_number).toUpperCase()}\n`;
     } else {
       ticket += `ORDER TYPE: ${order.order_type.replace(/_/g, " ")}\n`;
       if (order.order_type === 'COUNTER' && order.table_id !== 999 && order.table_number && order.table_number !== 'Counter Order') {
@@ -470,26 +514,24 @@ const printerService = {
       }
       if (order.customer_name) ticket += `CUSTOMER: ${order.customer_name}\n`;
       if (order.order_type === 'DELIVERY' && order.delivery_address) ticket += `DELIVER TO: ${order.delivery_address}\n`;
-      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${order.collection_time}\n`;
+      if (order.order_type === 'PICKUP' && order.collection_time) ticket += `PICKUP TIME: ${formatStoredTime(order.collection_time)}\n`;
     }
 
-    ticket += `${TICKET_RULE}\n`;
-    ticket += "ITEMS\n";
+    ticket += "[THIN_RULE]\n";
+    ticket += "[BOLD]ITEMS\n";
     let totalQty = 0;
 
     order.items.forEach(item => {
       totalQty += item.quantity;
-      ticket += `${item.quantity} x ${item.item_name || ""}\n`;
+      ticket += `[ROW]${item.quantity} x ${item.item_name || ""}\tRM ${(item.quantity * item.price_at_order_time).toFixed(2)}\n`;
       for (const option of parseItemOptions(item)) {
         const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
         ticket += `  OPTION: ${option.option}${suffix}\n`;
       }
       if (item.notes) ticket += `  NOTE: ${item.notes}\n`;
-      ticket += `[RIGHT]RM ${(item.quantity * item.price_at_order_time).toFixed(2)}\n`;
-      ticket += "\n";
     });
 
-    ticket += `${TICKET_RULE}\n`;
+    ticket += "[THIN_RULE]\n";
     ticket += `ITEMS: ${totalQty}\n`;
 
     const subtotal = Number(order.total_price || 0);
@@ -498,24 +540,32 @@ const printerService = {
     const serviceCharge = subtotal * serviceChargeRate;
     const sst = (subtotal + serviceCharge) * vatRate;
     const rawTotal = subtotal + sst + serviceCharge;
-    const roundedTotal = Math.round(rawTotal * 20) / 20;
-    const rounding = roundedTotal - rawTotal;
+    const subtotalCents = Math.round(subtotal * 100);
+    const serviceChargeCents = Math.round(serviceCharge * 100);
+    const rawTotalCents = Math.round(rawTotal * 100);
+    const sstCents = rawTotalCents - subtotalCents - serviceChargeCents;
+    const roundedTotalCents = Math.round(rawTotalCents / 5) * 5;
+    const roundingCents = roundedTotalCents - rawTotalCents;
 
-    ticket += `[RIGHT]SUBTOTAL: RM ${subtotal.toFixed(2)}\n`;
+    ticket += `[ROW]SUBTOTAL\tRM ${(subtotalCents / 100).toFixed(2)}\n`;
     if (serviceChargeRate > 0) {
-      ticket += `[RIGHT]SERVICE CHARGE: RM ${serviceCharge.toFixed(2)}\n`;
+      ticket += `[ROW]SERVICE CHARGE\tRM ${(serviceChargeCents / 100).toFixed(2)}\n`;
     }
     if (vatRate > 0) {
-      ticket += `[RIGHT]SST: RM ${sst.toFixed(2)}\n`;
+      ticket += `[ROW]SST\tRM ${(sstCents / 100).toFixed(2)}\n`;
     }
-    ticket += `[RIGHT]ROUNDING: RM ${rounding.toFixed(2)}\n`;
-    ticket += `${TICKET_TOTAL_RULE}\n`;
-    ticket += `[RIGHT]TOTAL DUE: RM ${roundedTotal.toFixed(2)}\n`;
-    ticket += `${TICKET_TOTAL_RULE}\n`;
+    ticket += `[ROW]ROUNDING\tRM ${(roundingCents / 100).toFixed(2)}\n`;
+    ticket += "[THICK_RULE]\n";
+    ticket += `[TOTAL][ROW]TOTAL DUE\tRM ${(roundedTotalCents / 100).toFixed(2)}\n`;
+    ticket += "[THICK_RULE]\n";
     ticket += "[CENTER]THANK YOU FOR DINING WITH US\n";
     ticket += "[CENTER]We hope to see you again!\n";
+    ticket += "[THIN_RULE]\n";
+    ticket += "[BOLD][CENTER]FOLLOW US ON FACEBOOK\n";
+    ticket += `[QRCODE]${RESTAURANT_FACEBOOK_URL}\n`;
+    ticket += "[CENTER]facebook.com/BPDragonflyGarden\n";
 
-    return ticket;
+    return compactTicket(ticket);
   },
 
   printChecklistTicket: async (order, itemsToPrint, isAddOn, copyNum) => {

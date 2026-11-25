@@ -23,6 +23,7 @@ import {
   type CustomerFeedback,
   type Order,
 } from "@/lib/api";
+import { formatDateTime12Hour } from "@/lib/timeFormat";
 
 type Notify = (kind: "success" | "error", text: string) => void;
 
@@ -405,7 +406,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
                   className="rounded-2xl border border-border/50 bg-background/80 p-3 cursor-pointer hover:bg-muted/30 transition text-left"
                 >
                   <p className="text-xs text-foreground/45">
-                    {new Date(fb.created_at).toLocaleString()}
+                    {formatDateTime12Hour(fb.created_at)}
                   </p>
                   <p className="mt-1 text-sm line-clamp-3">{fb.comment}</p>
                   {fb.manager_response && (
@@ -433,7 +434,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
                   {t("customer.feedback.submittedDetails")}
                 </DialogDescription>
                 <p className="text-xs text-foreground/50">
-                  {new Date(selectedSub.created_at).toLocaleString()}
+                  {formatDateTime12Hour(selectedSub.created_at)}
                 </p>
               </DialogHeader>
 

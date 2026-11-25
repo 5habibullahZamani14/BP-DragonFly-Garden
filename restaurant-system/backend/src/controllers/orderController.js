@@ -320,7 +320,7 @@ const createOrder = async (orderData) => {
 
     /* Automatically log this crucial order event in the Grand Archive */
     const dayOfWeek = new Date().toLocaleDateString('en-MY', { weekday: 'long' });
-    const timeOfDay = new Date().toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
+    const timeOfDay = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     const itemNames = items.map(item => {
       const mi = menuItemMap.get(item.menu_item_id);
       const isDrink = mi.category?.toLowerCase() === 'drinks' || mi.category?.toLowerCase() === 'drink';
