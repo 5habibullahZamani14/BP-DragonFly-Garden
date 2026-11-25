@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   fetchPatterns, createPattern, updatePattern, deletePattern,
   updateMenuItem, fetchMenu, updateSetting,
@@ -29,6 +30,7 @@ interface PatternEditorProps {
 }
 
 function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(pattern.name);
   const [opacity, setOpacity] = useState(pattern.opacity ?? 0.4);
   const [zoom, setZoom] = useState(pattern.zoom ?? 1.0);
@@ -53,7 +55,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
   };
 
   const fadeDirections: { value: FadeDirection; icon: LucideIcon; label: string }[] = [
-    { value: 'none', icon: X, label: 'None' },
+    { value: 'none', icon: X, label: t("m.pattern.none") },
     { value: 'right-to-left', icon: ArrowRight, label: '→' },
     { value: 'left-to-right', icon: ArrowLeft, label: '←' },
     { value: 'top-to-bottom', icon: ArrowDown, label: '↓' },
@@ -63,7 +65,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
   return (
     <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
       <div className="grid gap-1">
-        <Label>Pattern Name</Label>
+        <Label>{t("m.pattern.name")}</Label>
         <Input value={name} onChange={e => setName(e.target.value)} className="px-4" />
       </div>
 
@@ -71,11 +73,11 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
       <div className="grid grid-cols-2 gap-3">
         {/* Live Preview - Left 50% */}
         <div className="grid gap-1">
-          <Label>Live Preview</Label>
+          <Label>{t("m.pattern.livePreview")}</Label>
           <div className="relative h-28 w-full bg-gray-100 rounded-lg overflow-hidden border">
             <img
               src={pattern.image_url}
-              alt="Pattern preview"
+              alt={t("m.pattern.previewAlt")}
               className="w-full h-full object-cover"
               style={{
                 opacity,
@@ -102,12 +104,12 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
         {/* Opacity and Zoom - Right 50% */}
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <Label>Opacity ({Math.round(opacity * 100)}%)</Label>
+            <Label>{t("m.pattern.opacity", { percent: Math.round(opacity * 100) })}</Label>
             <Input type="range" min="0" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} />
           </div>
 
           <div className="grid gap-1">
-            <Label>Zoom ({zoom.toFixed(1)}x)</Label>
+            <Label>{t("m.pattern.zoom", { zoom: zoom.toFixed(1) })}</Label>
             <div className="flex gap-1 items-center">
               <Button size="sm" variant="outline" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} className="px-2"><ZoomIn className="h-3 w-3" /></Button>
               <Input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={e => setZoom(parseFloat(e.target.value))} className="flex-1" />
@@ -119,7 +121,7 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="grid gap-1">
-          <Label>Rotation ({rotation}°)</Label>
+          <Label>{t("m.pattern.rotation", { degrees: rotation })}</Label>
           <div className="flex gap-1 items-center">
             <Button size="sm" variant="outline" onClick={() => setRotation(rotation - 90)} className="px-2"><RotateCw className="h-3 w-3" /></Button>
             <Input type="range" min="0" max="360" step="15" value={rotation} onChange={e => setRotation(parseFloat(e.target.value))} className="flex-1" />
@@ -128,20 +130,20 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
         </div>
 
         <div className="grid gap-1">
-          <Label>Flip</Label>
+          <Label>{t("m.flip")}</Label>
           <div className="flex gap-2">
             <Button size="sm" variant={flipHorizontal ? "default" : "outline"} onClick={() => setFlipHorizontal(!flipHorizontal)} className="flex-1">
-              <FlipHorizontal className="h-3 w-3 mr-1" /> H
+              <FlipHorizontal className="h-3 w-3 mr-1" /> {t("m.pattern.horizontal")}
             </Button>
             <Button size="sm" variant={flipVertical ? "default" : "outline"} onClick={() => setFlipVertical(!flipVertical)} className="flex-1">
-              <FlipHorizontal className="h-3 w-3 mr-1 rotate-90" /> V
+              <FlipHorizontal className="h-3 w-3 mr-1 rotate-90" /> {t("m.pattern.vertical")}
             </Button>
           </div>
         </div>
       </div>
 
       <div className="grid gap-1">
-        <Label>Fade Direction</Label>
+        <Label>{t("m.pattern.fadeDirection")}</Label>
         <div className="flex gap-2">
           {fadeDirections.map(dir => (
             <button
@@ -162,20 +164,21 @@ function PatternEditor({ pattern, onSave, onCancel }: PatternEditorProps) {
 
       {fadeDirection !== 'none' && (
         <div className="grid gap-1">
-          <Label>Fade Intensity ({Math.round(fadeIntensity * 100)}%)</Label>
+          <Label>{t("m.pattern.fadeIntensity", { percent: Math.round(fadeIntensity * 100) })}</Label>
           <Input type="range" min="0" max="1" step="0.1" value={fadeIntensity} onChange={e => setFadeIntensity(parseFloat(e.target.value))} />
         </div>
       )}
 
       <div className="flex gap-2 pt-2">
-        <Button onClick={handleSave} className="flex-1"><Check className="h-4 w-4 mr-2" /> Save</Button>
-        <Button variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
+        <Button onClick={handleSave} className="flex-1"><Check className="h-4 w-4 mr-2" /> {t("m.save")}</Button>
+        <Button variant="outline" onClick={onCancel} className="flex-1">{t("m.cancel")}</Button>
       </div>
     </div>
   );
 }
 
 export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: number }) {
+  const { t } = useTranslation();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [loading, setLoading] = useState(true);
   const hasLoadedPatternsRef = useRef(false);
@@ -204,7 +207,7 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       setPatterns(data || []);
       hasLoadedPatternsRef.current = true;
     } catch {
-      toast.error("Failed to load patterns");
+      toast.error(t("m.pattern.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -229,14 +232,14 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
 
   const handleUploadPattern = async () => {
     if (!imageSrc || !newPatternName.trim()) {
-      toast.error("Please provide a name and image");
+      toast.error(t("m.pattern.nameAndImageRequired"));
       return;
     }
 
     try {
       const canvas = cropperRef.current?.cropper.getCroppedCanvas();
       if (!canvas) {
-        toast.error("Failed to process image");
+        toast.error(t("m.pattern.processImageFailed"));
         return;
       }
 
@@ -244,7 +247,7 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
         if (blob) {
           const result = await createPattern(blob, newPatternName.trim());
           if (result?.pattern) {
-            toast.success("Pattern uploaded successfully");
+            toast.success(t("m.pattern.uploaded"));
             setUploadDialogOpen(false);
             setImageSrc(null);
             setNewPatternName("");
@@ -253,7 +256,7 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
         }
       }, "image/jpeg", 0.9);
     } catch {
-      toast.error("Failed to upload pattern");
+      toast.error(t("m.pattern.uploadFailed"));
     }
   };
 
@@ -265,11 +268,11 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
   const handleSavePattern = async (updatedPattern: Pattern) => {
     try {
       await updatePattern(updatedPattern.id, updatedPattern);
-      toast.success("Pattern updated successfully");
+      toast.success(t("m.pattern.updated"));
       setIsEditorOpen(false);
       loadPatterns();
     } catch {
-      toast.error("Failed to update pattern");
+      toast.error(t("m.pattern.updateFailed"));
     }
   };
 
@@ -282,10 +285,10 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
     if (patternToDelete === null) return;
     try {
       await deletePattern(patternToDelete);
-      toast.success("Pattern deleted successfully");
+      toast.success(t("m.pattern.deleted"));
       loadPatterns();
     } catch {
-      toast.error("Failed to delete pattern");
+      toast.error(t("m.pattern.deleteFailed"));
     } finally {
       setDeleteConfirmOpen(false);
       setPatternToDelete(null);
@@ -303,9 +306,9 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       await Promise.all(menuItems.map(item =>
         updateMenuItem(item.id, { pattern_id: patternToApplyAll })
       ));
-      toast.success("Pattern applied to all items");
+      toast.success(t("m.pattern.appliedToAll"));
     } catch {
-      toast.error("Failed to apply pattern to all items");
+      toast.error(t("m.pattern.applyToAllFailed"));
     } finally {
       setApplyAllConfirmOpen(false);
       setPatternToApplyAll(null);
@@ -315,9 +318,9 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
   const handleSetAsDefault = async (patternId: number) => {
     try {
       await updateSetting("default_pattern_id", patternId);
-      toast.success("Default pattern set successfully");
+      toast.success(t("m.pattern.defaultSet"));
     } catch {
-      toast.error("Failed to set default pattern");
+      toast.error(t("m.pattern.defaultSetFailed"));
     }
   };
 
@@ -341,11 +344,11 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Pattern Repository</h2>
-          <p className="text-sm text-muted-foreground">Upload, edit, and manage pattern overlays for menu cards</p>
+          <h2 className="text-2xl font-bold">{t("m.pattern.title")}</h2>
+          <p className="text-sm text-muted-foreground">{t("m.pattern.description")}</p>
         </div>
         <Button onClick={() => setUploadDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Upload Pattern
+          <Plus className="h-4 w-4 mr-2" /> {t("m.pattern.upload")}
         </Button>
       </div>
 
@@ -367,13 +370,13 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
               <h3 className="font-semibold mb-2">{pattern.name}</h3>
               <div className="flex gap-2 flex-wrap">
                 <Button size="sm" variant="outline" onClick={() => handleEditPattern(pattern)}>
-                  <Edit2 className="h-3 w-3 mr-1" /> Edit
+                  <Edit2 className="h-3 w-3 mr-1" /> {t("m.edit")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleApplyToAll(pattern.id)}>
-                  <Settings2 className="h-3 w-3 mr-1" /> Apply All
+                  <Settings2 className="h-3 w-3 mr-1" /> {t("m.pattern.applyAll")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleSetAsDefault(pattern.id)}>
-                  Default
+                  {t("m.pattern.default")}
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => handleDeletePattern(pattern.id)}>
                   <Trash2 className="h-3 w-3" />
@@ -386,9 +389,9 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
 
       {patterns.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No patterns uploaded yet.</p>
+          <p>{t("m.pattern.empty")}</p>
           <Button onClick={() => setUploadDialogOpen(true)} className="mt-4">
-            <Plus className="h-4 w-4 mr-2" /> Upload Your First Pattern
+            <Plus className="h-4 w-4 mr-2" /> {t("m.pattern.uploadFirst")}
           </Button>
         </div>
       )}
@@ -397,15 +400,15 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Upload New Pattern</DialogTitle>
+            <DialogTitle>{t("m.pattern.uploadNew")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label>Pattern Name</Label>
-              <Input value={newPatternName} onChange={e => setNewPatternName(e.target.value)} placeholder="e.g., Floral, Geometric, etc." />
+              <Label>{t("m.pattern.name")}</Label>
+              <Input value={newPatternName} onChange={e => setNewPatternName(e.target.value)} placeholder={t("m.pattern.nameExample")} />
             </div>
             <div className="grid gap-2">
-              <Label>Pattern Image</Label>
+              <Label>{t("m.pattern.image")}</Label>
               {!imageSrc ? (
                 <Input type="file" accept="image/*" onChange={handleFileChange} ref={fileInputRef} />
               ) : (
@@ -414,14 +417,14 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
                     <Cropper ref={cropperRef} src={imageSrc} style={{ height: "100%", width: "100%" }}
                       aspectRatio={NaN} guides viewMode={1} background={false} responsive checkOrientation={false} />
                   </div>
-                  <Button variant="outline" onClick={() => setImageSrc(null)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setImageSrc(null)}>{t("m.cancel")}</Button>
                 </div>
               )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleUploadPattern} disabled={!imageSrc || !newPatternName.trim()}>Upload</Button>
+            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>{t("m.cancel")}</Button>
+            <Button onClick={handleUploadPattern} disabled={!imageSrc || !newPatternName.trim()}>{t("m.pattern.upload")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -430,8 +433,8 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
         <DialogContent className="sm:max-w-[910px] max-h-[90vh] p-6">
           <DialogHeader>
-            <DialogTitle>Edit Pattern</DialogTitle>
-            <DialogDescription>Adjust the pattern overlay settings for menu cards</DialogDescription>
+            <DialogTitle>{t("m.pattern.editTitle")}</DialogTitle>
+            <DialogDescription>{t("m.pattern.editDescription")}</DialogDescription>
           </DialogHeader>
           {editingPattern && (
             <PatternEditor pattern={editingPattern} onSave={handleSavePattern} onCancel={() => setIsEditorOpen(false)} />
@@ -443,14 +446,14 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Pattern</DialogTitle>
+            <DialogTitle>{t("m.pattern.deleteTitle")}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this pattern? This action cannot be undone.
+              {t("m.pattern.deleteConfirmation")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmDeletePattern}>Delete</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>{t("m.cancel")}</Button>
+            <Button variant="destructive" onClick={confirmDeletePattern}>{t("m.delete")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -459,14 +462,14 @@ export function PatternRepositoryTab({ refreshVersion = 0 }: { refreshVersion?: 
       <Dialog open={applyAllConfirmOpen} onOpenChange={setApplyAllConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Apply Pattern to All Items</DialogTitle>
+            <DialogTitle>{t("m.pattern.applyAllTitle")}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to apply this pattern to all menu items? This will overwrite existing patterns on all items.
+              {t("m.pattern.applyAllConfirmation")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setApplyAllConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={confirmApplyToAll}>Apply</Button>
+            <Button variant="outline" onClick={() => setApplyAllConfirmOpen(false)}>{t("m.cancel")}</Button>
+            <Button onClick={confirmApplyToAll}>{t("m.apply")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

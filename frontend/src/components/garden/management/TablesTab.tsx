@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTables, createTable, updateTable, deleteTable, fetchSettings } from "@/lib/api";
 import type { TableRecord } from "@/lib/api";
 import { buildWifiQrValue } from "@/lib/hotspotQr";
-import { Grid3X3, Plus, Edit2, Trash2, Printer, Download } from "lucide-react";
+import { ArrowUpRight, Grid3X3, Plus, Edit2, Trash2, Printer, Download, Sparkles } from "lucide-react";
 import { QRCode } from "react-qrcode-logo";
 import html2canvas from "html2canvas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -31,6 +31,12 @@ import { safeConsoleError } from "@/lib/safeConsole";
 
 const QR_QUIET_ZONE = 10;
 const QR_CODE_SIZE = 256;
+const SYSTEM_TABLE_ID = 999;
+const R4M_TABLE_NAME = "R4M";
+const isR4MTable = (table: Pick<TableRecord, "table_number">) =>
+  table.table_number.trim().toUpperCase() === R4M_TABLE_NAME;
+const isSystemTable = (table: Pick<TableRecord, "id" | "table_number">) =>
+  table.id === SYSTEM_TABLE_ID || /(takeaway|counter|to[- ]?go)/i.test(table.table_number);
 
 export const TablesTab = () => {
   const { t } = useTranslation();
@@ -73,7 +79,7 @@ export const TablesTab = () => {
   const getNextTableNumber = (): { number: number; name: string } => {
     // Extract numeric table numbers from existing tables
     const existingNumbers = tables
-      .filter(t => !/(takeaway|counter|to[- ]?go)/i.test(t.table_number))
+      .filter(t => !isSystemTable(t) && !isR4MTable(t))
       .map(t => {
         const match = t.table_number.match(/\d+/);
         return match ? parseInt(match[0], 10) : null;
@@ -118,7 +124,7 @@ export const TablesTab = () => {
   };
 
   const getSortedTables = (tablesToSort: TableRecord[]) => {
-    const filtered = tablesToSort.filter(table => !/(takeaway|counter|to[- ]?go)/i.test(table.table_number));
+    const filtered = tablesToSort.filter(table => !isSystemTable(table) && !isR4MTable(table));
 
     if (sortBy === "number") {
       return filtered.sort((a, b) => {
@@ -204,6 +210,9 @@ export const TablesTab = () => {
       loadTables();
     } catch (e) {
       safeConsoleError("Table request failed", e);
+      if (e instanceof Error && e.message.includes("reserved for the system ordering route")) {
+        toast.error(t("m.systemTableNameReserved"));
+      }
     }
   };
 
@@ -215,6 +224,9 @@ export const TablesTab = () => {
       loadTables();
     } catch (e) {
       safeConsoleError("Table update failed", e);
+      if (e instanceof Error && e.message.includes("reserved for the system ordering route")) {
+        toast.error(t("m.systemTableNameReserved"));
+      }
     }
   };
 
@@ -235,6 +247,7 @@ export const TablesTab = () => {
   };
 
   const hotspotQrValue = buildWifiQrValue(hotspotSsid, hotspotPassword, hotspotSecurity);
+  const r4mTable = tables.find(isR4MTable);
 
   if (loading) return (
     <div className="space-y-6 p-6">
@@ -264,43 +277,72 @@ export const TablesTab = () => {
               className={sortBy === "number" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
               size="sm"
             >
-              Sort by Number
+              {t("m.tableSortByNumber")}
             </Button>
             <Button
               onClick={() => setSortBy("creation_order")}
               className={sortBy === "creation_order" ? "bg-white shadow-sm text-gray-800 hover:bg-white" : "bg-gray-100 hover:bg-gray-200 text-gray-600"}
               size="sm"
             >
-              Sort by Creation Order
+              {t("m.tableSortByCreationOrder")}
             </Button>
           </div>
           {!isAdding ? (
             <>
               <Button onClick={() => { setIsAdding(true); setAddMode("manual"); }} className="bg-green-600 hover:bg-green-700 text-white">
-                <Plus className="h-4 w-4 mr-2" /> Add New Table Manually
+                <Plus className="h-4 w-4 mr-2" /> {t("m.addNewTableManually")}
               </Button>
               <Button onClick={() => { setIsAdding(true); setAddMode("auto"); handleAutoTableCreate(); }} className="bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="h-4 w-4 mr-2" /> Add New Table Automatically
+                <Plus className="h-4 w-4 mr-2" /> {t("m.addNewTableAutomatically")}
               </Button>
             </>
           ) : (
             <Button onClick={() => { setIsAdding(false); setAddMode(null); setNewTable({ table_number: "" }); }} variant="outline">
-              Close
+              {t("m.close")}
             </Button>
           )}
         </div>
       </div>
 
+      {r4mTable && (
+        <div className="space-y-4">
+          <div className="r4m-rainbow rounded-2xl p-[2px] shadow-[0_0_24px_rgba(168,85,247,0.28)]">
+            <a
+              href={r4mTable.ordering_url || `/?table=${r4mTable.id}&qr=${encodeURIComponent(r4mTable.qr_code)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-4 rounded-[14px] bg-white/95 p-4 text-left transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:ring-offset-2"
+            >
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400 text-white shadow-lg">
+                <Sparkles className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black uppercase tracking-[0.2em] text-fuchsia-700">
+                  R4M · {t("m.r4m.special")}
+                </span>
+                <span className="mt-1 block text-lg font-bold text-gray-900">{t("m.r4m.title")}</span>
+                <span className="mt-1 block text-sm text-gray-600">{t("m.r4m.description")}</span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-100 px-3 py-2 text-sm font-bold text-violet-800 transition-colors group-hover:bg-violet-200">
+                {t("m.r4m.open")}
+                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+              </span>
+            </a>
+          </div>
+          <div role="separator" aria-hidden="true" className="h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent" />
+        </div>
+      )}
+
       {isAdding && addMode === "manual" && (
         <Card className="border-green-200 shadow-md">
           <CardHeader>
-            <CardTitle>Add Table Manually</CardTitle>
+            <CardTitle>{t("m.addTableManually")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>{t("m.tableName")}</Label>
-                <Input value={newTable.table_number} onChange={(e) => setNewTable({...newTable, table_number: e.target.value})} placeholder="e.g. Table 12 or VIP Lounge" />
+                <Input value={newTable.table_number} onChange={(e) => setNewTable({...newTable, table_number: e.target.value})} placeholder={t("m.tableNameExample")} />
               </div>
             </div>
             <div className="flex gap-2 pt-4">
@@ -335,7 +377,7 @@ export const TablesTab = () => {
         {getSortedTables(tables).map((table) => (
           <Card key={table.id} className="text-center hover:shadow-md transition-all border-t-4 border-t-green-500 relative group cursor-pointer" onClick={() => setViewQRCodeTable(table)}>
             <CardContent className="pt-6 pb-4">
-              {!/(takeaway|counter|to[- ]?go)/i.test(table.table_number) && (
+              {!isSystemTable(table) && (
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
@@ -378,9 +420,9 @@ export const TablesTab = () => {
       }}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Create Table Automatically</DialogTitle>
+            <DialogTitle>{t("m.createTableAutomatically")}</DialogTitle>
             <DialogDescription>
-              Please confirm the table details below
+              {t("m.confirmTableDetails")}
             </DialogDescription>
           </DialogHeader>
           {autoTableToCreate && (
@@ -388,10 +430,10 @@ export const TablesTab = () => {
               <div className="rounded-lg bg-blue-50 p-4 border border-blue-200">
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Table Name</p>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{t("m.tableName")}</p>
                     <p className="text-lg font-bold text-gray-900 mt-1">{autoTableToCreate.table_number}</p>
                   </div>
-                  <p className="text-sm text-gray-700">A secure QR credential will be generated automatically when you create this table.</p>
+                  <p className="text-sm text-gray-700">{t("m.secureQrCredentialInfo")}</p>
                 </div>
               </div>
               <div className="flex gap-2 pt-4">
@@ -399,7 +441,7 @@ export const TablesTab = () => {
                   onClick={handleConfirmAutoCreate}
                   className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
                 >
-                  Create Table
+                  {t("m.createTable")}
                 </Button>
                 <Button 
                   onClick={() => {
@@ -411,7 +453,7 @@ export const TablesTab = () => {
                   variant="outline"
                   className="flex-1"
                 >
-                  Cancel
+                  {t("m.cancel")}
                 </Button>
               </div>
             </div>
@@ -431,13 +473,12 @@ export const TablesTab = () => {
             <div className="max-h-[calc(100vh-4rem)] overflow-y-auto bg-gradient-to-b from-blue-50 to-blue-100 p-4 flex flex-col items-center justify-start">
               <DialogHeader className="w-full text-center mb-3">
                 <DialogTitle className="text-lg font-bold text-gray-900">
-                  {showHotspotQR ? "🌐 WiFi Network QR Code" : "🛒 Table Ordering QR Code"}
+                  {showHotspotQR ? t("m.wifiNetworkQrTitle") : t("m.tableOrderingQrTitle")}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-gray-600 mt-1.5">
-                  {showHotspotQR 
-                    ? `Table: ${viewQRCodeTable.table_number} • Optional network QR for hotspot access`
-                    : `Table: ${viewQRCodeTable.table_number} • This is the single QR customers scan to order`
-                  }
+                  {showHotspotQR
+                    ? t("m.hotspotQrDescription", { table: viewQRCodeTable.table_number })
+                    : t("m.orderingQrDescription", { table: viewQRCodeTable.table_number })}
                 </DialogDescription>
               </DialogHeader>
 
@@ -447,7 +488,7 @@ export const TablesTab = () => {
                 {showHotspotQR && hotspotSsid && !hotspotLoading ? (
                   <>
                     <div className="text-center mb-3">
-                      <h3 className="text-base font-bold text-gray-900">🌐 WiFi Network</h3>
+                      <h3 className="text-base font-bold text-gray-900">{t("m.wifiNetwork")}</h3>
                       <p className="text-xs text-gray-600 mt-0.5">{hotspotSsid}</p>
                     </div>
                     <div className="relative min-w-0 overflow-hidden border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
@@ -473,8 +514,8 @@ export const TablesTab = () => {
                 ) : !showHotspotQR ? (
                   <>
                     <div className="text-center mb-3">
-                      <h3 className="text-base font-bold text-gray-900">🛒 Ordering Portal</h3>
-                      <p className="text-xs text-gray-600 mt-0.5">Direct access to menu</p>
+                      <h3 className="text-base font-bold text-gray-900">{t("m.orderingPortal")}</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">{t("m.directAccessToMenu")}</p>
                     </div>
                     <div className="relative min-w-0 overflow-hidden border-[5px] border-[#555555] rounded-lg p-2 bg-white flex items-center justify-center z-10 shadow-md w-full max-w-[90vw]">
                       <QRCode
@@ -500,7 +541,7 @@ export const TablesTab = () => {
                   </>
                 ) : null}
 
-                <p className="mt-4 text-lg font-bold text-gray-800 uppercase tracking-widest">TABLE {viewQRCodeTable.table_number}</p>
+                <p className="mt-4 text-lg font-bold text-gray-800 uppercase tracking-widest">{t("m.tableNumberLabel", { number: viewQRCodeTable.table_number })}</p>
               </div>
 
               {/* Footer with Toggle and Download Buttons */}
@@ -508,18 +549,18 @@ export const TablesTab = () => {
                 {hotspotSsid && !hotspotLoading && (
                   <Button 
                     onClick={() => setShowHotspotQR(!showHotspotQR)}
-                    aria-label={showHotspotQR ? "Show ordering QR" : "Show Wi-Fi QR"}
+                    aria-label={showHotspotQR ? t("m.showOrderingQr") : t("m.showWifiQr")}
                     className="w-full min-w-0 whitespace-normal bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md font-semibold px-1 py-1.5 text-xs leading-tight"
                   >
-                    {showHotspotQR ? "🛒 Ordering QR" : "🌐 Wi-Fi QR"}
+                    {showHotspotQR ? t("m.orderingQr") : t("m.wifiQr")}
                   </Button>
                 )}
                 <Button 
-                  aria-label={`Download ${showHotspotQR ? "Wi-Fi" : "ordering"} QR`}
+                  aria-label={showHotspotQR ? t("m.downloadWifiQr") : t("m.downloadOrderingQr")}
                   className="w-full min-w-0 whitespace-normal bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md font-semibold px-1 py-1.5 text-xs leading-tight"
                   onClick={handleDownloadQR}
                 >
-                  <Download className="h-3.5 w-3.5 shrink-0 mr-1" /> Download QR
+                  <Download className="h-3.5 w-3.5 shrink-0 mr-1" /> {t("m.downloadQr")}
                 </Button>
               </div>
             </div>

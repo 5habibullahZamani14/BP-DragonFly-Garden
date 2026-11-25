@@ -4,7 +4,7 @@ const RESET_CATEGORY_OPTIONS = [
   {
     key: "all_data",
     label: "Reset everything",
-    description: "Permanently remove restaurant data, uploaded menu/feedback photos, and activity history. Manager credentials, printer/tax/working-hour settings, the Counter Order system route, and backup archives are kept so the app remains functional and recoverable.",
+    description: "Permanently remove restaurant data, uploaded menu/feedback photos, and activity history. Manager credentials, printer/tax/working-hour settings, the Counter Order and R4M system tables, and backup archives are kept so the app remains functional and recoverable.",
   },
   {
     key: "foods",

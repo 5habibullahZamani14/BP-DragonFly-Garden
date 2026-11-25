@@ -22,7 +22,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, requestSystemShutdown, VersionCheckResult } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, FileText, Power } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, X, FileText, Power } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -82,13 +82,13 @@ type SampleTicketResponse = PrinterApiResponse & { ticket?: string; receiptLayou
 type SampleTicketType = "order_customer" | "order_kitchen" | "addon_customer" | "addon_kitchen" | "final_receipt" | "daily_sales_report";
 type SampleTicketLine = { text: string; alignment: "left" | "center" | "right" };
 
-const SAMPLE_TICKET_TYPES: { value: SampleTicketType; label: string }[] = [
-  { value: "order_customer", label: "New Order — Customer Copy" },
-  { value: "order_kitchen", label: "New Order — Kitchen Copy" },
-  { value: "addon_customer", label: "Add-on — Customer Copy" },
-  { value: "addon_kitchen", label: "Add-on — Kitchen Copy" },
-  { value: "final_receipt", label: "Final Receipt" },
-  { value: "daily_sales_report", label: "Daily Sales Report" }
+const SAMPLE_TICKET_TYPES: { value: SampleTicketType; labelKey: string }[] = [
+  { value: "order_customer", labelKey: "m.orderReceiptCustomer" },
+  { value: "order_kitchen", labelKey: "m.orderReceiptKitchen" },
+  { value: "addon_customer", labelKey: "m.addOnReceiptCustomer" },
+  { value: "addon_kitchen", labelKey: "m.addOnReceiptKitchen" },
+  { value: "final_receipt", labelKey: "m.finalReceipt" },
+  { value: "daily_sales_report", labelKey: "m.dailySalesReport" }
 ];
 
 const isSampleTicketType = (value: string): value is SampleTicketType =>
@@ -152,9 +152,15 @@ const isCardSize = (value: string): value is "normal" | "large" | "extra_large" 
 
 export const SettingsTab = () => {
   const { t } = useTranslation();
-  const [hours, setHours] = useState({ start: "09:00", end: "22:00" });
+  const [hours, setHours] = useState({
+    start: "09:00",
+    end: "22:00",
+    open_days: [0, 1, 2, 3, 4, 5, 6],
+    first_day_of_week: "monday" as "sunday" | "monday" | "saturday",
+  });
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaved, setHoursSaved] = useState(false);
+  const [timeInputDrafts, setTimeInputDrafts] = useState<Record<string, string>>({});
 
   const [profile, setProfile] = useState({ name: "", id: "", email: "", phone: "" });
   const [newPassword, setNewPassword] = useState("");
@@ -327,7 +333,15 @@ export const SettingsTab = () => {
     let data: Awaited<ReturnType<typeof fetchSettings>> | null = null;
     try {
       data = await fetchSettings();
-      if (data?.work_hours) setHours(data.work_hours);
+      if (data?.work_hours) {
+        const loaded = data.work_hours;
+        setHours({
+          start: loaded.start || "09:00",
+          end: loaded.end || "22:00",
+          open_days: Array.isArray(loaded.open_days) ? loaded.open_days : [0, 1, 2, 3, 4, 5, 6],
+          first_day_of_week: loaded.first_day_of_week || "monday",
+        });
+      }
       if (typeof data?.default_card_size === "string" && isCardSize(data.default_card_size)) {
         setDefaultCardSize(data.default_card_size);
       }
@@ -557,14 +571,14 @@ export const SettingsTab = () => {
       hasLoadedPrinterJobsRef.current = true;
     } catch (error: unknown) {
       safeConsoleError("Failed to load printer jobs needing review", error);
-      toast.error(`Could not load printer job status: ${getErrorMessage(error)}`);
+      toast.error(t("m.settings.printerJobsLoadFailed"));
     } finally {
       setPrinterJobsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const acknowledgePrinterJob = async (jobId: number) => {
-    if (!window.confirm("Have you checked the printer and verified whether this ticket printed? This only marks the alert reviewed; it will not reprint the ticket.")) return;
+    if (!window.confirm(t("m.settings.confirmPrinterJobReviewed"))) return;
     try {
       const response = await fetch(`/management/printers/jobs/${jobId}/acknowledge`, {
         method: "POST",
@@ -575,11 +589,11 @@ export const SettingsTab = () => {
       if (!response.ok || !data.success) {
         throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
-      toast.success(data.message || "Printer job reviewed.");
+      toast.success(t("m.settings.printerJobReviewed"));
       await loadPrinterJobs();
     } catch (error: unknown) {
       safeConsoleError(`Failed to acknowledge printer job ${jobId}`, error);
-      toast.error(`Could not update printer job: ${getErrorMessage(error)}`);
+      toast.error(t("m.settings.printerJobUpdateFailed"));
     }
   };
 
@@ -598,7 +612,7 @@ export const SettingsTab = () => {
       });
       
       if (response.status === 401) {
-        setPrinterError("Authentication failed. Your session may have expired. Please log in again.");
+        setPrinterError(t("m.settings.printerAuthenticationFailed"));
         setPrintersLoading(false);
         return;
       }
@@ -608,22 +622,21 @@ export const SettingsTab = () => {
       if (data.success) {
         setPrinters(data.printers ?? []);
       } else {
-        setPrinterError(`Failed to discover printers: ${data.message}`);
         safeConsoleError("Failed to discover printers", data.message);
+        setPrinterError(t("m.settings.printerDiscoveryFailed"));
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
-        setPrinterError("Request timed out. The printer discovery is taking too long. Please check your backend logs.");
+        setPrinterError(t("m.settings.printerDiscoveryTimeout"));
       } else {
-        const message = getErrorMessage(err);
-        setPrinterError(`Error discovering printers: ${message}`);
+        setPrinterError(t("m.settings.printerDiscoveryFailed"));
         safeConsoleError("Printer discovery failed", err);
       }
     } finally {
       clearTimeout(timeoutId);
       setPrintersLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const loadPrinterSettings = async () => {
     if (!hasLoadedPrinterSettingsRef.current) setPrinterSettingsLoading(true);
@@ -664,7 +677,7 @@ export const SettingsTab = () => {
       hasLoadedPrinterSettingsRef.current = true;
     } catch (err: unknown) {
       safeConsoleError("Failed to load printer settings", err);
-      toast.error(`Could not load printer settings: ${getErrorMessage(err)}`);
+      toast.error(t("m.settings.printerSettingsLoadFailed"));
     } finally {
       setPrinterSettingsLoading(false);
     }
@@ -683,13 +696,13 @@ export const SettingsTab = () => {
       const data: PrinterApiResponse = await response.json();
       if (!data.success) {
         safeConsoleError("Failed to print daily sales report", data.message);
-        toast.error(`Failed to print daily sales report: ${data.message || "Unknown error"}`);
+        toast.error(t("m.settings.dailySalesPrintFailed"));
       } else {
-        toast.success(data.message || "Daily sales report submitted.");
+        toast.success(t("m.settings.dailySalesPrintSubmitted"));
       }
     } catch (err: unknown) {
       safeConsoleError("Failed to print daily sales report", err);
-      toast.error(`Failed to print daily sales report: ${getErrorMessage(err)}`);
+      toast.error(t("m.settings.dailySalesPrintFailed"));
     } finally {
       setPrintingDailyReport(false);
       void loadPrinterJobs();
@@ -699,11 +712,11 @@ export const SettingsTab = () => {
   const printSampleTicket = async () => {
     const printerName = selectedPrinter || defaultPrinter;
     if (!printerName) {
-      toast.error("Choose an active or default printer before printing a sample.");
+      toast.error(t("m.settings.choosePrinterForSample"));
       return;
     }
     if (sampleTicketLoading || sampleTicketError || !sampleTicket.trim()) {
-      toast.error("Wait for the selected sample preview to finish loading.");
+      toast.error(t("m.settings.waitForSample"));
       return;
     }
 
@@ -719,11 +732,12 @@ export const SettingsTab = () => {
       if (!response.ok || !data.success) {
         throw new Error(data.message || `Request failed (HTTP ${response.status})`);
       }
-      const sampleLabel = SAMPLE_TICKET_TYPES.find(({ value }) => value === sampleTicketType)?.label || "sample ticket";
-      toast.success(data.message || `${sampleLabel} sent to ${printerName}.`);
+      const sampleType = SAMPLE_TICKET_TYPES.find(({ value }) => value === sampleTicketType);
+      const sampleLabel = sampleType ? t(sampleType.labelKey) : t("m.sampleTicketType");
+      toast.success(t("m.settings.sampleTicketSent", { sample: sampleLabel, printer: printerName }));
     } catch (error: unknown) {
       safeConsoleError("Failed to print sample ticket", error);
-      toast.error(`Sample print failed: ${getErrorMessage(error)}`);
+      toast.error(t("m.settings.sampleTicketPrintFailed"));
     } finally {
       setPrintingSampleTicket(false);
       void loadPrinterJobs();
@@ -732,11 +746,11 @@ export const SettingsTab = () => {
 
   const printTestTicket = async () => {
     if (!selectedPrinter) {
-      toast.error("Select an active printer before testing.");
+      toast.error(t("m.settings.selectActivePrinterBeforeTesting"));
       return;
     }
     if (!ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview) {
-      toast.error("Save the ticket preview before printing it.");
+      toast.error(t("m.settings.savePreviewBeforePrint"));
       return;
     }
     setPrintingTestTicket(true);
@@ -752,13 +766,13 @@ export const SettingsTab = () => {
       const data: PrinterApiResponse = await response.json();
       if (!response.ok || !data.success) {
         safeConsoleError("Failed to print test ticket", data.message);
-        toast.error(`Test print failed: ${data.message || `Request failed (HTTP ${response.status})`}`);
+        toast.error(t("m.settings.testTicketPrintFailed"));
       } else {
-        toast.success(data.message || "Test print submitted.");
+        toast.success(t("m.settings.testTicketPrintSubmitted"));
       }
     } catch (err: unknown) {
       safeConsoleError("Failed to print test ticket", err);
-      toast.error(`Test print failed: ${getErrorMessage(err)}`);
+      toast.error(t("m.settings.testTicketPrintFailed"));
     } finally {
       setPrintingTestTicket(false);
       void loadPrinterJobs();
@@ -786,10 +800,12 @@ export const SettingsTab = () => {
       if (choice === "active") setSelectedPrinter(printerName);
       else setDefaultPrinter(printerName);
       setPrinterPreferences(data.printerPreferences || {});
-      toast.success(choice === "active" ? "Active printer selected." : "Default printer saved.");
+      toast.success(choice === "active"
+        ? t("m.settings.activePrinterSaved")
+        : t("m.settings.defaultPrinterSaved"));
     } catch (err: unknown) {
       safeConsoleError(`Failed to update ${choice} printer`, err);
-      toast.error(`Failed to update ${choice} printer: ${getErrorMessage(err)}`);
+      toast.error(t("m.settings.printerChoiceUpdateFailed"));
     } finally {
       setPrinterChoiceSaving(null);
     }
@@ -804,8 +820,8 @@ export const SettingsTab = () => {
       final_receipt: finalReceiptCopies,
       daily_sales_report: dailySalesReportCopies
     };
-    if (Object.values(requestedCounts).some(count => !Number.isInteger(count) || count < 1 || count > 5)) {
-      toast.error("Every receipt copy count must be a whole number from 1 to 5.");
+    if (Object.values(requestedCounts).some(count => !Number.isInteger(count) || count < 0 || count > 5)) {
+      toast.error(t("m.settings.copyCountRangeError"));
       return;
     }
 
@@ -845,10 +861,10 @@ export const SettingsTab = () => {
       setDailySalesReportCopies(savedCopies.daily_sales_report ?? 1);
       setReceiptCopiesSaved(true);
       setTimeout(() => setReceiptCopiesSaved(false), 2500);
-      toast.success("Receipt copy counts saved.");
+      toast.success(t("m.settings.copyCountsSaved"));
     } catch (error: unknown) {
       safeConsoleError("Failed to save receipt copy counts", error);
-      toast.error(`Failed to save receipt copy counts: ${getErrorMessage(error)}`);
+      toast.error(t("m.settings.receiptCopiesSaveFailed"));
     } finally {
       setReceiptCopiesSaving(false);
     }
@@ -856,11 +872,11 @@ export const SettingsTab = () => {
 
   const saveTicketPreview = async () => {
     if (!ticketPreview.trim()) {
-      toast.error("The test ticket cannot be empty.");
+      toast.error(t("m.settings.emptyTestTicket"));
       return;
     }
     if (ticketPreview.length > 4000) {
-      toast.error("The test ticket must be 4,000 characters or fewer.");
+      toast.error(t("m.settings.testTicketTooLong"));
       return;
     }
     setTicketPreviewSaving(true);
@@ -879,10 +895,10 @@ export const SettingsTab = () => {
       setSavedTicketPreview(ticketPreview);
       setTicketPreviewHasBeenSaved(true);
       setEditingTicketPreview(false);
-      toast.success("Test ticket preview saved.");
+      toast.success(t("m.settings.testTicketSaved"));
     } catch (error: unknown) {
       safeConsoleError("Failed to save test ticket preview", error);
-      toast.error(`Failed to save test ticket preview: ${getErrorMessage(error)}`);
+      toast.error(t("m.settings.testTicketPreviewSaveFailed"));
     } finally {
       setTicketPreviewSaving(false);
     }
@@ -890,7 +906,7 @@ export const SettingsTab = () => {
 
   const testPrinter = async (printerName: string) => {
     if (!ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview) {
-      toast.error("Save the ticket preview before printing it.");
+      toast.error(t("m.settings.savePreviewBeforePrint"));
       return;
     }
     setTestPrintLoading(printerName);
@@ -906,19 +922,20 @@ export const SettingsTab = () => {
       });
       const data: PrinterApiResponse = await response.json();
       if (response.ok && data.success) {
-        const message = data.message || `Test print queued for ${printerName}`;
+        const message = t("m.settings.testPrintQueued", { printer: printerName });
         setTestPrintResult({ printerName, success: true, message });
         toast.success(message);
       } else {
-        const message = data.message || `Print request failed (HTTP ${response.status})`;
+        safeConsoleError("Test print failed", data.message || `HTTP ${response.status}`);
+        const message = t("m.settings.testTicketPrintFailed");
         setTestPrintResult({ printerName, success: false, message });
-        toast.error(`Test print failed: ${message}`);
+        toast.error(message);
       }
     } catch (err: unknown) {
       safeConsoleError("Test print failed", err);
-      const message = getErrorMessage(err, "Could not read the printer response.");
+      const message = t("m.settings.testTicketPrintFailed");
       setTestPrintResult({ printerName, success: false, message });
-      toast.error(`Test print failed: ${message}`);
+      toast.error(message);
     } finally {
       setTestPrintLoading(null);
     }
@@ -968,7 +985,7 @@ export const SettingsTab = () => {
           await updateSetting("default_card_size", defaultCardSize);
           setCardSizeSaved(true);
           setTimeout(() => setCardSizeSaved(false), 2500);
-        } catch (e) { safeConsoleError("Failed to apply card size", e); toast.error("Failed to apply card size"); }
+        } catch (e) { safeConsoleError("Failed to apply card size", e);         toast.error(t("m.settings.applyCardSizeFailed")); }
         finally { setApplyingCardSize(false); }
       }
     );
@@ -976,8 +993,8 @@ export const SettingsTab = () => {
 
   const saveHours = async () => {
     showConfirmation(
-      "Confirm working hours",
-      `The restaurant operating hours will be changed to ${hours.start} - ${hours.end}.`,
+      "Confirm restaurant working schedule",
+      `The restaurant schedule will be changed to ${hours.start} - ${hours.end}, on the selected operating days.`,
       async () => {
         await updateSetting("work_hours", hours);
         setHoursSaved(true);
@@ -1201,9 +1218,9 @@ export const SettingsTab = () => {
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg text-blue-900">System Updates</CardTitle>
+            <CardTitle className="text-lg text-blue-900">{t("m.settings.updateTitle")}</CardTitle>
           </div>
-          <CardDescription>Apply only clean, fast-forward updates whose commits are signed by a trusted key</CardDescription>
+          <CardDescription>{t("m.settings.updateTrustDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {updateMsg && (
@@ -1219,21 +1236,21 @@ export const SettingsTab = () => {
           {versionInfo && !updateInProgress && (
             <div className="bg-white/70 p-3 rounded-lg border border-blue-200 text-sm">
               <div className="space-y-2">
-                <div><span className="font-semibold">Current Version:</span> {versionInfo.version}</div>
-                <div><span className="font-semibold">Update branch:</span> {versionInfo.branch}</div>
-                <div><span className="font-semibold">Installed commit:</span> {versionInfo.current_commit.slice(0, 12)}</div>
+                <div><span className="font-semibold">{t("m.settings.currentVersion")}:</span> {versionInfo.version}</div>
+                <div><span className="font-semibold">{t("m.settings.updateBranch")}:</span> {versionInfo.branch}</div>
+                <div><span className="font-semibold">{t("m.settings.installedCommit")}:</span> {versionInfo.current_commit.slice(0, 12)}</div>
                 {versionInfo.needs_update && (
-                  <div><span className="font-semibold">Available commit:</span> {versionInfo.latest_commit.slice(0, 12)}</div>
+                  <div><span className="font-semibold">{t("m.settings.availableCommit")}:</span> {versionInfo.latest_commit.slice(0, 12)}</div>
                 )}
                 {versionInfo.needs_update && (
                   <div>
-                    <span className="font-semibold">Trusted commit signature:</span>{" "}
-                    {versionInfo.trusted_commit_signature ? "Verified" : "Not verified"}
+                    <span className="font-semibold">{t("m.settings.trustedSignature")}:</span>{" "}
+                    {versionInfo.trusted_commit_signature ? t("m.settings.verified") : t("m.settings.notVerified")}
                   </div>
                 )}
                 {versionInfo.needs_update && (
                   <div className={versionInfo.can_update ? "text-orange-600 font-medium" : "text-red-700 font-medium"}>
-                    {versionInfo.can_update ? "Update available and ready to validate" : "Automatic update is blocked"}
+                    {versionInfo.can_update ? t("m.settings.updateReady") : t("m.settings.updateBlocked")}
                   </div>
                 )}
                 {versionInfo.reason && <p className="text-amber-900">{versionInfo.reason}</p>}
@@ -1253,7 +1270,7 @@ export const SettingsTab = () => {
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              Check for Updates
+              {t("m.settings.checkForUpdates")}
             </Button>
 
             {updateAvailable && versionInfo?.can_update && (
@@ -1267,7 +1284,7 @@ export const SettingsTab = () => {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {updateInProgress ? "Updating..." : "Update Now"}
+                {updateInProgress ? t("m.settings.updating") : t("m.settings.updateNow")}
               </Button>
             )}
           </div>
@@ -1278,16 +1295,16 @@ export const SettingsTab = () => {
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Power className="h-5 w-5 text-amber-700" />
-            <CardTitle className="text-lg text-amber-950">Server control</CardTitle>
+            <CardTitle className="text-lg text-amber-950">{t("m.settings.serverControl")}</CardTitle>
           </div>
           <CardDescription>
-            Stop the backend safely when the restaurant is finished using the system. This affects every connected device.
+            {t("m.settings.shutdownDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {shutdownError && (
             <div role="alert" className="rounded-lg border border-red-300 bg-red-100 p-3 text-sm text-red-800">
-              Could not stop the server: {shutdownError}
+              {t("m.settings.shutdownError", { error: shutdownError })}
             </div>
           )}
           <Button
@@ -1297,7 +1314,7 @@ export const SettingsTab = () => {
             className="gap-2"
           >
             <Power className="h-4 w-4" />
-            Stop backend for everyone
+            {t("m.settings.shutdownEveryone")}
           </Button>
         </CardContent>
       </Card>
@@ -1320,10 +1337,10 @@ export const SettingsTab = () => {
           <div className="text-left flex flex-col gap-1.5">
             <h3 className="font-semibold leading-none tracking-tight text-lg flex items-center gap-2">
               <Percent className="h-5 w-5 text-green-700" />
-              Tax &amp; Service Charge
+              {t("m.settings.taxServiceTitle")}
             </h3>
             <p className="text-sm text-muted-foreground font-normal">
-              Toggle SST and service charge on or off, and set their percentages. Changes apply to new orders only.
+              {t("m.settings.taxServiceDescription")}
             </p>
           </div>
         </AccordionTrigger>
@@ -1339,8 +1356,8 @@ export const SettingsTab = () => {
                   onCheckedChange={setSstEnabled}
                 />
                 <div className="min-w-0">
-                  <label htmlFor="sst-toggle" className="font-semibold text-sm cursor-pointer">SST (Sales &amp; Service Tax)</label>
-                  <p className="text-xs text-muted-foreground">{sstEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
+                  <label htmlFor="sst-toggle" className="font-semibold text-sm cursor-pointer">{t("m.settings.sstFullLabel")}</label>
+                  <p className="text-xs text-muted-foreground">{sstEnabled ? t("m.settings.shownCalculated") : t("m.settings.hiddenNotCalculated")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1368,8 +1385,8 @@ export const SettingsTab = () => {
                   onCheckedChange={setScEnabled}
                 />
                 <div className="min-w-0">
-                  <label htmlFor="sc-toggle" className="font-semibold text-sm cursor-pointer">Service Charge</label>
-                  <p className="text-xs text-muted-foreground">{scEnabled ? "Shown on receipts and calculated in totals" : "Hidden everywhere, not calculated"}</p>
+                  <label htmlFor="sc-toggle" className="font-semibold text-sm cursor-pointer">{t("m.settings.serviceChargeTitle")}</label>
+                  <p className="text-xs text-muted-foreground">{scEnabled ? t("m.settings.shownCalculated") : t("m.settings.hiddenNotCalculated")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1389,11 +1406,11 @@ export const SettingsTab = () => {
             </div>
 
             <div className="pt-1">
-              <p className="text-xs text-amber-600 font-medium mb-3">⚠️ Changes apply to new orders only. Existing open orders keep their original rates.</p>
+              <p className="text-xs text-amber-600 font-medium mb-3">{t("m.settings.changesApplyNewOrders")}</p>
               <Button onClick={saveTaxSettings} disabled={taxSaving} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-                {taxSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                {taxSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("m.saving")}</>
                   : taxSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
-                  : "Save Tax Settings"}
+                  : t("m.settings.saveTaxSettings")}
               </Button>
             </div>
           </div>
@@ -1404,30 +1421,30 @@ export const SettingsTab = () => {
       <AccordionItem value="cardsize" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Card Size Defaults</h3>
-            <p className="text-sm text-muted-foreground font-normal">Set the default card size for new items and optionally apply to all existing items.</p>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.settings.cardSizeDefaults")}</h3>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.settings.cardSizeDefaultsDescription")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label>Default Card Size</Label>
+              <Label>{t("m.settings.defaultCardSize")}</Label>
               <Select value={defaultCardSize} onValueChange={value => {
                 if (isCardSize(value)) setDefaultCardSize(value);
               }}>
-                <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("m.settings.sizeNormal")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="large">Large</SelectItem>
-                  <SelectItem value="extra_large">Extra Large</SelectItem>
+                  <SelectItem value="normal">{t("m.settings.sizeNormal")}</SelectItem>
+                  <SelectItem value="large">{t("m.settings.sizeLarge")}</SelectItem>
+                  <SelectItem value="extra_large">{t("m.settings.sizeExtraLarge")}</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">New items will use this size unless overridden per-item.</p>
+              <p className="text-xs text-muted-foreground">{t("m.settings.newCardSizeHint")}</p>
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={saveDefaultCardSize} className="bg-green-700 hover:bg-green-800 text-white">{cardSizeSaved ? "Saved" : "Save Default"}</Button>
-              <Button variant="destructive" onClick={handleApplyCardSizeToAll} disabled={applyingCardSize}>{applyingCardSize ? "Applying…" : "Apply To All Items"}</Button>
+              <Button onClick={saveDefaultCardSize} className="bg-green-700 hover:bg-green-800 text-white">{cardSizeSaved ? t("m.saved") : t("m.settings.saveDefault")}</Button>
+              <Button variant="destructive" onClick={handleApplyCardSizeToAll} disabled={applyingCardSize}>{applyingCardSize ? t("m.settings.applying") : t("m.settings.applyToAllItems")}</Button>
             </div>
           </div>
         </AccordionContent>
@@ -1437,59 +1454,213 @@ export const SettingsTab = () => {
       <AccordionItem value="patterns" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Menu Pattern Defaults</h3>
-            <p className="text-sm text-muted-foreground font-normal">Set a global default pattern overlay for all menu items without a custom pattern.</p>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.settings.menuPatternDefaults")}</h3>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.settings.menuPatternDefaultsDescription")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-4">
             <div className="grid gap-2">
-              <Label>Default Pattern</Label>
+              <Label>{t("m.settings.defaultPattern")}</Label>
               <Select value={defaultPatternId ? String(defaultPatternId) : "none"} onValueChange={value => setDefaultPatternId(value === "none" ? null : parseInt(value, 10))}>
-                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("m.settings.noPatternOverlay")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None — no pattern overlay</SelectItem>
+                  <SelectItem value="none">{t("m.settings.noPatternOverlay")}</SelectItem>
                   {patterns.map(pattern => (
                     <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">This pattern will appear on all items that don't have a custom pattern assigned. Display with 40% opacity.</p>
+              <p className="text-xs text-muted-foreground">{t("m.settings.patternWillAppear")}</p>
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={saveDefaultPattern} className="bg-green-700 hover:bg-green-800 text-white">{defaultPatternSaved ? "Saved" : "Save Default"}</Button>
-              <Button variant="outline" onClick={clearDefaultPattern} disabled={defaultPatternId === null}>Clear Pattern</Button>
+              <Button onClick={saveDefaultPattern} className="bg-green-700 hover:bg-green-800 text-white">{defaultPatternSaved ? t("m.saved") : t("m.settings.saveDefault")}</Button>
+              <Button variant="outline" onClick={clearDefaultPattern} disabled={defaultPatternId === null}>{t("m.settings.clearPattern")}</Button>
             </div>
           </div>
         </AccordionContent>
       </AccordionItem>
 
-      {/* ── Working Hours ───────────────────────────────────── */}
+      {/* ── Restaurant Working Schedule ─────────────────────── */}
       <AccordionItem value="hours" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.restHours")}</h3>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.restaurantScheduleTitle")}</h3>
             <p className="text-sm text-muted-foreground font-normal">{t("m.hoursDesc")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="start-time">{t("m.openTime")}</Label>
-                <Input id="start-time" type="time" value={hours.start}
-                  onChange={(e) => setHours({ ...hours, start: e.target.value })} className="w-full text-lg" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {([
+                { label: t("m.openTime"), field: "start" as const },
+                { label: t("m.closeTime"), field: "end" as const },
+              ]).map(({ label, field }) => {
+                const [hour, minute] = hours[field].split(":");
+                const commitTimePart = (part: "hour" | "minute") => {
+                  const key = `${field}-${part}`;
+                  const typed = timeInputDrafts[key];
+                  const value = Number(typed);
+                  const max = part === "hour" ? 23 : 59;
+                  if (typed !== undefined && typed !== "" && Number.isInteger(value) && value >= 0 && value <= max) {
+                    setHours((current) => {
+                      const [currentHour, currentMinute] = current[field].split(":");
+                      const nextTime = part === "hour"
+                        ? `${String(value).padStart(2, "0")}:${currentMinute}`
+                        : `${currentHour}:${String(value).padStart(2, "0")}`;
+                      return { ...current, [field]: nextTime };
+                    });
+                  }
+                  setTimeInputDrafts((drafts) => {
+                    const next = { ...drafts };
+                    delete next[key];
+                    return next;
+                  });
+                };
+                return (
+                  <div key={field} className="rounded-xl border bg-muted/20 p-4">
+                    <Label className="mb-3 block text-sm font-semibold">{label}</Label>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                      <Select value={hour} onValueChange={(value) => setHours({ ...hours, [field]: `${value}:${minute || "00"}` })}>
+                        <SelectTrigger className="h-12 rounded-xl border-2 text-lg font-bold shadow-sm">
+                          <SelectValue placeholder={t("m.scheduleHour")} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {Array.from({ length: 24 }, (_, value) => {
+                            const valueText = String(value).padStart(2, "0");
+                            return <SelectItem key={valueText} value={valueText}>{valueText}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-2xl font-bold text-muted-foreground">:</span>
+                      <Select value={minute} onValueChange={(value) => setHours({ ...hours, [field]: `${hour || "09"}:${value}` })}>
+                        <SelectTrigger className="h-12 rounded-xl border-2 text-lg font-bold shadow-sm">
+                          <SelectValue placeholder={t("m.scheduleMinute")} />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          {Array.from({ length: 12 }, (_, value) => {
+                            const valueText = String(value * 5).padStart(2, "0");
+                            return <SelectItem key={valueText} value={valueText}>{valueText}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mt-2">
+                      <Input
+                        aria-label={`${label} ${t("m.scheduleHour")}`}
+                        inputMode="numeric"
+                        type="text"
+                        pattern="[0-9]*"
+                        maxLength={2}
+                        value={timeInputDrafts[`${field}-hour`] ?? hour}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
+                          setTimeInputDrafts((drafts) => ({ ...drafts, [`${field}-hour`]: digits }));
+                        }}
+                        onBlur={() => commitTimePart("hour")}
+                        placeholder={t("m.scheduleHour")}
+                        className="h-9 text-center text-sm tabular-nums"
+                      />
+                      <span className="text-muted-foreground">:</span>
+                      <Input
+                        aria-label={`${label} ${t("m.scheduleMinute")}`}
+                        inputMode="numeric"
+                        type="text"
+                        pattern="[0-9]*"
+                        maxLength={2}
+                        value={timeInputDrafts[`${field}-minute`] ?? minute}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
+                          setTimeInputDrafts((drafts) => ({ ...drafts, [`${field}-minute`]: digits }));
+                        }}
+                        onBlur={() => commitTimePart("minute")}
+                        placeholder={t("m.scheduleMinute")}
+                        className="h-9 text-center text-sm tabular-nums"
+                      />
+                    </div>
+                    <p className="mt-1 text-center text-xs text-muted-foreground">{t("m.scheduleSelectTime")}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-5">
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">{t("m.operatingDays")}</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
+                  {[
+                    { day: 1, label: t("m.dayMon") },
+                    { day: 2, label: t("m.dayTue") },
+                    { day: 3, label: t("m.dayWed") },
+                    { day: 4, label: t("m.dayThu") },
+                    { day: 5, label: t("m.dayFri") },
+                    { day: 6, label: t("m.daySat") },
+                    { day: 0, label: t("m.daySun") },
+                  ].map(({ day, label }) => {
+                    const active = hours.open_days.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setHours({
+                          ...hours,
+                          open_days: active
+                            ? hours.open_days.filter((value) => value !== day)
+                            : [...hours.open_days, day],
+                        })}
+                        className={`flex h-11 items-center justify-between gap-2 rounded-xl border-2 px-3 font-semibold transition-all ${
+                          active
+                            ? "border-green-500 bg-green-50 text-green-800 shadow-sm"
+                            : "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-400"
+                        }`}
+                      >
+                        {label}
+                        {active
+                          ? <Check className="h-4 w-4 shrink-0 text-green-700" aria-label={t("m.selected")} />
+                          : <X className="h-4 w-4 shrink-0 text-rose-600" aria-label={t("m.notSelected")} />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="end-time">{t("m.closeTime")}</Label>
-                <Input id="end-time" type="time" value={hours.end}
-                  onChange={(e) => setHours({ ...hours, end: e.target.value })} className="w-full text-lg" />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">{t("m.firstDayOfWeek")}</Label>
+                <Select
+                  value={hours.first_day_of_week}
+                  onValueChange={(value) => setHours({
+                    ...hours,
+                    first_day_of_week: value as "sunday" | "monday" | "saturday",
+                  })}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-2 font-semibold shadow-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monday">{t("m.weekdayMonday")}</SelectItem>
+                    <SelectItem value="saturday">{t("m.weekdaySaturday")}</SelectItem>
+                    <SelectItem value="sunday">{t("m.weekdaySunday")}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <Button onClick={saveHours} className="bg-green-700 hover:bg-green-800 text-white flex gap-2">
-              {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : t("m.saveHours")}
-            </Button>
+
+            <div className="flex items-center justify-between rounded-xl border bg-green-50/60 px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                {hours.open_days.length === 0
+                  ? t("m.scheduleNoDays")
+                  : t("m.scheduleDays", { count: hours.open_days.length })}
+              </p>
+              <Button
+                onClick={saveHours}
+                disabled={hours.open_days.length === 0}
+                className="h-11 rounded-xl bg-green-700 px-5 hover:bg-green-800 text-white flex gap-2 shadow-md"
+              >
+                {hoursSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</> : <><CheckCircle2 className="h-4 w-4" /> {t("m.saveSchedule")}</>}
+              </Button>
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -1498,8 +1669,8 @@ export const SettingsTab = () => {
       <AccordionItem value="printers" className="border rounded-xl bg-card text-card-foreground shadow-sm">
         <AccordionTrigger className="px-4 py-4 sm:px-6 sm:py-5 hover:no-underline hover:bg-muted/50 rounded-t-xl data-[state=closed]:rounded-b-xl transition-all">
           <div className="text-left flex flex-col gap-1.5">
-            <h3 className="font-semibold leading-none tracking-tight text-lg">Printer Management</h3>
-            <p className="text-sm text-muted-foreground font-normal">Discover, test, and configure printers for order receipts and kitchen tickets.</p>
+            <h3 className="font-semibold leading-none tracking-tight text-lg">{t("m.printerManagementTitle")}</h3>
+            <p className="text-sm text-muted-foreground font-normal">{t("m.printerManagementDescription")}</p>
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
@@ -1509,7 +1680,7 @@ export const SettingsTab = () => {
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                 <div className="text-left flex items-center gap-2">
                   <Printer className="h-4 w-4" />
-                  <h4 className="font-semibold text-sm">Printer Settings</h4>
+                  <h4 className="font-semibold text-sm">{t("m.printerSettingsTitle")}</h4>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
@@ -1526,11 +1697,11 @@ export const SettingsTab = () => {
                     {printersLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Discovering installed queues...
+                        {t("m.discoveringPrinters")}
                       </>
                     ) : (
                       <>
-                        <RefreshCw className="h-4 w-4" /> Discover Printers
+                        <RefreshCw className="h-4 w-4" /> {t("m.discoverPrinters")}
                       </>
                     )}
                     </Button>
@@ -1545,7 +1716,7 @@ export const SettingsTab = () => {
                   {/* Printer List */}
                   {printers.length > 0 && (
                     <div className="space-y-3">
-                      <h4 className="font-semibold text-sm">Available Printers ({printers.length})</h4>
+                      <h4 className="font-semibold text-sm">{t("m.availablePrintersCount", { count: printers.length })}</h4>
                       <div className="space-y-2">
                         {printers.map((printer, index) => (
                           <div key={index} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
@@ -1563,9 +1734,9 @@ export const SettingsTab = () => {
                                   </span>
                                 </div>
                                 <div className="space-y-1 text-xs text-gray-600">
-                                  <p><span className="font-medium">Driver:</span> {printer.driver || 'N/A'}</p>
-                                  <p><span className="font-medium">Connection:</span> {printer.connectionType?.toUpperCase() || 'N/A'}</p>
-                                  {printer.port && <p><span className="font-medium">Port:</span> {printer.port}</p>}
+                                  <p><span className="font-medium">{t("m.driver")}:</span> {printer.driver || "N/A"}</p>
+                                  <p><span className="font-medium">{t("m.connection")}:</span> {printer.connectionType?.toUpperCase() || "N/A"}</p>
+                                  {printer.port && <p><span className="font-medium">{t("m.port")}:</span> {printer.port}</p>}
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <Button
@@ -1577,8 +1748,8 @@ export const SettingsTab = () => {
                                     disabled={printerSettingsLoading || printerChoiceSaving !== null || selectedPrinter === printer.name}
                                   >
                                     {printerChoiceSaving?.printerName === printer.name && printerChoiceSaving.choice === "active"
-                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>
-                                      : selectedPrinter === printer.name ? "Selected (Active)" : "Select Active"}
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> {t("m.saving")}</>
+                                      : selectedPrinter === printer.name ? t("m.selectedActivePrinter") : t("m.selectActivePrinter")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1589,8 +1760,8 @@ export const SettingsTab = () => {
                                     disabled={printerSettingsLoading || printerChoiceSaving !== null || defaultPrinter === printer.name}
                                   >
                                     {printerChoiceSaving?.printerName === printer.name && printerChoiceSaving.choice === "default"
-                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving...</>
-                                      : defaultPrinter === printer.name ? "Default" : "Set as Default"}
+                                      ? <><Loader2 className="h-3 w-3 animate-spin" /> {t("m.saving")}</>
+                                      : defaultPrinter === printer.name ? t("m.defaultPrinter") : t("m.setDefaultPrinter")}
                                   </Button>
                                 </div>
                               </div>
@@ -1606,9 +1777,9 @@ export const SettingsTab = () => {
                                 className="shrink-0"
                               >
                                 {testPrintLoading === printer.name ? (
-                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Testing...</>
+                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> {t("m.testingPrint")}</>
                                 ) : (
-                                  <><Printer className="h-3 w-3 mr-1" /> Test Print</>
+                                  <><Printer className="h-3 w-3 mr-1" /> {t("m.testPrint")}</>
                                 )}
                               </Button>
                             </div>
@@ -1619,8 +1790,9 @@ export const SettingsTab = () => {
                                   testPrintResult.success ? "text-green-700" : "text-red-700"
                                 }`}
                               >
-                                {testPrintResult.success ? "Test print: " : "Test print failed: "}
-                                {testPrintResult.message}
+                                {t(testPrintResult.success ? "m.testPrintResult" : "m.testPrintFailed", {
+                                  message: testPrintResult.message,
+                                })}
                               </p>
                             )}
                           </div>
@@ -1637,20 +1809,20 @@ export const SettingsTab = () => {
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                 <div className="text-left flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <h4 className="font-semibold text-sm">Print Jobs Needing Review ({printerJobs.length})</h4>
+                  <h4 className="font-semibold text-sm">{t("m.printJobsReviewCount", { count: printerJobs.length })}</h4>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    If submission was interrupted, the ticket may or may not have printed. Check the printer and its queue before arranging a manual reprint. The system never retries these jobs automatically.
+                    {t("m.printJobsReviewHelp")}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void loadPrinterJobs(true)} disabled={printerJobsLoading}>
                     {printerJobsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Refresh job status
+                    {t("m.refreshJobStatus")}
                   </Button>
                   {printerJobs.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No print jobs currently need review.</p>
+                    <p className="text-sm text-muted-foreground">{t("m.noPrintJobsReview")}</p>
                   ) : (
                     <div className="space-y-3">
                       {printerJobs.map(job => (
@@ -1660,13 +1832,13 @@ export const SettingsTab = () => {
                               <p className="font-medium">
                                 {job.jobType.replace(/_/g, " ")}{job.orderId ? ` · Order #${job.orderId}` : ""}
                               </p>
-                              <p>Printer: {job.printerName}</p>
-                              <p>Status: {job.status === "submitting" ? "Submission not confirmed" : "Outcome uncertain"}</p>
+                              <p>{t("m.printerLabel")}: {job.printerName}</p>
+                              <p>{t("m.statusLabel")}: {job.status === "submitting" ? t("m.submissionNotConfirmed") : t("m.outcomeUncertain")}</p>
                               <p className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</p>
                               {job.errorMessage && <p className="text-xs text-red-700">{job.errorMessage}</p>}
                             </div>
                             <Button size="sm" variant="outline" onClick={() => void acknowledgePrinterJob(job.id)}>
-                              Mark reviewed
+                              {t("m.markPrintJobReviewed")}
                             </Button>
                           </div>
                         </div>
@@ -1682,18 +1854,18 @@ export const SettingsTab = () => {
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                 <div className="text-left flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  <h4 className="font-semibold text-sm">Receipt Copy Counts</h4>
+                  <h4 className="font-semibold text-sm">{t("m.receiptCopyCounts")}</h4>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
                 <div className="space-y-4">
-                  <p className="text-xs text-muted-foreground">Set how many copies of each receipt type to print globally.</p>
+                  <p className="text-xs text-muted-foreground">                  {t("m.receiptCopyCountHelp")}</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Order Receipt (Customer)</Label>
+                      <Label>{t("m.orderReceiptCustomer")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={orderCustomerCopies}
                         onChange={(e) => {
@@ -1703,10 +1875,10 @@ export const SettingsTab = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Order Receipt (Kitchen)</Label>
+                      <Label>{t("m.orderReceiptKitchen")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={orderKitchenCopies}
                         onChange={(e) => {
@@ -1716,10 +1888,10 @@ export const SettingsTab = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Add-on Receipt (Customer)</Label>
+                      <Label>{t("m.addOnReceiptCustomer")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={addonCustomerCopies}
                         onChange={(e) => {
@@ -1729,10 +1901,10 @@ export const SettingsTab = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Add-on Receipt (Kitchen)</Label>
+                      <Label>{t("m.addOnReceiptKitchen")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={addonKitchenCopies}
                         onChange={(e) => {
@@ -1742,10 +1914,10 @@ export const SettingsTab = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Final Receipt</Label>
+                      <Label>{t("m.finalReceipt")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={finalReceiptCopies}
                         onChange={(e) => {
@@ -1755,10 +1927,10 @@ export const SettingsTab = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Daily Sales Report</Label>
+                      <Label>{t("m.dailySalesReport")}</Label>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
                         max="5"
                         value={dailySalesReportCopies}
                         onChange={(e) => {
@@ -1773,9 +1945,9 @@ export const SettingsTab = () => {
                     disabled={receiptCopiesSaving}
                     className="w-full bg-green-700 hover:bg-green-800 text-white flex gap-2"
                   >
-                    {receiptCopiesSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-                      : receiptCopiesSaved ? <><CheckCircle2 className="h-4 w-4" /> Saved</>
-                      : "Save Receipt Copy Counts"}
+                    {receiptCopiesSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("m.saving")}</>
+                      : receiptCopiesSaved ? <><CheckCircle2 className="h-4 w-4" /> {t("m.saved")}</>
+                      : t("m.saveReceiptCopyCounts")}
                   </Button>
                 </div>
               </AccordionContent>
@@ -1786,7 +1958,7 @@ export const SettingsTab = () => {
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                 <div className="text-left flex items-center gap-2">
                   <Printer className="h-4 w-4" />
-                  <h4 className="font-semibold text-sm">Ticket Preview & Actions</h4>
+                  <h4 className="font-semibold text-sm">{t("m.ticketPreviewActions")}</h4>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pt-3 pb-4 border-t">
@@ -1794,10 +1966,10 @@ export const SettingsTab = () => {
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="min-w-0 bg-gray-50 border rounded-lg p-4" style={{ containerType: "inline-size" }}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h4 className="font-semibold text-sm">Test Ticket Preview</h4>
+                        <h4 className="font-semibold text-sm">{t("m.testTicketPreview")}</h4>
                         {!editingTicketPreview ? (
                           <Button variant="outline" size="sm" onClick={() => setEditingTicketPreview(true)}>
-                            Edit
+                            {t("m.edit")}
                           </Button>
                         ) : (
                           <div className="flex gap-2">
@@ -1810,14 +1982,14 @@ export const SettingsTab = () => {
                               }}
                               disabled={ticketPreviewSaving}
                             >
-                              Cancel
+                              {t("m.cancel")}
                             </Button>
                             <Button
                               size="sm"
                               onClick={() => void saveTicketPreview()}
                               disabled={ticketPreviewSaving || !ticketPreview.trim() || ticketPreview.length > 4000}
                             >
-                              {ticketPreviewSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Preview"}
+                              {ticketPreviewSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("m.saving")}</> : t("m.savePreview")}
                             </Button>
                           </div>
                         )}
@@ -1831,7 +2003,7 @@ export const SettingsTab = () => {
                               contentEditable={editingTicketPreview}
                               suppressContentEditableWarning
                               role={editingTicketPreview ? "textbox" : undefined}
-                              aria-label={editingTicketPreview ? "Editable test ticket text" : undefined}
+                              aria-label={editingTicketPreview ? t("m.editableTestTicketText") : undefined}
                               aria-multiline={editingTicketPreview || undefined}
                               spellCheck={false}
                               onInput={(event) => {
@@ -1856,29 +2028,29 @@ export const SettingsTab = () => {
                           </div>
                         ) : (
                           <p role={receiptLayoutError ? "alert" : "status"} className="p-3 text-sm text-muted-foreground">
-                            {receiptLayoutError || "Loading printer layout..."}
+                            {receiptLayoutError || t("m.loadingPrinterLayout")}
                           </p>
                         )}
                       </div>
                       {ticketPreviewHasBeenSaved && ticketPreview !== savedTicketPreview && (
-                        <p role="status" className="mt-2 text-sm text-amber-700">Preview changed; save it before printing the test ticket.</p>
+                        <p role="status" className="mt-2 text-sm text-amber-700">{t("m.previewChangedSaveBeforePrint")}</p>
                       )}
                       {!ticketPreviewHasBeenSaved && (
-                        <p role="status" className="mt-2 text-sm text-amber-700">Save this preview once before printing a test ticket.</p>
+                        <p role="status" className="mt-2 text-sm text-amber-700">{t("m.savePreviewBeforePrint")}</p>
                       )}
                       <Button
                         onClick={() => void printTestTicket()}
                         disabled={printingTestTicket || !selectedPrinter || !ticketPreviewHasBeenSaved || ticketPreview !== savedTicketPreview}
                         className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white flex gap-2"
                       >
-                        {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
-                          : <><Printer className="h-4 w-4" /> Print Test Ticket</>}
+                        {printingTestTicket ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("m.printing")}</>
+                          : <><Printer className="h-4 w-4" /> {t("m.printTestTicket")}</>}
                       </Button>
                     </div>
 
                     <div className="min-w-0 bg-gray-50 border rounded-lg p-4" style={{ containerType: "inline-size" }}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h4 className="font-semibold text-sm">Sample Ticket Preview</h4>
+                        <h4 className="font-semibold text-sm">{t("m.sampleTicketPreview")}</h4>
                         <Select
                           value={sampleTicketType}
                           disabled={printingSampleTicket}
@@ -1886,12 +2058,12 @@ export const SettingsTab = () => {
                             if (isSampleTicketType(value)) setSampleTicketType(value);
                           }}
                         >
-                          <SelectTrigger aria-label="Sample ticket type" className="w-full sm:w-64">
+                          <SelectTrigger aria-label={t("m.sampleTicketType")} className="w-full sm:w-64">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {SAMPLE_TICKET_TYPES.map(({ value, label }) => (
-                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            {SAMPLE_TICKET_TYPES.map(({ value, labelKey }) => (
+                              <SelectItem key={value} value={value}>{t(labelKey)}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -1899,12 +2071,12 @@ export const SettingsTab = () => {
 
                       <div className="mt-3 w-full border bg-white">
                         {sampleTicketLoading ? (
-                          <p role="status" className="p-3 text-sm text-muted-foreground">Loading sample...</p>
+                          <p role="status" className="p-3 text-sm text-muted-foreground">{t("m.loadingSample")}</p>
                         ) : sampleTicketError ? (
                           <p role="alert" className="p-3 text-sm text-destructive">{sampleTicketError}</p>
                         ) : !receiptLayout ? (
                           <p role={receiptLayoutError ? "alert" : "status"} className="p-3 text-sm text-muted-foreground">
-                            {receiptLayoutError || "Loading printer layout..."}
+                            {receiptLayoutError || t("m.loadingPrinterLayout")}
                           </p>
                         ) : (
                           <div style={getReceiptContentStyle(receiptLayout)}>
@@ -1934,23 +2106,23 @@ export const SettingsTab = () => {
                           className="bg-indigo-600 text-white hover:bg-indigo-700"
                         >
                           {printingSampleTicket ? (
-                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Printing sample...</>
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("m.printingSample")}</>
                           ) : (
-                            <><Printer className="mr-2 h-4 w-4" /> Print This Sample</>
+                            <><Printer className="mr-2 h-4 w-4" /> {t("m.printThisSample")}</>
                           )}
                         </Button>
                         <p className="text-xs text-muted-foreground">
                           {selectedPrinter || defaultPrinter
-                            ? `Prints one copy on ${selectedPrinter || defaultPrinter}.`
-                            : "Select an active or default printer to enable sample printing."}
+                            ? t("m.samplePrintOnPrinter", { printer: selectedPrinter || defaultPrinter })
+                            : t("m.selectPrinterForSample")}
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4 pt-4 border-t">
-                    <h4 className="font-semibold text-sm">Daily Sales Reports</h4>
-                    <p className="text-xs text-muted-foreground">Print current day's sales report on demand.</p>
+                    <h4 className="font-semibold text-sm">{t("m.dailySalesReports")}</h4>
+                    <p className="text-xs text-muted-foreground">{t("m.dailySalesOnDemand")}</p>
 
                     <div className="flex gap-2">
                       <Button
@@ -1958,8 +2130,8 @@ export const SettingsTab = () => {
                         disabled={printingDailyReport}
                         className="bg-blue-700 hover:bg-blue-800 text-white flex gap-2"
                       >
-                        {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> Printing...</>
-                          : <><FileText className="h-4 w-4" /> Print Daily Sales Report</>}
+                        {printingDailyReport ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("m.printing")}</>
+                          : <><FileText className="h-4 w-4" /> {t("m.printDailySalesReport")}</>}
                       </Button>
                     </div>
                   </div>
@@ -2108,69 +2280,69 @@ export const SettingsTab = () => {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-orange-600" />
                 <div>
-                <p className="font-bold text-gray-900">Data Reset</p>
-                <p className="text-sm text-gray-600">Remove a complete data category, or use Reset Everything for a clean restaurant setup.</p>
+                <p className="font-bold text-gray-900">{t("m.settings.dataResetTitle")}</p>
+                <p className="text-sm text-gray-600">{t("m.settings.dataResetDescription")}</p>
                 </div>
               </div>
 
               <div className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reset-category">Reset Category</Label>
+                  <Label htmlFor="reset-category">{t("m.settings.resetCategory")}</Label>
                   <Select value={resetCategory} onValueChange={(value) => setResetCategory(value)}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select reset category" />
+                      <SelectValue placeholder={t("m.settings.selectResetCategory")} />
                     </SelectTrigger>
                     <SelectContent>
                       {resetOptions.map((option) => (
-                        <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>
+                        <SelectItem key={option.key} value={option.key}>{t(`m.settings.resetOption.${option.key}.label`)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{resetOptions.find((option) => option.key === resetCategory)?.description}</p>
+                  <p className="text-xs text-muted-foreground">{resetCategory ? t(`m.settings.resetOption.${resetCategory}.description`) : null}</p>
                 </div>
 
                 {resetCategory === "all_data" ? (
                   <div className="space-y-4">
                     <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950">
-                      <p className="font-bold">This permanently removes business data and uploaded photos.</p>
-                      <p className="mt-1">It clears orders and archives, feedback, menu items and categories, tables, inventory, employees, printer history, promotions, and activity history.</p>
-                      <p className="mt-1">Your manager login, printer setup, tax and service-charge settings, working hours, the Counter Order system route, and backup archives are retained so the app remains usable and recoverable.</p>
-                      <p className="mt-1 font-semibold">This cannot be undone except by restoring a backup.</p>
+                      <p className="font-bold">{t("m.settings.resetRemovesData")}</p>
+                      <p className="mt-1">{t("m.settings.resetRemovedCategories")}</p>
+                      <p className="mt-1">{t("m.settings.resetRetainedCategories")}</p>
+                      <p className="mt-1 font-semibold">{t("m.settings.resetRestoreWarning")}</p>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reset-confirmation-sentence">Type the exact confirmation sentence</Label>
+                      <Label htmlFor="reset-confirmation-sentence">{t("m.settings.exactConfirmationSentence")}</Label>
                       <Input
                         id="reset-confirmation-sentence"
                         value={resetConfirmationInput}
                         onChange={(e) => setResetConfirmationInput(e.target.value)}
                         autoComplete="off"
-                        placeholder="Type the exact sentence shown below"
+                        placeholder={t("m.settings.typeExactSentenceBelow")}
                       />
-                      <p className="text-xs text-muted-foreground">Required: {resetSentenceExpected || "Loading confirmation..."}</p>
+                      <p className="text-xs text-muted-foreground">{t("m.settings.requiredLabel")}: {resetSentenceExpected || t("m.settings.loadingConfirmation")}</p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="reset-manager-password">Re-enter the manager password</Label>
+                      <Label htmlFor="reset-manager-password">{t("m.settings.reenterManagerPassword")}</Label>
                       <Input
                         id="reset-manager-password"
                         type="password"
                         value={resetPasswordInput}
                         onChange={(e) => setResetPasswordInput(e.target.value)}
                         autoComplete="current-password"
-                        placeholder="Manager password"
+                        placeholder={t("m.settings.managerPassword")}
                       />
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="reset-confirmation-text">Confirmation text</Label>
+                    <Label htmlFor="reset-confirmation-text">{t("m.settings.confirmationText")}</Label>
                     <Input
                       id="reset-confirmation-text"
                       value={resetConfirmationInput}
                       onChange={(e) => setResetConfirmationInput(e.target.value)}
-                      placeholder="Type the selected category label exactly"
+                      placeholder={t("m.settings.typeSelectedCategoryExactly")}
                     />
-                    <p className="text-xs text-muted-foreground">Type exactly: {resetOptions.find((option) => option.key === resetCategory)?.label}</p>
+                    <p className="text-xs text-muted-foreground">{t("m.settings.typeExactlyEnglish")}: {resetOptions.find((option) => option.key === resetCategory)?.label}</p>
                   </div>
                 )}
 
@@ -2192,8 +2364,8 @@ export const SettingsTab = () => {
                     className="bg-rose-600 hover:bg-rose-700 text-white"
                   >
                     {resetLoading
-                      ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Deleting data…</>
-                      : resetCategory === "all_data" ? "Reset Everything" : "Delete this category"}
+                      ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> {t("m.settings.deletingData")}</>
+                      : resetCategory === "all_data" ? t("m.settings.resetEverything") : t("m.settings.deleteCategory")}
                   </Button>
                 </div>
               </div>
@@ -2233,7 +2405,7 @@ export const SettingsTab = () => {
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" variant="outline" onClick={() => handleDownloadBackup(file.filename)}>
-                              Download
+                              {t("m.download")}
                             </Button>
                             <Button 
                               size="sm"

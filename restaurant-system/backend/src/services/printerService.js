@@ -316,9 +316,10 @@ const parseItemOptions = (item) => {
   return options;
 };
 
-const formatDailySalesReport = (todayOrders, now = new Date()) => {
+const formatDailySalesReport = (todayOrders, now = new Date(), reportDate = null) => {
   const timestamp = formatDateTime(now);
-  const todayDateStr = now.toLocaleDateString('en-GB');
+  const reportDateObj = reportDate instanceof Date ? reportDate : now;
+  const todayDateStr = reportDateObj.toLocaleDateString('en-GB');
 
   let ticket = "";
   ticket += "[CENTER]BP DRAGONFLY GARDEN\n";
@@ -540,10 +541,10 @@ const printerService = {
     });
   },
 
-  printDailySalesReport: async (todayOrders) => {
+  printDailySalesReport: async (todayOrders, reportDate = null) => {
     const printerName = await getSelectedPrinter();
     if (!printerName) throw new Error("No printer is selected. Choose the active printer in Manager Settings.");
-    const ticket = formatDailySalesReport(todayOrders);
+    const ticket = formatDailySalesReport(todayOrders, new Date(), reportDate);
 
     return await executePrintWithPrinter(ticket, `daily_sales_report`, printerName, {
       jobType: "daily_sales_report"

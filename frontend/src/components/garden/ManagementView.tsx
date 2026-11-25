@@ -63,10 +63,12 @@ const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", 
 type ManagerTab = typeof MANAGER_TABS[number];
 type ManagerNotification = {
   id: string;
-  type: "low_stock";
+  type: "low_stock" | "daily_sales_missed";
   title: string;
   message: string;
-  action: () => void;
+  action?: () => void;
+  printAction?: () => void;
+  ignoreAction?: () => void;
 };
 
 const MANAGER_SESSION_LOCK_KEY = "managerSessionLock";
@@ -181,12 +183,11 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   const loadNotifications = async () => {
     try {
       const invData = await fetchInventory();
-      if (!invData) return false;
-      const lowStock = invData.filter((item: InventoryItem) => {
+      const lowStock = (invData || []).filter((item: InventoryItem) => {
         const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
         return percent <= item.low_stock_threshold_percent;
       });
-      setNotifications(lowStock.map((item: InventoryItem) => ({
+      const lowStockNotifications: ManagerNotification[] = lowStock.map((item: InventoryItem) => ({
         id: `inv-${item.id}`,
         type: "low_stock",
         title: t("manager.lowStockTitle"),
@@ -195,8 +196,65 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           setInventoryAction({ subTab: "stock", editItemId: item.id });
           goToTab("inventory");
         }
-      })));
-      return lowStock.length > 0;
+      }));
+
+      let missedNotifications: ManagerNotification[] = [];
+      try {
+        const response = await fetch("/management/printers/daily-sales-report/status", { credentials: "include" });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          missedNotifications = (data.reports || [])
+            .filter((report: { status: string }) => report.status === "missed")
+            .map((report: { sales_date: string; order_count?: number; total_sales?: number; error_message?: string }) => ({
+              id: `daily-sales-${report.sales_date}`,
+              type: "daily_sales_missed" as const,
+              title: t("manager.dailySales.missedTitle", { date: report.sales_date }),
+              message: t("manager.dailySales.missedMessage"),
+              printAction: () => {
+                void (async () => {
+                  try {
+                    const printResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/print`, {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    const printData = await printResponse.json();
+                    if (!printResponse.ok || !printData.success) throw new Error(printData.message || "Print failed");
+                    notify("success", t("manager.dailySales.printSuccess"));
+                  } catch (error) {
+                    console.error("Failed to print missed daily sales receipt:", error);
+                    notify("error", t("manager.dailySales.printFailure"));
+                  } finally {
+                    void loadNotifications();
+                  }
+                })();
+              },
+              ignoreAction: () => {
+                void (async () => {
+                  try {
+                    const ignoreResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/ignore`, {
+                      method: "POST",
+                      credentials: "include",
+                    });
+                    const ignoreData = await ignoreResponse.json();
+                    if (!ignoreResponse.ok || !ignoreData.success) throw new Error(ignoreData.message || "Could not dismiss the alert");
+                    notify("success", t("manager.dailySales.ignoreSuccess"));
+                  } catch (error) {
+                    console.error("Failed to dismiss missed daily sales notification:", error);
+                    notify("error", t("manager.dailySales.ignoreFailure"));
+                  } finally {
+                    void loadNotifications();
+                  }
+                })();
+              },
+            }));
+        }
+      } catch (error) {
+        safeConsoleError("Failed to load missed daily sales receipts", error);
+      }
+
+      const combined = [...missedNotifications, ...lowStockNotifications];
+      setNotifications(combined);
+      return combined.length > 0;
     } catch (e) {
       safeConsoleError("Failed to load manager notifications", e);
       return false;
@@ -225,6 +283,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     "NEW_PAYMENT",
     "INVENTORY_UPDATE",
     "DATA_REFRESH",
+    "DAILY_SALES_REPORT_UPDATE",
     "PRINT_JOB_REVIEW_REQUIRED",
     "CONNECTION_RESTORED",
   ], (event) => {
@@ -235,6 +294,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       event.type === "NEW_PAYMENT" ||
       event.type === "INVENTORY_UPDATE" ||
       event.type === "DATA_REFRESH" ||
+      event.type === "DAILY_SALES_REPORT_UPDATE" ||
       event.type === "CONNECTION_RESTORED"
     ) {
       void loadNotifications();
@@ -499,17 +559,33 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                   ) : (
                     <div className="flex flex-col">
                       {notifications.map((notif, idx) => (
-                        <button
-                          key={notif.id || idx}
-                          onClick={notif.action}
-                          className="text-left px-4 py-3 border-b last:border-0 hover:bg-green-50 transition-colors flex gap-3 items-start"
-                        >
-                          <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{notif.title}</p>
-                            <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
-                          </div>
-                        </button>
+                        <div key={notif.id || idx} className="px-4 py-3 border-b last:border-0 hover:bg-green-50 transition-colors">
+                          {notif.type === "daily_sales_missed" ? (
+                            <div className="flex gap-3 items-start">
+                              <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-800">{notif.title}</p>
+                                <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
+                                <div className="grid grid-cols-2 gap-2 mt-3">
+                                  <Button size="sm" className="h-8 bg-green-700 hover:bg-green-800 text-white" onClick={notif.printAction}>
+                                    {t("manager.dailySales.printAction")}
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-8" onClick={notif.ignoreAction}>
+                                    {t("manager.dailySales.ignoreAction")}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={notif.action} className="w-full text-left flex gap-3 items-start">
+                              <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{notif.title}</p>
+                                <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
+                              </div>
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}

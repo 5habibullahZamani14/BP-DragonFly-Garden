@@ -24,7 +24,7 @@ export const ChartInfo = ({ textKey, className }: { textKey: string; className?:
             <Info className="h-4 w-4 text-white" />
           </div>
           <div className="flex-1">
-            <h4 className="font-semibold text-gray-900 text-base mb-4">About this chart</h4>
+            <h4 className="font-semibold text-gray-900 text-base mb-4">{t("ui.aboutChart")}</h4>
             <div className="text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-4 prose-headings:mb-2 prose-h2:text-lg prose-h3:text-base prose-p:text-gray-700 prose-p:my-3 prose-p:leading-relaxed prose-strong:text-gray-900 prose-ul:my-4 prose-li:my-2 prose-li:text-gray-700 prose-hr:my-5 prose-hr:border-gray-300 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline">
               <ReactMarkdown
                 components={{

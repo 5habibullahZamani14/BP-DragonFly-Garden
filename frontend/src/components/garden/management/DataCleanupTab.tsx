@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Search, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import {
 import { safeConsoleError } from "@/lib/safeConsole";
 
 const PAGE_SIZE = 50;
-const MAX_DELETE_COUNT = 2000;
+const MAX_DELETE_COUNT = 10_000;
 
 const FILTER_LABELS: Record<string, string> = {
   status: "Status",
@@ -55,12 +55,17 @@ export const DataCleanupTab = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedRecords, setSelectedRecords] = useState<Map<string, DataCleanupRecord>>(new Map());
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  const [pasteAttempted, setPasteAttempted] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const dataset = datasets.find((item) => item.key === datasetKey);
-  const selectedCount = allMatchingSelected ? total : selectedIds.size;
+  const selectedCount = allMatchingSelected ? Math.max(0, total - excludedIds.size) : selectedIds.size;
+  const selectionActive = allMatchingSelected || selectedIds.size > 0;
+  const isRecordSelected = (id: string) => allMatchingSelected ? !excludedIds.has(id) : selectedIds.has(id);
+  const currentPageFullySelected = rows.length > 0 && rows.every((row) => isRecordSelected(row.id));
   const expectedConfirmation = dataset
     ? `DELETE ${selectedCount} ${dataset.label.toUpperCase()}`
     : "";
@@ -69,7 +74,9 @@ export const DataCleanupTab = () => {
   const activeFilters = Object.entries(filters)
     .filter(([key, value]) => value && key !== "search")
     .map(([key, value]) => `${FILTER_LABELS[key] || key}: ${value}`);
-  const reviewExamples = allMatchingSelected ? rows.slice(0, 5) : [...selectedRecords.values()].slice(0, 5);
+  const reviewExamples = allMatchingSelected
+    ? rows.filter((row) => !excludedIds.has(row.id)).slice(0, 5)
+    : [...selectedRecords.values()].slice(0, 5);
 
   useEffect(() => {
     let active = true;
@@ -117,6 +124,7 @@ export const DataCleanupTab = () => {
     setSelectedIds(new Set());
     setSelectedRecords(new Map());
     setAllMatchingSelected(false);
+    setExcludedIds(new Set());
   };
 
   const updateFilter = (key: string, value: string) => {
@@ -127,10 +135,12 @@ export const DataCleanupTab = () => {
 
   const toggleRecord = (id: string) => {
     if (allMatchingSelected) {
-      setAllMatchingSelected(false);
-      const selected = rows.filter((row) => row.id !== id);
-      setSelectedIds(new Set(selected.map((row) => row.id)));
-      setSelectedRecords(new Map(selected.map((row) => [row.id, row])));
+      setExcludedIds((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
       return;
     }
     const record = rows.find((row) => row.id === id);
@@ -150,18 +160,20 @@ export const DataCleanupTab = () => {
 
   const selectCurrentPage = () => {
     setAllMatchingSelected(false);
+    setExcludedIds(new Set());
     setSelectedIds((current) => new Set([...current, ...rows.map((row) => row.id)]));
     setSelectedRecords((current) => new Map([...current, ...rows.map((row) => [row.id, row] as const)]));
   };
 
   const openDeleteReview = () => {
-    if (!dataset || selectedCount === 0) return;
+    if (!dataset || selectedCount === 0 || selectedCount > MAX_DELETE_COUNT) return;
     setConfirmationText("");
+    setPasteAttempted(false);
     setConfirmOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!dataset || selectedCount === 0) return;
+    if (!dataset || selectedCount === 0 || selectedCount > MAX_DELETE_COUNT) return;
     setDeleting(true);
     try {
       const result = await deleteDataCleanupRecords({
@@ -169,14 +181,16 @@ export const DataCleanupTab = () => {
         ids: allMatchingSelected ? undefined : [...selectedIds],
         filters,
         allMatching: allMatchingSelected,
+        excludedIds: allMatchingSelected ? [...excludedIds] : undefined,
         expectedCount: selectedCount,
-        confirmationText: confirmationText.trim(),
+        confirmationText,
       });
       setConfirmOpen(false);
       resetSelection();
       toast.success(t("m.dataCleanup.deleted", { count: result.deleted }));
       if (result.warnings.length) {
-        toast.warning(result.warnings.join(" "));
+        safeConsoleError("Data cleanup completed with warnings", result.warnings);
+        toast.warning(t("m.dataCleanup.deleteWarning", { count: result.warnings.length }));
       }
       const refreshed = await fetchDataCleanupRecords(dataset.key, filters, page, PAGE_SIZE);
       setRows(refreshed.rows);
@@ -184,7 +198,7 @@ export const DataCleanupTab = () => {
       if (refreshed.rows.length === 0 && page > 1) setPage((current) => current - 1);
     } catch (error: unknown) {
       safeConsoleError("Bulk data deletion failed", error);
-      toast.error(error instanceof Error ? error.message : t("m.dataCleanup.deleteFailed"));
+      toast.error(t("m.dataCleanup.deleteFailed"));
       if (typeof error === "object" && error !== null && "status" in error && error.status === 409) {
         setConfirmOpen(false);
         resetSelection();
@@ -197,9 +211,14 @@ export const DataCleanupTab = () => {
 
   const toggleAllOnPage = (checked: boolean) => {
     if (allMatchingSelected) {
-      setAllMatchingSelected(false);
-      setSelectedIds(new Set());
-      setSelectedRecords(new Map());
+      setExcludedIds((current) => {
+        const next = new Set(current);
+        rows.forEach((row) => {
+          if (checked) next.delete(row.id);
+          else next.add(row.id);
+        });
+        return next;
+      });
       return;
     }
     if (checked) selectCurrentPage();
@@ -214,6 +233,24 @@ export const DataCleanupTab = () => {
         rows.forEach((row) => next.delete(row.id));
         return next;
       });
+    }
+  };
+
+  const preventPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    setPasteAttempted(true);
+  };
+
+  const preventDrop = (event: DragEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    setPasteAttempted(true);
+  };
+
+  const preventPasteShortcut = (event: KeyboardEvent<HTMLInputElement>) => {
+    const key = event.key.toLowerCase();
+    if (((event.ctrlKey || event.metaKey) && key === "v") || (event.shiftKey && key === "insert")) {
+      event.preventDefault();
+      setPasteAttempted(true);
     }
   };
 
@@ -283,30 +320,37 @@ export const DataCleanupTab = () => {
       </div>
 
       {dataset && <p className="text-sm text-muted-foreground">{dataset.impact}</p>}
-      {total > MAX_DELETE_COUNT && (
+      {(total > MAX_DELETE_COUNT || selectedCount > MAX_DELETE_COUNT) && (
         <p className="text-sm font-medium text-amber-800">{t("m.dataCleanup.batchLimit", { count: MAX_DELETE_COUNT })}</p>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm font-medium">{t("m.dataCleanup.matching", { count: total })}</div>
+        <div className="space-y-1 text-sm font-medium">
+          <p>{t("m.dataCleanup.matching", { count: total })}</p>
+          {allMatchingSelected && (
+            <p role="status" className="text-emerald-700">
+              {t("m.dataCleanup.selectedAcrossPages", { count: selectedCount })}
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {rows.length > 0 && (
-            <Button type="button" variant="outline" size="sm" onClick={() => toggleAllOnPage(rows.some((row) => !selectedIds.has(row.id)))}>
-              {t("m.dataCleanup.selectPage")}
+            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => toggleAllOnPage(!currentPageFullySelected)}>
+              {t(currentPageFullySelected ? "m.dataCleanup.deselectPage" : "m.dataCleanup.selectPage")}
             </Button>
           )}
           {total > rows.length && total <= MAX_DELETE_COUNT && !allMatchingSelected && (
-            <Button type="button" variant="outline" size="sm" onClick={() => { setAllMatchingSelected(true); setSelectedIds(new Set()); setSelectedRecords(new Map()); }}>
+            <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => { setAllMatchingSelected(true); setSelectedIds(new Set()); setSelectedRecords(new Map()); setExcludedIds(new Set()); }}>
               {t("m.dataCleanup.selectAll", { count: total })}
             </Button>
           )}
           {selectedCount > 0 && (
-            <Button type="button" variant="destructive" size="sm" onClick={openDeleteReview}>
+            <Button type="button" variant="destructive" size="sm" disabled={loading || selectedCount > MAX_DELETE_COUNT} onClick={openDeleteReview}>
               <Trash2 className="mr-2 h-4 w-4" />
               {t("m.dataCleanup.deleteSelected", { count: selectedCount })}
             </Button>
           )}
-          {selectedCount > 0 && (
+          {selectionActive && (
             <Button type="button" variant="ghost" size="sm" onClick={resetSelection}>
               {t("m.dataCleanup.clearSelection")}
             </Button>
@@ -321,8 +365,9 @@ export const DataCleanupTab = () => {
               <th className="w-10 p-3">
                 <input
                   type="checkbox"
-                  aria-label={t("m.dataCleanup.selectPage")}
-                  checked={allMatchingSelected || (rows.length > 0 && rows.every((row) => selectedIds.has(row.id)))}
+                  aria-label={t(currentPageFullySelected ? "m.dataCleanup.deselectPage" : "m.dataCleanup.selectPage")}
+                  checked={currentPageFullySelected}
+                  disabled={loading}
                   onChange={(event) => toggleAllOnPage(event.target.checked)}
                 />
               </th>
@@ -343,7 +388,8 @@ export const DataCleanupTab = () => {
                   <input
                     type="checkbox"
                     aria-label={t("m.dataCleanup.selectRecord", { record: row.label })}
-                    checked={allMatchingSelected || selectedIds.has(row.id)}
+                    checked={isRecordSelected(row.id)}
+                    disabled={loading}
                     onChange={() => toggleRecord(row.id)}
                   />
                 </td>
@@ -381,7 +427,7 @@ export const DataCleanupTab = () => {
           <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
             <p className="font-semibold">{dataset?.impact}</p>
             <p className="mt-2">
-              {allMatchingSelected ? t("m.dataCleanup.allFiltered") : t("m.dataCleanup.selectedRows")}
+              {allMatchingSelected && excludedIds.size === 0 ? t("m.dataCleanup.allFiltered") : t("m.dataCleanup.selectedRows")}
               {activeFilters.length > 0 && ` ${activeFilters.join(" · ")}`}
               {filters.search && ` · ${t("m.dataCleanup.search")}: “${filters.search}”`}
             </p>
@@ -397,11 +443,27 @@ export const DataCleanupTab = () => {
           </div>
           <div className="space-y-2">
             <Label htmlFor="cleanup-confirmation">{t("m.dataCleanup.typeToConfirm", { phrase: expectedConfirmation })}</Label>
-            <Input id="cleanup-confirmation" autoComplete="off" value={confirmationText} onChange={(event) => setConfirmationText(event.target.value)} />
+            <Input
+              id="cleanup-confirmation"
+              aria-describedby="cleanup-confirmation-help"
+              autoComplete="off"
+              value={confirmationText}
+              onChange={(event) => setConfirmationText(event.target.value)}
+              onPaste={preventPaste}
+              onDrop={preventDrop}
+              onKeyDown={preventPasteShortcut}
+            />
+            <p
+              id="cleanup-confirmation-help"
+              className={`text-xs ${pasteAttempted ? "font-medium text-destructive" : "text-muted-foreground"}`}
+              role={pasteAttempted ? "alert" : undefined}
+            >
+              {t("m.dataCleanup.manualEntryOnly")}
+            </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" disabled={deleting} onClick={() => setConfirmOpen(false)}>{t("m.dataCleanup.cancel")}</Button>
-            <Button type="button" variant="destructive" disabled={deleting || confirmationText.trim() !== expectedConfirmation} onClick={() => void confirmDelete()}>
+            <Button type="button" variant="destructive" disabled={deleting || confirmationText !== expectedConfirmation} onClick={() => void confirmDelete()}>
               {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
               {t("m.dataCleanup.deleteNow")}
             </Button>

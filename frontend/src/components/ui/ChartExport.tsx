@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { safeConsoleError } from "@/lib/safeConsole";
 
 type ChartExportProps = {
@@ -64,40 +65,41 @@ async function svgToJpeg(svg: SVGElement, scale = 2) {
 }
 
 export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileName = "chart", className }) => {
+  const { t } = useTranslation();
   const exportPng = async () => {
     const container = document.getElementById(targetId);
-    if (!container) return toast.error("Chart container not found");
+    if (!container) return toast.error(t("ui.chartExport.containerNotFound"));
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return toast.error("SVG element not found inside chart container");
+    if (!svg) return toast.error(t("ui.chartExport.svgNotFound"));
     try {
       const blob = await svgToPng(svg);
       if (blob) downloadBlob(blob, `${fileName}.png`);
     } catch (err) {
       safeConsoleError("Chart export failed", err);
-      toast.error("Failed to export PNG");
+      toast.error(t("ui.chartExport.failedPng"));
     }
   };
 
   const exportJpeg = async () => {
     const container = document.getElementById(targetId);
-    if (!container) return toast.error("Chart container not found");
+    if (!container) return toast.error(t("ui.chartExport.containerNotFound"));
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return toast.error("SVG element not found inside chart container");
+    if (!svg) return toast.error(t("ui.chartExport.svgNotFound"));
     try {
       const blob = await svgToJpeg(svg);
       if (blob) downloadBlob(blob, `${fileName}.jpg`);
     } catch (err) {
       safeConsoleError("Chart export failed", err);
-      toast.error("Failed to export JPG");
+      toast.error(t("ui.chartExport.failedJpg"));
     }
   };
 
   const exportPdf = async () => {
     // Fallback PDF: open PNG in new window and call print (user can Save as PDF)
     const container = document.getElementById(targetId);
-    if (!container) return toast.error("Chart container not found");
+    if (!container) return toast.error(t("ui.chartExport.containerNotFound"));
     const svg = container.querySelector('svg') as SVGElement | null;
-    if (!svg) return toast.error("SVG element not found inside chart container");
+    if (!svg) return toast.error(t("ui.chartExport.svgNotFound"));
     try {
       const blob = await svgToPng(svg, 2);
       if (!blob) return;
@@ -108,12 +110,12 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
       }
     } catch (err) {
       safeConsoleError("Chart export failed", err);
-      toast.error("Failed to prepare PDF (use PNG export as fallback)");
+      toast.error(t("ui.chartExport.failedPdf"));
     }
   };
 
   const exportCsv = () => {
-    if (!data || !data.length) return toast.error("No tabular data available for CSV export");
+    if (!data || !data.length) return toast.error(t("ui.chartExport.noCsvData"));
     const keys = Object.keys(data[0]);
     const rows = [keys.join(',')].concat(data.map(row =>
       keys.map(key => `"${String(Reflect.get(row, key) ?? '')}"`).join(',')
@@ -133,7 +135,7 @@ export const ChartExport: React.FC<ChartExportProps> = ({ targetId, data, fileNa
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2", className)}>
-      <div className="text-sm text-gray-600 mr-2">Export:</div>
+      <div className="text-sm text-gray-600 mr-2">{t("ui.exportLabel")}:</div>
       <button onClick={exportPng} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">PNG</button>
       <button onClick={exportJpeg} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">JPG</button>
       <button onClick={exportPdf} className="px-2.5 py-1 bg-white border border-gray-200 rounded text-sm hover:bg-gray-50 transition-colors shadow-sm">PDF</button>

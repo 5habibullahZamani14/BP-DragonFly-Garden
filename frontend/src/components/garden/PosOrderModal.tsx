@@ -59,7 +59,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
   const loadTables = useCallback(async () => {
     try {
       const data = await fetchTables();
-      const tableList = data || [];
+      const tableList = (data || []).filter((table) => table.table_number.trim().toUpperCase() !== "R4M");
       setTables(tableList);
       setSelectedTableId((current) =>
         current === 999 || tableList.some((table) => table.id === current) ? current : 999
@@ -259,7 +259,14 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
               {parentOrder ? (
                 <>
                   <Plus className="h-6 w-6 text-green-600" />
-                  Add-on items to Order #{parentOrder.id} ({parentOrder.order_type})
+                  {t("pos.addonItemsToOrder", {
+                    id: parentOrder.id,
+                    orderType: parentOrder.order_type === "TAKEAWAY" ? t("pos.orderTypeTakeaway")
+                      : parentOrder.order_type === "PICKUP" ? t("pos.orderTypePickup")
+                        : parentOrder.order_type === "DELIVERY" ? t("pos.orderTypeDelivery")
+                          : parentOrder.order_type === "COUNTER" ? t("pos.orderTypeCounter")
+                            : t("pos.orderTypeDineIn"),
+                  })}
                 </>
               ) : (
                 <>
@@ -301,7 +308,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
                           >
                             <option value={999}>{t("pos.noTable", "No Table (At Counter)")}</option>
                             {tables
-                              .filter(t => t.id !== 999 && t.table_number !== "Counter Order")
+                              .filter(t => t.id !== 999 && t.table_number !== "Counter Order" && t.table_number.trim().toUpperCase() !== "R4M")
                               .map(t => (
                                 <option key={t.id} value={t.id}>{t.table_number}</option>
                               ))

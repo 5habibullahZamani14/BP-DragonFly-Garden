@@ -48,7 +48,7 @@ const listRecords = async (req, res, next) => {
 
 const deleteRecords = async (req, res, next) => {
   try {
-    const { dataset, ids, filters, allMatching, expectedCount, confirmationText } = req.body || {};
+    const { dataset, ids, filters, allMatching, excludedIds, expectedCount, confirmationText } = req.body || {};
     const definition = DATASETS[dataset];
     if (!definition) {
       return res.status(400).json({ success: false, message: "Unknown data category." });
@@ -58,7 +58,7 @@ const deleteRecords = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "The reviewed record count is invalid." });
     }
     const expectedConfirmation = `DELETE ${count} ${definition.label.toUpperCase()}`;
-    if (String(confirmationText || "").trim() !== expectedConfirmation) {
+    if (String(confirmationText || "") !== expectedConfirmation) {
       return res.status(400).json({
         success: false,
         message: `Type exactly: ${expectedConfirmation}`,
@@ -70,6 +70,7 @@ const deleteRecords = async (req, res, next) => {
       ids,
       filters,
       allMatching: allMatching === true,
+      excludedIds,
       expectedCount: count,
       audit: (deletedCount) => createLog(
         "SYSTEM",
@@ -78,7 +79,11 @@ const deleteRecords = async (req, res, next) => {
         req.user?.name,
         dataset,
         definition.label,
-        { deleted_count: deletedCount, all_matching: allMatching === true }
+        {
+          deleted_count: deletedCount,
+          all_matching: allMatching === true,
+          excluded_count: Array.isArray(excludedIds) ? excludedIds.length : 0,
+        }
       ),
     });
     if (broadcastFn) broadcastFn({ type: "DATA_REFRESH" });

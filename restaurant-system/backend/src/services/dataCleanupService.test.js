@@ -42,6 +42,8 @@ test.beforeEach(async () => {
     CREATE TABLE customer_feedback_images (id INTEGER PRIMARY KEY, feedback_id INTEGER, image_url TEXT);
     CREATE TABLE customer_feedback_access_entries (id INTEGER PRIMARY KEY, session_id TEXT, feedback_id INTEGER);
     CREATE TABLE customer_feedback_access_sessions (id TEXT PRIMARY KEY, expires_at INTEGER);
+    CREATE TABLE tables (id INTEGER PRIMARY KEY, table_number TEXT NOT NULL, qr_code TEXT);
+    CREATE TABLE orders (id INTEGER PRIMARY KEY, table_id INTEGER);
     CREATE TABLE patterns (id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, image_url TEXT);
     CREATE TABLE repo_images (id INTEGER PRIMARY KEY, name TEXT, created_at TEXT, image_url TEXT);
     CREATE TABLE image_repository_sections (id INTEGER PRIMARY KEY, name TEXT, created_at TEXT);
@@ -92,6 +94,42 @@ test("all-matching deletion refuses a stale reviewed count without deleting reco
   assert.equal((await fetchOne("SELECT COUNT(*) AS count FROM customer_feedback")).count, 1);
 });
 
+test("all-matching deletion honors excluded records without dropping the remaining selection", async () => {
+  await execute("INSERT INTO customer_feedback (id, sender_name, comment, status, rating_app, created_at) VALUES (1, 'Guest', 'One', 'active', 5, '2026-01-01'), (2, 'Guest', 'Two', 'active', 5, '2026-01-01'), (3, 'Guest', 'Three', 'active', 5, '2026-01-01')");
+
+  const result = await service.deleteRecords({
+    dataset: "feedback",
+    filters: {},
+    allMatching: true,
+    excludedIds: ["2"],
+    expectedCount: 2,
+  });
+
+  assert.equal(result.deleted, 2);
+  assert.deepEqual((await fetchAll("SELECT id FROM customer_feedback ORDER BY id")).map((row) => row.id), [2]);
+});
+
+test("all-matching deletion supports the 8,292-record selection shown in the manager UI", async () => {
+  await execute(`
+    WITH RECURSIVE ids(id) AS (
+      SELECT 1
+      UNION ALL SELECT id + 1 FROM ids WHERE id < 8292
+    )
+    INSERT INTO customer_feedback (id, sender_name, comment, status, rating_app, created_at)
+    SELECT id, 'Guest', 'Feedback', 'active', 5, '2026-01-01' FROM ids
+  `);
+
+  const result = await service.deleteRecords({
+    dataset: "feedback",
+    filters: {},
+    allMatching: true,
+    expectedCount: 8292,
+  });
+
+  assert.equal(result.deleted, 8292);
+  assert.equal((await fetchOne("SELECT COUNT(*) AS count FROM customer_feedback")).count, 0);
+});
+
 test("a failed audit write rolls the entire deletion transaction back", async () => {
   await execute("INSERT INTO customer_feedback (id, sender_name, comment, status, rating_app, created_at) VALUES (1, 'Guest', 'Good', 'active', 5, '2026-01-01')");
 
@@ -126,6 +164,27 @@ test("categories containing menu items cannot be deleted", async () => {
     (error) => error instanceof DataCleanupError && error.status === 409
   );
   assert.equal((await fetchOne("SELECT COUNT(*) AS count FROM categories")).count, 1);
+});
+
+test("system ordering tables are hidden from cleanup results and cannot be selected for deletion", async () => {
+  await execute("INSERT INTO tables (id, table_number) VALUES (999, 'Takeaway'), (7, 'Table 7'), (8, 'Counter Order'), (9, 'R4M')");
+
+  const preview = await service.getRows("tables");
+  assert.equal(preview.total, 1);
+  assert.equal(preview.rows[0].id, "7");
+  assert.equal(preview.rows[0].label, "Table 7");
+
+  await assert.rejects(
+    service.deleteRecords({ dataset: "tables", ids: ["999"] }),
+    (error) => error instanceof DataCleanupError && error.status === 409
+  );
+  assert.equal((await fetchOne("SELECT COUNT(*) AS count FROM tables WHERE id = 999")).count, 1);
+
+  await assert.rejects(
+    service.deleteRecords({ dataset: "tables", ids: ["9"] }),
+    (error) => error instanceof DataCleanupError && error.status === 409
+  );
+  assert.equal((await fetchOne("SELECT COUNT(*) AS count FROM tables WHERE id = 9")).count, 1);
 });
 
 test("deleting a shared modifier choice clears its menu-item default", async () => {

@@ -202,6 +202,8 @@ export type ManagementSettings = {
   work_hours?: {
     start: string;
     end: string;
+    open_days?: number[];
+    first_day_of_week?: "sunday" | "monday" | "saturday";
   };
   captive_portal_target?: string;
   hotspot_ssid?: string;
@@ -1306,6 +1308,7 @@ export const deleteDataCleanupRecords = async (body: {
   ids?: string[];
   filters?: DataCleanupFilters;
   allMatching?: boolean;
+  excludedIds?: string[];
   expectedCount: number;
   confirmationText: string;
 }): Promise<{ success: boolean; deleted: number; warnings: string[] }> =>

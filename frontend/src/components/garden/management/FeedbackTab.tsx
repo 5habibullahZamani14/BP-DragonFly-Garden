@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -61,7 +62,7 @@ const statusBadge = (s: string) => {
   return "bg-blue-100 text-blue-800";
 };
 
-const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summary"], findings: FeedbackAnalysisFinding[]): React.ReactNode => {
+const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summary"], findings: FeedbackAnalysisFinding[], t: TFunction): React.ReactNode => {
   if (!summary) return null;
 
   // If AI analysis is available, display it
@@ -71,8 +72,8 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
           <div className="flex items-center gap-2 mb-3">
             <Brain className="h-5 w-5 text-blue-600" />
-            <h3 className="font-bold text-gray-900">AI-Powered Analysis</h3>
-            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">AI Generated</span>
+            <h3 className="font-bold text-gray-900">{t("manager.feedback.aiPowered")}</h3>
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">{t("manager.feedback.aiGenerated")}</span>
           </div>
           <div className="prose prose-blue max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-4 prose-headings:mb-2 prose-p:text-gray-700 prose-p:my-1 prose-strong:text-gray-900 prose-ul:my-1 prose-li:my-0.5 prose-li:text-gray-700 text-sm leading-relaxed">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>
@@ -92,10 +93,10 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
     <div key="overview" className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl p-4 mb-4 border border-violet-100">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles className="h-5 w-5 text-violet-600" />
-        <h3 className="font-bold text-violet-900">Feedback Overview</h3>
+        <h3 className="font-bold text-violet-900">{t("manager.feedback.overviewTitle")}</h3>
       </div>
       <p className="text-gray-700 text-sm leading-relaxed">
-        We received <span className="font-semibold text-violet-700">{summary.feedback_count ?? 0}</span> customer feedback entries during this period.
+        {t("manager.feedback.overviewCount", { count: summary.feedback_count ?? 0 })}
       </p>
     </div>
   );
@@ -115,18 +116,18 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
       <div key="sentiment" className="bg-white rounded-xl p-4 mb-4 border border-gray-200">
         <div className="flex items-center gap-2 mb-2">
           <MessageSquare className="h-5 w-5 text-blue-600" />
-          <h3 className="font-bold text-gray-900">Overall Sentiment</h3>
+          <h3 className="font-bold text-gray-900">{t("manager.feedback.overallSentiment")}</h3>
         </div>
         <div className="flex items-center gap-2 mb-2">
           <span className={`px-3 py-1 rounded-full text-sm font-medium border ${sentimentColor}`}>
-            {summary.overall_sentiment}
+            {t(`manager.feedback.sentiment_${sentiment}`)}
           </span>
         </div>
         <p className="text-gray-700 text-sm leading-relaxed">
-          {sentiment === "positive" && "This is a good sign that most guests are satisfied with our service."}
-          {sentiment === "negative" && "We need to address several concerns to improve customer satisfaction."}
-          {sentiment === "mixed" && "There's room for improvement in certain areas."}
-          {sentiment === "text_only" && "Customers provided text-only feedback without ratings."}
+          {sentiment === "positive" && t("manager.feedback.sentimentPositiveDescription")}
+          {sentiment === "negative" && t("manager.feedback.sentimentNegativeDescription")}
+          {sentiment === "mixed" && t("manager.feedback.sentimentMixedDescription")}
+          {sentiment === "text_only" && t("manager.feedback.sentimentTextOnlyDescription")}
         </p>
       </div>
     );
@@ -138,10 +139,10 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
       <div key="negative" className="bg-red-50 rounded-xl p-4 mb-4 border border-red-200">
         <div className="flex items-center gap-2 mb-2">
           <AlertTriangle className="h-5 w-5 text-red-600" />
-          <h3 className="font-bold text-red-900">Attention Required</h3>
+          <h3 className="font-bold text-red-900">{t("manager.feedback.attentionRequired")}</h3>
         </div>
         <p className="text-gray-700 text-sm leading-relaxed">
-          We received <span className="font-semibold text-red-700">{summary.negative_count}</span> negative feedback entries that require immediate attention. These highlight areas where customers are dissatisfied.
+          {t("manager.feedback.negativeCount", { count: summary.negative_count })}
         </p>
       </div>
     );
@@ -161,16 +162,16 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
         <div key="dimensions" className="bg-white rounded-xl p-4 mb-4 border border-gray-200">
           <div className="flex items-center gap-2 mb-3">
             <Star className="h-5 w-5 text-amber-500" />
-            <h3 className="font-bold text-gray-900">Performance by Category</h3>
+            <h3 className="font-bold text-gray-900">{t("manager.feedback.performanceByCategory")}</h3>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-              <p className="text-xs text-green-600 font-medium mb-1">Strongest Area</p>
+              <p className="text-xs text-green-600 font-medium mb-1">{t("manager.feedback.strongestArea")}</p>
               <p className="font-semibold text-green-800">{highest[1].label}</p>
               <p className="text-lg font-bold text-green-900">{highest[1].average!.toFixed(1)}/5</p>
             </div>
             <div className="bg-red-50 rounded-lg p-3 border border-red-200">
-              <p className="text-xs text-red-600 font-medium mb-1">Needs Attention</p>
+              <p className="text-xs text-red-600 font-medium mb-1">{t("manager.feedback.needsAttention")}</p>
               <p className="font-semibold text-red-800">{lowest[1].label}</p>
               <p className="text-lg font-bold text-red-900">{lowest[1].average!.toFixed(1)}/5</p>
             </div>
@@ -180,7 +181,11 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
               const score = dim.average!;
               const bgColor = score < 3 ? "bg-red-100" : score < 4 ? "bg-yellow-100" : "bg-green-100";
               const textColor = score < 3 ? "text-red-800" : score < 4 ? "text-yellow-800" : "text-green-800";
-              const status = score < 3 ? "Critical" : score < 4 ? "Needs Improvement" : "Good";
+              const status = score < 3
+                ? t("manager.feedback.critical")
+                : score < 4
+                  ? t("manager.feedback.needsImprovement")
+                  : t("manager.feedback.good");
               return (
                 <div key={key} className={`flex items-center justify-between p-2 rounded-lg ${bgColor}`}>
                   <span className="font-medium text-gray-800 text-sm">{dim.label}</span>
@@ -203,13 +208,13 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
       <div key="keywords" className="bg-white rounded-xl p-4 mb-4 border border-gray-200">
         <div className="flex items-center gap-2 mb-3">
           <Hash className="h-5 w-5 text-purple-600" />
-          <h3 className="font-bold text-gray-900">Common Themes</h3>
+          <h3 className="font-bold text-gray-900">{t("manager.feedback.commonThemes")}</h3>
         </div>
-        <p className="text-gray-600 text-sm mb-3">Customers frequently mentioned:</p>
+        <p className="text-gray-600 text-sm mb-3">{t("manager.feedback.customersMentioned")}</p>
         <div className="flex flex-wrap gap-2">
           {summary.top_keywords.slice(0, 5).map((k, i) => (
             <span key={i} className="px-3 py-1.5 bg-purple-100 text-purple-800 rounded-full text-sm font-medium border border-purple-200">
-              "{k.word}" <span className="text-purple-600">({k.count}x)</span>
+              "{k.word}" <span className="text-purple-600">({t("manager.feedback.keywordMentions", { count: k.count })})</span>
             </span>
           ))}
         </div>
@@ -226,22 +231,22 @@ const generateComprehensiveAnalysis = (summary: FeedbackAnalysisResponse["summar
       <div key="findings" className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 mb-4 border border-blue-200">
         <div className="flex items-center gap-2 mb-3">
           <Brain className="h-5 w-5 text-blue-600" />
-          <h3 className="font-bold text-gray-900">Analysis Insights</h3>
+          <h3 className="font-bold text-gray-900">{t("manager.feedback.analysisInsights")}</h3>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <p className="text-xs text-blue-600 font-medium mb-1">Total Insights</p>
+            <p className="text-xs text-blue-600 font-medium mb-1">{t("manager.feedback.totalInsights")}</p>
             <p className="text-2xl font-bold text-blue-900">{findings.length}</p>
           </div>
           <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <p className="text-xs text-blue-600 font-medium mb-1">Awaiting Review</p>
+            <p className="text-xs text-blue-600 font-medium mb-1">{t("manager.feedback.awaitingReview")}</p>
             <p className="text-2xl font-bold text-blue-900">{pending}</p>
           </div>
         </div>
         {highPriority > 0 && (
           <div className="mt-3 bg-orange-100 rounded-lg p-3 border border-orange-200">
             <p className="text-sm text-orange-800">
-              <span className="font-semibold">{highPriority}</span> items are marked as high priority and should be addressed urgently.
+              {t("manager.feedback.highPriorityCount", { count: highPriority })}
             </p>
           </div>
         )}
@@ -383,10 +388,10 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
         findings: result.findings,
         analysis_method: result.analysis_method,
       });
-      notify("success", result.analysis_method === "ai" ? "AI analysis completed" : "Analysis completed");
+      notify("success", t("manager.feedback.analysisDone"));
     } catch (e: unknown) {
-      const err = e as Error;
-      notify("error", err.message || "Analysis failed");
+      console.error("Failed to analyze customer feedback:", e);
+      notify("error", t("manager.feedback.analysisFailed"));
     } finally {
       setAnalyzing(false);
     }
@@ -453,17 +458,17 @@ export const FeedbackTab = ({ notify }: { notify: Notify }) => {
     if (!analysis || !summary) return;
     
     const exportText = `
-Feedback Analysis Report
+${t("manager.feedback.reportTitle")}
 ========================
-Generated: ${new Date().toLocaleString()}
-Period: ${analysis.run?.period_from || "All time"} to ${analysis.run?.period_to || "Present"}
-Analysis Method: ${analysis.analysis_method || "rule_based"}
-Feedback Count: ${summary.feedback_count || 0}
+${t("manager.feedback.reportGenerated")}: ${new Date().toLocaleString()}
+${t("manager.feedback.reportPeriod")}: ${analysis.run?.period_from || t("manager.feedback.allTime")} ${t("manager.feedback.to")} ${analysis.run?.period_to || t("manager.feedback.present")}
+${t("manager.feedback.reportMethod")}: ${analysis.analysis_method === "ai" ? t("manager.feedback.aiPowered") : t("manager.feedback.ruleBased")}
+${t("manager.feedback.reportFeedbackCount")}: ${summary.feedback_count || 0}
 
-${summary.ai_analysis ? `AI Analysis:\n${summary.ai_analysis}` : ''}
+${summary.ai_analysis ? `${t("manager.feedback.reportAiAnalysis")}:\n${summary.ai_analysis}` : ""}
 
-Findings:
-${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')}
+${t("manager.feedback.reportFindings")}:
+${findings.map(f => `- ${f.title} (${t(`manager.feedback.${f.priority}Priority`)}): ${f.description}`).join("\n")}
     `.trim();
 
     const blob = new Blob([exportText], { type: 'text/plain' });
@@ -476,7 +481,7 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    notify("success", "Analysis exported successfully");
+    notify("success", t("manager.feedback.analysisExported"));
   };
 
   const handleDelete = (id: number) => {
@@ -549,10 +554,10 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
               <div className="flex items-center justify-between mb-3">
                 <p className="font-semibold text-violet-900">{t("manager.feedback.comprehensiveAnalysis")}</p>
                 <Button size="sm" variant="outline" onClick={exportAnalysis} className="text-xs">
-                  Export Report
+                  {t("manager.feedback.exportReport")}
                 </Button>
               </div>
-              {generateComprehensiveAnalysis(summary, findings)}
+              {generateComprehensiveAnalysis(summary, findings, t)}
             </div>
           )}
 
@@ -565,10 +570,10 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
                   onChange={(e) => setFindingPriorityFilter(e.target.value as "all" | "high" | "medium" | "low")}
                   className="text-xs border rounded px-2 py-1 bg-white"
                 >
-                  <option value="all">All Priorities</option>
-                  <option value="high">High Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="low">Low Priority</option>
+                  <option value="all">{t("manager.feedback.allPriorities")}</option>
+                  <option value="high">{t("manager.feedback.highPriority")}</option>
+                  <option value="medium">{t("manager.feedback.mediumPriority")}</option>
+                  <option value="low">{t("manager.feedback.lowPriority")}</option>
                 </select>
               </div>
               {findings
@@ -638,9 +643,9 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
               onChange={(e) => setSortBy(e.target.value as "date" | "rating" | "sentiment")}
               className="text-xs border rounded px-2 py-1 bg-white ml-2"
             >
-              <option value="date">Sort by Date</option>
-              <option value="rating">Sort by Rating</option>
-              <option value="sentiment">Sort by Sentiment</option>
+              <option value="date">{t("manager.feedback.sortByDate")}</option>
+              <option value="rating">{t("manager.feedback.sortByRating")}</option>
+              <option value="sentiment">{t("manager.feedback.sortBySentiment")}</option>
             </select>
           </div>
         </CardHeader>
@@ -685,7 +690,7 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
               <DialogHeader>
                 <DialogTitle>{selected.sender_name}</DialogTitle>
                 <DialogDescription className="sr-only">
-                  Full details of the selected customer feedback
+                  {t("manager.feedback.selectedFeedbackDetails")}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 text-sm">
@@ -765,7 +770,7 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
           <DialogHeader>
             <DialogTitle>{t("manager.feedback.deleteConfirm")}</DialogTitle>
             <DialogDescription className="sr-only">
-              Confirm deletion of this analysis finding
+              {t("manager.feedback.confirmFindingDeletion")}
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-gray-600">{t("manager.feedback.deleteFindingConfirm")}</p>
@@ -786,7 +791,7 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
           <DialogHeader>
             <DialogTitle>{t("manager.feedback.deleteConfirm")}</DialogTitle>
             <DialogDescription className="sr-only">
-              Confirm permanent deletion of this customer feedback
+              {t("manager.feedback.confirmFeedbackDeletion")}
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-gray-600">{t("manager.feedback.deleteConfirm")}</p>
@@ -804,13 +809,13 @@ ${findings.map(f => `- ${f.title} (${f.priority}): ${f.description}`).join('\n')
       {/* Image Preview Dialog */}
       <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
         <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
-          <DialogTitle className="sr-only">Image Preview</DialogTitle>
-          <DialogDescription className="sr-only">A larger view of the uploaded feedback photo</DialogDescription>
+          <DialogTitle className="sr-only">{t("manager.feedback.imagePreview")}</DialogTitle>
+          <DialogDescription className="sr-only">{t("manager.feedback.uploadedPhotoAlt")}</DialogDescription>
           {previewImage && (
             <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center p-4">
               <img
                 src={previewImage}
-                alt="Feedback preview"
+                alt={t("manager.feedback.imagePreview")}
                 className="max-w-full max-h-[75vh] object-contain rounded-2xl"
               />
             </div>

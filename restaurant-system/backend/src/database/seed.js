@@ -156,7 +156,7 @@ const seedDatabase = async () => {
       (SELECT COUNT(*) FROM promotion_templates) +
       (SELECT COUNT(*) FROM modifier_groups) +
       (SELECT COUNT(*) FROM payment_methods) +
-      (SELECT COUNT(*) FROM tables WHERE id <> 999) AS count
+      (SELECT COUNT(*) FROM tables WHERE id <> 999 AND UPPER(TRIM(table_number)) <> 'R4M') AS count
   `);
   const ensurePaymentMethods = async () => {
     for (const method of ["Cash", "Visa Card", "Mastercard", "eWallet"]) {

@@ -31,7 +31,7 @@ export const LandingView = () => {
       {/* Hero logo image — the main brand visual */}
       <img
         src={bpDragonflyGardenLogo}
-        alt="BP Dragonfly Garden logo"
+        alt={t("landing.logoAlt")}
         className="mb-6 h-56 w-72 object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.18)]"
       />
 
@@ -41,7 +41,7 @@ export const LandingView = () => {
         <br />Garden
       </h1>
       <p className="mt-4 max-w-xs text-foreground/60 text-balance leading-relaxed">
-        Where nature, fun &amp; memories grow.
+        {t("landing.tagline")}
       </p>
 
       {/* QR instruction card — the primary call to action. */}
@@ -66,19 +66,19 @@ export const LandingView = () => {
             </div>
             <h2 className="font-1 text-2xl font-bold">{t("landing.scan")}</h2>
             <p className="mt-2 text-sm text-foreground/60 leading-relaxed">
-              Point your camera at the QR code on your table to view our menu and start ordering.
+              {t("landing.pointCamera")}
             </p>
 
             <div className="mt-5 flex items-center justify-center gap-2 rounded-full bg-background/80 px-4 py-2 text-xs text-foreground/60">
               <Leaf className="h-3.5 w-3.5 text-leaf" />
-              Or wave to a farm crew member — we'll come to you.
+              {t("landing.orWave")}
             </div>
           </div>
         </div>
       </div>
 
       <p className="mt-8 inline-flex items-center gap-1.5 text-[0.65rem] uppercase tracking-[0.3em] text-foreground/30">
-        <Sparkles className="h-3 w-3" /> Est. in the heart of the garden
+        <Sparkles className="h-3 w-3" /> {t("landing.est")}
       </p>
     </div>
   );

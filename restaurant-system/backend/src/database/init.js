@@ -40,6 +40,7 @@
  */
 const db = require("./db");
 const { generateTableQrCode, normalizeTableQrCode } = require("../utils/tableQrCode");
+const { ensureSystemTables } = require("../utils/systemTables");
 let printerJobsReconciled = false;
 
 /*
@@ -274,6 +275,22 @@ const initializeDatabase = async () => {
       acknowledged_by_id TEXT,
       acknowledged_by_name TEXT,
       archived_at DATETIME
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS daily_sales_receipt_logs (
+      sales_date TEXT PRIMARY KEY,
+      status TEXT NOT NULL CHECK(status IN ('printed', 'missed', 'ignored')),
+      printed_at DATETIME,
+      missed_at DATETIME,
+      ignored_at DATETIME,
+      ignored_by TEXT,
+      copy_count INTEGER,
+      order_count INTEGER,
+      total_sales REAL,
+      printer_job_ids TEXT,
+      error_message TEXT
     )
   `);
 
@@ -659,6 +676,7 @@ const initializeDatabase = async () => {
   await ensureIndex("idx_payment_logs_order", "payment_logs", "order_id, timestamp DESC");
   await ensureIndex("idx_archived_orders_date", "archived_orders", "archived_at DESC");
   await ensureIndex("idx_orders_payment_status", "orders", "payment_status, created_at DESC");
+  await ensureIndex("idx_daily_sales_receipt_status", "daily_sales_receipt_logs", "status, sales_date DESC");
   await ensureIndex("idx_staff_assistance_today", "staff_assistance_requests", "requested_at DESC, archived_at, acknowledged_at");
   await ensureIndex("idx_customer_feedback_created", "customer_feedback", "created_at DESC");
   await ensureIndex("idx_customer_feedback_status", "customer_feedback", "status, created_at DESC");
@@ -718,16 +736,12 @@ const initializeDatabase = async () => {
     );
   }
 
-  /* Ensure the virtual 'Counter Orders' table exists for POS takeaway/pickup/delivery. */
-  await run(`
-    INSERT OR IGNORE INTO tables (id, table_number, qr_code)
-    VALUES (999, 'Counter Order', 'counter-orders')
-  `);
+  await ensureSystemTables(run);
 
   /* Insert the default work hours setting if it has not been configured yet. */
   await run(`
     INSERT OR IGNORE INTO restaurant_settings (key, value)
-    VALUES ('work_hours', '{"start": "09:00", "end": "22:00"}')
+    VALUES ('work_hours', '{"start":"09:00","end":"22:00","open_days":[1,2,3,4,5,6,0],"first_day_of_week":"monday"}')
   `);
 
   /* Insert default SST and service charge settings if not yet configured. */

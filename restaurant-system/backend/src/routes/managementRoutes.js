@@ -551,6 +551,7 @@ const {
 } = require("../services/printerPreferences");
 const {
   DEFAULT_RECEIPT_COPY_COUNTS,
+  MIN_RECEIPT_COPIES,
   MAX_RECEIPT_COPIES
 } = require("../services/receiptCopies");
 
@@ -673,10 +674,10 @@ router.put("/printers/settings", requireManagerToken, async (req, res) => {
             ? Number(rawCount)
             : NaN;
         if (!Object.prototype.hasOwnProperty.call(DEFAULT_RECEIPT_COPY_COUNTS, type) ||
-            !Number.isInteger(count) || count < 1 || count > MAX_RECEIPT_COPIES) {
+            !Number.isInteger(count) || count < MIN_RECEIPT_COPIES || count > MAX_RECEIPT_COPIES) {
           return res.status(400).json({
             success: false,
-            message: `Each receipt copy count must be a whole number between 1 and ${MAX_RECEIPT_COPIES}.`
+            message: `Each receipt copy count must be a whole number between ${MIN_RECEIPT_COPIES} and ${MAX_RECEIPT_COPIES}.`
           });
         }
       }
@@ -789,46 +790,47 @@ router.post("/printers/sample-ticket/print", requireManagerToken, async (req, re
  */
 router.post("/printers/daily-sales-report", requireManagerToken, async (req, res) => {
   try {
-    const db = require("../database/db");
-    const printerService = require("../services/printerService");
-    const { printCopies } = require("../services/receiptCopies");
-    
-    // Get today's orders
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
-    
-    const orders = await new Promise((resolve, reject) => {
-      db.all(
-        "SELECT * FROM orders WHERE created_at >= ? AND created_at < ? ORDER BY created_at ASC",
-        [todayStart, todayEnd],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
-    
-    // Load items for each order
-    for (const order of orders) {
-      order.items = await new Promise((resolve, reject) => {
-        db.all(
-          "SELECT * FROM order_items WHERE order_id = ?",
-          [order.id],
-          (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      });
-    }
-    
-    const copyCounts = await printerService.getReceiptCopyCounts();
-    await printCopies(copyCounts.daily_sales_report, () =>
-      printerService.printDailySalesReport(orders)
-    );
-    
-    res.json({ success: true, message: "Daily sales report printed successfully" });
+    const dailySales = require("../services/dailySalesReceiptService");
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const salesDate = typeof req.body?.salesDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.salesDate)
+      ? req.body.salesDate
+      : today;
+    const result = await dailySales.printDailySalesReportForDate(salesDate);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get("/printers/daily-sales-report/status", requireManagerToken, async (req, res) => {
+  try {
+    const dailySales = require("../services/dailySalesReceiptService");
+    await dailySales.reconcileDailySalesReceipts();
+    const reports = await dailySales.getDailySalesReceiptStatus();
+    res.json({ success: true, reports });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post("/printers/daily-sales-report/:salesDate/print", requireManagerToken, async (req, res) => {
+  try {
+    const dailySales = require("../services/dailySalesReceiptService");
+    const result = await dailySales.printDailySalesReportForDate(req.params.salesDate);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post("/printers/daily-sales-report/:salesDate/ignore", requireManagerToken, async (req, res) => {
+  try {
+    const dailySales = require("../services/dailySalesReceiptService");
+    const ignoredBy = req.user?.name || req.user?.id || "Manager";
+    const result = await dailySales.ignoreMissedReceipt(req.params.salesDate, String(ignoredBy));
+    res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

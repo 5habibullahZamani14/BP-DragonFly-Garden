@@ -620,86 +620,11 @@ const startServer = async () => {
       };
 
       const scheduleDailySalesReport = () => {
-        let lastPrintedDay = null;
-
+        const dailySales = require("./services/dailySalesReceiptService");
         const checkAndPrintSalesReport = async () => {
-          try {
-            const now = new Date();
-            const currentDay = now.toDateString(); // e.g. "Wed Jul 15 2026"
-
-            // Skip if already printed today
-            if (lastPrintedDay === currentDay) return;
-
-            // Fetch closing time setting from DB
-            const closingTimeSetting = await getRestaurantSetting("work_hours");
-            let closingTime = "22:00"; // default fallback
-            if (closingTimeSetting) {
-              try {
-                const parsed = JSON.parse(closingTimeSetting);
-                if (parsed && parsed.end) {
-                  closingTime = parsed.end; // e.g. "22:00"
-                }
-              } catch (err) {
-                // Not JSON or fallback
-                if (typeof closingTimeSetting === "string" && closingTimeSetting.includes(":")) {
-                  closingTime = closingTimeSetting.trim();
-                }
-              }
-            }
-
-            // Parse closing time (e.g. "22:00" -> hour = 22, minute = 0)
-            const parts = closingTime.split(":");
-            if (parts.length !== 2) return;
-            const closingHour = parseInt(parts[0], 10);
-            const closingMinute = parseInt(parts[1], 10);
-            if (isNaN(closingHour) || isNaN(closingMinute)) return;
-
-            // Calculate print time: 5 minutes before closing
-            let printHour = closingHour;
-            let printMinute = closingMinute - 5;
-            if (printMinute < 0) {
-              printMinute += 60;
-              printHour -= 1;
-              if (printHour < 0) {
-                printHour += 24;
-              }
-            }
-
-            // Check if current local time matches printHour and printMinute
-            if (now.getHours() === printHour && now.getMinutes() === printMinute) {
-              // Query all paid/archived orders
-              const all = (sql, params = []) =>
-                new Promise((resolve, reject) => {
-                  db.all(sql, params, (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows);
-                  });
-                });
-
-              const orders = await all("SELECT id, total_price, created_at, daily_ticket_number FROM orders WHERE payment_status = 'paid' OR status = 'archived'");
-              
-              // Filter for today's orders
-              const todayLocalStr = now.toLocaleDateString();
-              const todayOrders = orders.filter(order => {
-                const orderDate = new Date(order.created_at.includes("T") ? order.created_at : order.created_at.replace(" ", "T"));
-                return orderDate.toLocaleDateString() === todayLocalStr;
-              });
-
-              // Get configured copy count for daily sales report
-              const copyCounts = await printerService.getReceiptCopyCounts();
-              await printCopies(copyCounts.daily_sales_report, () =>
-                printerService.printDailySalesReport(todayOrders)
-              );
-
-              lastPrintedDay = currentDay;
-              console.log(`[Scheduler] Daily sales report printed successfully for ${currentDay}.`);
-            }
-          } catch (err) {
-            console.error("Scheduled daily sales report print failed:", err);
-          }
+          await dailySales.reconcileDailySalesReceipts();
+          broadcast({ type: "DAILY_SALES_REPORT_UPDATE" });
         };
-
-        // Run check immediately and then every 60 seconds
         trackScheduledTask(checkAndPrintSalesReport);
         scheduledTasks.salesReportInterval = setInterval(() => trackScheduledTask(checkAndPrintSalesReport), 60 * 1000);
       };

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isProtectedSystemTable } = require("../utils/systemTables");
 
 const DATASETS = {
   feedback: {
@@ -87,9 +88,10 @@ const DATASETS = {
   },
   tables: {
     label: "Restaurant tables",
-    impact: "Deletes selected physical tables that have no current orders. The system Counter Order table is protected.",
+    impact: "Deletes selected physical tables that have no current orders. System ordering tables are hidden and protected.",
+    baseWhere: "t.id <> 999 AND UPPER(TRIM(t.table_number)) <> 'R4M' AND LOWER(t.table_number) NOT LIKE '%takeaway%' AND LOWER(t.table_number) NOT LIKE '%counter%' AND LOWER(t.table_number) NOT LIKE '%to-go%' AND LOWER(t.table_number) NOT LIKE '%to go%' AND LOWER(t.table_number) NOT LIKE '%togo%'",
     from: "tables t",
-    select: "CAST(t.id AS TEXT) AS id, t.table_number AS label, NULL AS created_at, 'Table' AS type, CASE WHEN t.id = 999 THEN 'Protected system table' ELSE (SELECT COUNT(*) FROM orders o WHERE o.table_id = t.id) || ' current orders' END AS details",
+    select: "CAST(t.id AS TEXT) AS id, t.table_number AS label, NULL AS created_at, 'Table' AS type, (SELECT COUNT(*) FROM orders o WHERE o.table_id = t.id) || ' current orders' AS details",
     dateColumn: null,
     searchColumns: ["t.table_number"],
     filterColumns: {},
@@ -249,7 +251,7 @@ const DATASETS = {
 
 const DATASET_KEYS = Object.keys(DATASETS);
 const MAX_PAGE_SIZE = 100;
-const MAX_DELETE_COUNT = 2000;
+const MAX_DELETE_COUNT = 10000;
 
 class DataCleanupError extends Error {
   constructor(message, status = 400) {
@@ -309,6 +311,7 @@ const normalizeFilters = (dataset, filters = {}) => {
 const buildWhere = (definition, filters) => {
   const clauses = [];
   const params = [];
+  if (definition.baseWhere) clauses.push(`(${definition.baseWhere})`);
   if (filters.from && definition.dateColumn) {
     clauses.push(`date(${definition.dateColumn}) >= date(?)`);
     params.push(filters.from);
@@ -404,21 +407,40 @@ const createDataCleanupService = ({ all, get, run, fileSystem = fs, publicDir })
     };
   };
 
-  const getIdsForDelete = async (dataset, ids, filters, allMatching, expectedCount) => {
+  const getIdsForDelete = async (dataset, ids, filters, allMatching, expectedCount, excludedIds = []) => {
     const definition = DATASETS[dataset];
     const normalized = normalizeFilters(dataset, filters);
     const where = buildWhere(definition, normalized);
+    if (!Array.isArray(excludedIds)) throw new DataCleanupError("Record exclusions are invalid.");
     let rows;
     if (allMatching) {
       const countRow = await get(`SELECT COUNT(*) AS count FROM (${buildQuery(definition, where)}) AS matching_records`, where.params);
-      if (!Number.isSafeInteger(expectedCount) || expectedCount < 0 || countRow?.count !== expectedCount) {
+      if (!Number.isSafeInteger(expectedCount) || expectedCount < 0 || !Number.isSafeInteger(countRow?.count)) {
         throw new DataCleanupError("The matching data changed after review. Refresh the preview before deleting.", 409);
       }
       if (countRow.count > MAX_DELETE_COUNT) {
         throw new DataCleanupError(`This selection has ${countRow.count} records. Delete up to ${MAX_DELETE_COUNT} at a time, or use Reset Everything.`, 413);
       }
-      rows = await all(`SELECT id FROM (${buildQuery(definition, where)}) AS matching_records`, where.params);
+      if (
+        excludedIds.some((id) => typeof id !== "string" || id.length === 0) ||
+        new Set(excludedIds).size !== excludedIds.length
+      ) {
+        throw new DataCleanupError("Record exclusions are invalid.");
+      }
+      const matchingRows = await all(`SELECT id FROM (${buildQuery(definition, where)}) AS matching_records`, where.params);
+      const excluded = new Set(excludedIds);
+      const matchingIds = new Set(matchingRows.map((row) => String(row.id)));
+      rows = matchingRows.filter((row) => !excluded.has(String(row.id)));
+      if (
+        matchingRows.length !== countRow.count ||
+        rows.length !== expectedCount ||
+        matchingRows.length - rows.length !== excluded.size ||
+        [...excluded].some((id) => !matchingIds.has(id))
+      ) {
+        throw new DataCleanupError("The matching data changed after review. Refresh the preview before deleting.", 409);
+      }
     } else {
+      if (excludedIds.length > 0) throw new DataCleanupError("Record exclusions require an all-matching selection.");
       if (!Array.isArray(ids) || ids.length === 0) throw new DataCleanupError("Select at least one record.");
       if (ids.length > MAX_DELETE_COUNT) throw new DataCleanupError(`Select no more than ${MAX_DELETE_COUNT} records per deletion.`);
       if (dataset === "menu_images") {
@@ -535,7 +557,10 @@ const createDataCleanupService = ({ all, get, run, fileSystem = fs, publicDir })
       if (items?.count) throw new DataCleanupError("Selected categories still contain menu items. Delete or move those items first.", 409);
       await run(`DELETE FROM categories WHERE id IN (${placeholders})`, numericIds);
     } else if (dataset === "tables") {
-      if (numericIds.includes(999)) throw new DataCleanupError("The system Counter Order table cannot be deleted.", 409);
+      const selectedTables = await all(`SELECT id, table_number FROM tables WHERE id IN (${placeholders})`, numericIds);
+      if (selectedTables.some(isProtectedSystemTable)) {
+        throw new DataCleanupError("System ordering tables cannot be deleted.", 409);
+      }
       const orders = await get(`SELECT COUNT(*) AS count FROM orders WHERE table_id IN (${placeholders})`, numericIds);
       if (orders?.count) throw new DataCleanupError("Selected tables still have current orders. Clear those orders first.", 409);
       await run(`DELETE FROM tables WHERE id IN (${placeholders})`, numericIds);
@@ -577,12 +602,12 @@ const createDataCleanupService = ({ all, get, run, fileSystem = fs, publicDir })
     return fileUrls;
   };
 
-  const deleteRecords = async ({ dataset, ids, filters = {}, allMatching = false, expectedCount, audit }) => {
+  const deleteRecords = async ({ dataset, ids, filters = {}, allMatching = false, excludedIds = [], expectedCount, audit }) => {
     await run("BEGIN IMMEDIATE");
     let rows;
     let fileUrls;
     try {
-      rows = await getIdsForDelete(dataset, ids, filters, allMatching, expectedCount);
+      rows = await getIdsForDelete(dataset, ids, filters, allMatching, expectedCount, excludedIds);
       if (rows.length === 0) throw new DataCleanupError("There are no matching records to delete.");
       fileUrls = await deleteRows(dataset, rows);
       await run(

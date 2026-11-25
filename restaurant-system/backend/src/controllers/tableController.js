@@ -14,6 +14,11 @@ const { createHttpError } = require("../middleware/validation");
 const { setAuthCookie, CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS } = require("../middleware/authCookies");
 const { getValidatedRequestBaseUrl, pickPreferredLocalIp } = require("../utils/networkAddress");
 const { generateTableQrCode, normalizeTableQrCode, hashTableQrCode } = require("../utils/tableQrCode");
+const {
+  SYSTEM_ORDER_TABLE_ID,
+  isProtectedSystemTable,
+  isReservedSystemTableName,
+} = require("../utils/systemTables");
 const { all, run, get: dbGet } = require("../utils/dbUtils");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://127.0.0.1:4173";
@@ -202,6 +207,9 @@ const createTable = async (req, res) => {
   if (typeof table_number !== "string" || !table_number.trim()) {
     throw createHttpError(400, "A table number is required");
   }
+  if (isReservedSystemTableName(table_number)) {
+    throw createHttpError(409, "That table name is reserved for the system ordering route.");
+  }
 
   const qrCode = generateTableQrCode();
   const result = await run(`INSERT INTO tables (table_number, qr_code) VALUES (?, ?)`, [table_number.trim(), qrCode]);
@@ -224,12 +232,20 @@ const createTable = async (req, res) => {
 const updateTable = async (req, res) => {
   const { id } = req.params;
   const { table_number } = req.body;
+  if (Number(id) === SYSTEM_ORDER_TABLE_ID) {
+    throw createHttpError(409, "The system ordering table cannot be edited.");
+  }
+  const existingTable = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [id]);
+  if (!existingTable) throw createHttpError(404, "Table not found");
+  if (isProtectedSystemTable(existingTable)) {
+    throw createHttpError(409, "The system ordering table cannot be edited.");
+  }
   if (typeof table_number !== "string" || !table_number.trim()) {
     throw createHttpError(400, "A table number is required");
   }
-
-  const existingTable = await get("SELECT id, qr_code FROM tables WHERE id = ?", [id]);
-  if (!existingTable || Number(id) === 999) throw createHttpError(404, "Table not found");
+  if (isReservedSystemTableName(table_number)) {
+    throw createHttpError(409, "That table name is reserved for the system ordering route.");
+  }
   const qrCode = normalizeTableQrCode(existingTable.qr_code) || generateTableQrCode();
   await run(`UPDATE tables SET table_number = ?, qr_code = ? WHERE id = ?`, [table_number.trim(), qrCode, id]);
   const table = await get("SELECT id, table_number, qr_code FROM tables WHERE id = ?", [id]);
@@ -250,8 +266,14 @@ const updateTable = async (req, res) => {
 
 const deleteTable = async (req, res) => {
   const { id } = req.params;
-  const table = await get("SELECT table_number FROM tables WHERE id = ?", [id]);
+  if (Number(id) === SYSTEM_ORDER_TABLE_ID) {
+    throw createHttpError(409, "The system ordering table cannot be deleted.");
+  }
+  const table = await get("SELECT id, table_number FROM tables WHERE id = ?", [id]);
   if (!table) throw createHttpError(404, "Table not found");
+  if (isProtectedSystemTable(table)) {
+    throw createHttpError(409, "The system ordering table cannot be deleted.");
+  }
 
   await run(`DELETE FROM tables WHERE id = ?`, [id]);
   await run(

@@ -128,7 +128,7 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
       <DialogTrigger asChild>
         <button
           className="grid h-10 w-10 place-items-center rounded-full bg-white/80 text-foreground/70 shadow-sm backdrop-blur transition-all hover:bg-white hover:shadow-md active:scale-95 border border-border/50"
-          aria-label="Settings"
+          aria-label={t("settings.settingsButtonLabel")}
           id="settings-modal-trigger"
         >
           <Settings className="h-5 w-5" />
@@ -219,7 +219,7 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
             <div
               className="mt-3 rounded-xl bg-muted/30 border border-border/40 px-4 py-3"
               aria-live="polite"
-              aria-label="Font preview"
+              aria-label={t("settings.fontPreviewLabel")}
             >
               <p
                 className="text-sm leading-relaxed text-foreground/80"
@@ -252,7 +252,7 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setUiScale(Math.max(0.75, parseFloat((uiScale - 0.05).toFixed(2))))}
-                aria-label="Decrease interface size"
+                aria-label={t("settings.decreaseInterfaceSize")}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-foreground/70 transition-all hover:bg-muted/80 active:scale-90"
               >
                 <Minus className="h-4 w-4" />
@@ -265,11 +265,11 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
                 value={uiScale}
                 onChange={handleUiScaleChange}
                 className="flex-1 accent-primary h-2 cursor-pointer"
-                aria-label="Interface size slider"
+                aria-label={t("settings.interfaceSizeSlider")}
               />
               <button
                 onClick={() => setUiScale(Math.min(1.5, parseFloat((uiScale + 0.05).toFixed(2))))}
-                aria-label="Increase interface size"
+                aria-label={t("settings.increaseInterfaceSize")}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-foreground/70 transition-all hover:bg-muted/80 active:scale-90"
               >
                 <Plus className="h-4 w-4" />
@@ -295,7 +295,7 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setFontScale(Math.max(0.75, parseFloat((fontScale - 0.05).toFixed(2))))}
-                aria-label="Decrease text size"
+                aria-label={t("settings.decreaseTextSize")}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-foreground/70 transition-all hover:bg-muted/80 active:scale-90"
               >
                 <Minus className="h-4 w-4" />
@@ -308,11 +308,11 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
                 value={fontScale}
                 onChange={handleFontScaleChange}
                 className="flex-1 accent-primary h-2 cursor-pointer"
-                aria-label="Text size slider"
+                aria-label={t("settings.textSizeSlider")}
               />
               <button
                 onClick={() => setFontScale(Math.min(1.5, parseFloat((fontScale + 0.05).toFixed(2))))}
-                aria-label="Increase text size"
+                aria-label={t("settings.increaseTextSize")}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-foreground/70 transition-all hover:bg-muted/80 active:scale-90"
               >
                 <Plus className="h-4 w-4" />
@@ -343,11 +343,11 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
               <div className="rounded-2xl border border-border/50 bg-muted/20 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 id="install-heading" className="text-sm font-semibold text-foreground/80">Install this app</h3>
-                    <p className="mt-1 text-xs text-foreground/60">Use it as a full app on your phone, tablet, or desktop.</p>
+                    <h3 id="install-heading" className="text-sm font-semibold text-foreground/80">{t("settings.installThisApp")}</h3>
+                    <p className="mt-1 text-xs text-foreground/60">{t("settings.installAppDescription")}</p>
                   </div>
                   {installStatus === "installed" ? (
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Installed</span>
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">{t("settings.installed")}</span>
                   ) : canInstall ? (
                     <button
                       type="button"
@@ -355,10 +355,10 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
                       className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
                     >
                       <Download className="h-3.5 w-3.5" />
-                      Install app
+                      {t("settings.installApp")}
                     </button>
                   ) : (
-                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/60">Not available</span>
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/60">{t("settings.installNotAvailable")}</span>
                   )}
                 </div>
               </div>

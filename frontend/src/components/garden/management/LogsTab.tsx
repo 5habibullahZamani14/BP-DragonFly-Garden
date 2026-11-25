@@ -520,8 +520,8 @@ export const LogsTab = () => {
               <div className="flex items-center gap-2">
                 <PieChart className="h-5 w-5 text-purple-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Activity by Category</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Distribution of system events across different operational areas.</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.logs.activityByCategory")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.logs.activityCategoryDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -599,8 +599,8 @@ Understanding activity distribution helps you:
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-indigo-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Activity Trends</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Daily system activity volume over the last 7 days.</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.logs.activityTrends")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.logs.activityTrendsDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -713,7 +713,7 @@ Use this data to optimize your operations:
           {filteredLogs.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-foreground/5">
               <div className="flex items-center gap-2 text-xs text-foreground/60">
-                <span>Show</span>
+                <span>{t("m.logs.show")}</span>
                 <select
                   value={rowsPerPage === 50 ? "50" : rowsPerPage === 10 ? "10" : rowsPerPage === 20 ? "20" : rowsPerPage === 40 ? "40" : "custom"}
                   onChange={(e) => handleRowsPerPageChange(e.target.value)}
@@ -723,7 +723,7 @@ Use this data to optimize your operations:
                   <option value="20">20</option>
                   <option value="40">40</option>
                   <option value="50">50</option>
-                  <option value="custom">Custom</option>
+                  <option value="custom">{t("m.logs.custom")}</option>
                 </select>
                 {rowsPerPage !== 10 && rowsPerPage !== 20 && rowsPerPage !== 40 && rowsPerPage !== 50 && (
                   <input
@@ -736,9 +736,9 @@ Use this data to optimize your operations:
                     placeholder="50"
                   />
                 )}
-                <span>rows per page</span>
+                <span>{t("m.logs.rowsPerPage")}</span>
                 <span className="text-foreground/40">|</span>
-                <span>{(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredLogs.length)} of {filteredLogs.length}</span>
+                <span>{t("m.logs.range", { start: (currentPage - 1) * rowsPerPage + 1, end: Math.min(currentPage * rowsPerPage, filteredLogs.length), total: filteredLogs.length })}</span>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -858,7 +858,7 @@ Use this data to optimize your operations:
         {filteredLogs.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-foreground/5 bg-white/40">
             <div className="flex items-center gap-2 text-xs text-foreground/60">
-              <span>Show</span>
+              <span>{t("m.logs.show")}</span>
               <select
                 value={rowsPerPage === 50 ? "50" : rowsPerPage === 10 ? "10" : rowsPerPage === 20 ? "20" : rowsPerPage === 40 ? "40" : "custom"}
                 onChange={(e) => handleRowsPerPageChange(e.target.value)}
@@ -868,7 +868,7 @@ Use this data to optimize your operations:
                 <option value="20">20</option>
                 <option value="40">40</option>
                 <option value="50">50</option>
-                <option value="custom">Custom</option>
+                <option value="custom">{t("m.logs.custom")}</option>
               </select>
               {rowsPerPage !== 10 && rowsPerPage !== 20 && rowsPerPage !== 40 && rowsPerPage !== 50 && (
                 <input
@@ -881,9 +881,9 @@ Use this data to optimize your operations:
                   placeholder="50"
                 />
               )}
-              <span>rows per page</span>
+              <span>{t("m.logs.rowsPerPage")}</span>
               <span className="text-foreground/40">|</span>
-              <span>{(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredLogs.length)} of {filteredLogs.length}</span>
+              <span>{t("m.logs.range", { start: (currentPage - 1) * rowsPerPage + 1, end: Math.min(currentPage * rowsPerPage, filteredLogs.length), total: filteredLogs.length })}</span>
             </div>
             <div className="flex items-center gap-1">
               <button

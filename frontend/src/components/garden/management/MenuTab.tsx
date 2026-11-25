@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import Cropper, { ReactCropperElement } from "react-cropper";
 import "cropperjs/dist/cropper.css";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { safeConsoleError } from "@/lib/safeConsole";
 import { PatternRepositoryTab } from "./PatternRepositoryTab";
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ import { PatternRepositoryTab } from "./PatternRepositoryTab";
 // ───────────────────────────────────────────────────────────────────────────────
 
 function VariationsEditor({ itemId }: { itemId: number }) {
+  const { t } = useTranslation();
   // All global modifier groups (from DB)
   const [allGroups, setAllGroups] = useState<GlobalModifierGroup[]>([]);
   // The subset currently assigned to this item (from DB)
@@ -121,7 +123,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
         setAssignedGroupIds(p => new Set([...p, group.id]));
         setDefaults(p => ({ ...p, [group.id]: null }));
       }
-    } catch { toast.error("Failed to update modifier assignment"); }
+    } catch { toast.error(t("m.modifier.assignmentFailed")); }
   };
 
   // ── Default option ────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
     try {
       await setModifierDefault(itemId, groupId, next);
       setDefaults(p => ({ ...p, [groupId]: next }));
-    } catch { toast.error("Failed to set default"); }
+    } catch { toast.error(t("m.modifier.defaultFailed")); }
   };
 
   // ── Global group toggle flags ──────────────────────────────────────────────
@@ -140,14 +142,14 @@ function VariationsEditor({ itemId }: { itemId: number }) {
     try {
       await updateGlobalModifierGroup(group.id, { is_required: v });
       setAllGroups(p => p.map(g => g.id === group.id ? { ...g, is_required: v } : g));
-    } catch { toast.error("Failed to update"); }
+    } catch { toast.error(t("m.modifier.updateFailed")); }
   };
   const handleToggleMulti = async (group: GlobalModifierGroup) => {
     const v = !group.is_multi_select;
     try {
       await updateGlobalModifierGroup(group.id, { is_multi_select: v });
       setAllGroups(p => p.map(g => g.id === group.id ? { ...g, is_multi_select: v } : g));
-    } catch { toast.error("Failed to update"); }
+    } catch { toast.error(t("m.modifier.updateFailed")); }
   };
 
   // ── Rename group ──────────────────────────────────────────────────────────
@@ -157,22 +159,22 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       await updateGlobalModifierGroup(groupId, { name: renameValue.trim() });
       setAllGroups(p => p.map(g => g.id === groupId ? { ...g, name: renameValue.trim() } : g));
       setRenamingGroupId(null);
-    } catch { toast.error("Failed to rename"); }
+    } catch { toast.error(t("m.modifier.renameFailed")); }
   };
 
   // ── Global delete (from chip long-press) ─────────────────────────────────
   const handleGlobalDelete = async (groupId: number) => {
-    toast("Delete this modifier globally? It will be removed from ALL menu items.", {
+    toast(t("m.modifier.deleteGlobalConfirmation"), {
       action: {
-        label: "Delete",
+        label: t("m.delete"),
         onClick: async () => {
           try {
             await deleteGlobalModifierGroup(groupId);
             setAllGroups(p => p.filter(g => g.id !== groupId));
             setAssignedGroupIds(p => { const s = new Set(p); s.delete(groupId); return s; });
             setLongPressedId(null);
-            toast.success("Modifier deleted globally");
-          } catch { toast.error("Failed to delete modifier"); }
+            toast.success(t("m.modifier.deletedGlobally"));
+          } catch { toast.error(t("m.modifier.deleteFailed")); }
         },
       },
     });
@@ -185,7 +187,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       const opt = await createGlobalModifierOption(groupId, { label: newOptionLabel.trim(), price_delta: parseFloat(newOptionDelta) || 0 });
       setAllGroups(p => p.map(g => g.id === groupId ? { ...g, options: [...g.options, opt] } : g));
       setNewOptionLabel(""); setNewOptionDelta("0"); setAddingOptionGroupId(null);
-    } catch { toast.error("Failed to add option"); }
+    } catch { toast.error(t("m.modifier.addOptionFailed")); }
   };
   const handleUpdateOption = async (optionId: number, groupId: number) => {
     try {
@@ -194,7 +196,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
         ...g, options: g.options.map(o => o.id === optionId ? { ...o, label: editOptionLabel.trim(), price_delta: parseFloat(editOptionDelta) || 0 } : o)
       } : g));
       setEditingOptionId(null);
-    } catch { toast.error("Failed to update option"); }
+    } catch { toast.error(t("m.modifier.updateOptionFailed")); }
   };
   const handleDeleteOption = async (optionId: number, groupId: number) => {
     try {
@@ -205,7 +207,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
         await setModifierDefault(itemId, groupId, null).catch(() => null);
         setDefaults(p => ({ ...p, [groupId]: null }));
       }
-    } catch { toast.error("Failed to delete option"); }
+    } catch { toast.error(t("m.modifier.deleteOptionFailed")); }
   };
 
   // ── Create new global group ───────────────────────────────────────────────
@@ -219,10 +221,11 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       setAssignedGroupIds(p => new Set([...p, g.id]));
       setDefaults(p => ({ ...p, [g.id]: null }));
       setNewGroupName(""); setShowNewGroupForm(false);
-      toast.success(`"${g.name}" created and applied to this item`);
+      toast.success(t("m.modifier.createdAndApplied", { name: g.name }));
     } catch (error: unknown) {
       const alreadyExists = error instanceof Error && error.message.includes("already exists");
-      toast.error(alreadyExists ? "A modifier with that name already exists" : "Failed to create modifier");
+      safeConsoleError("Failed to create global modifier group", error);
+      toast.error(alreadyExists ? t("m.modifier.nameAlreadyExists") : t("m.modifier.createFailed"));
     }
   };
 
@@ -242,7 +245,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
 
       {/* ── Applied groups ─────────────────────────────────────────────── */}
       {assignedGroups.length === 0 && (
-        <p className="text-sm text-muted-foreground italic py-1">No modifiers applied. Tap a tag below or create a new one.</p>
+        <p className="text-sm text-muted-foreground italic py-1">{t("m.modifier.noneApplied")}</p>
       )}
 
       {assignedGroups.map(group => (
@@ -265,13 +268,13 @@ function VariationsEditor({ itemId }: { itemId: number }) {
               <button onClick={() => handleToggleRequired(group)}
                 className={`text-[0.62rem] px-1.5 py-0.5 rounded-full font-medium border transition-colors ${
                   group.is_required ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border"}`}>
-                {group.is_required ? "Required" : "Optional"}
+                {group.is_required ? t("m.modifier.required") : t("m.modifier.optional")}
               </button>
               {/* Multi / Single toggle */}
               <button onClick={() => handleToggleMulti(group)}
                 className={`text-[0.62rem] px-1.5 py-0.5 rounded-full font-medium border transition-colors ${
                   group.is_multi_select ? "bg-accent/20 text-accent-foreground border-accent/40" : "bg-muted text-muted-foreground border-border"}`}>
-                {group.is_multi_select ? "Multi" : "Single"}
+                {group.is_multi_select ? t("m.modifier.multi") : t("m.modifier.single")}
               </button>
               {/* Rename */}
               {renamingGroupId !== group.id && (
@@ -282,7 +285,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
               )}
               {/* Unassign from this item only */}
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                title="Remove from this item (keeps modifier in library)"
+                title={t("m.modifier.removeFromItemTitle")}
                 onClick={() => handleToggleAssignment(group)}>
                 <X className="h-3 w-3" />
               </Button>
@@ -292,17 +295,17 @@ function VariationsEditor({ itemId }: { itemId: number }) {
           {/* Options */}
           <div className="px-3 py-2 space-y-1.5">
             {group.options.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">No options yet. Add one below.</p>
+              <p className="text-xs text-muted-foreground italic">{t("m.modifier.noOptions")}</p>
             )}
             {group.options.map(opt => (
               <div key={opt.id} className="flex items-center gap-2 py-0.5">
                 {editingOptionId === opt.id ? (
                   <>
                     <Input autoFocus value={editOptionLabel} onChange={e => setEditOptionLabel(e.target.value)}
-                      placeholder="Label" className="h-7 text-sm flex-1" />
+                      placeholder={t("m.modifier.optionLabel")} className="h-7 text-sm flex-1" />
                     <Input type="number" step="0.01" value={editOptionDelta}
                       onChange={e => setEditOptionDelta(e.target.value)}
-                      placeholder="+RM" className="h-7 text-sm w-20" />
+                      placeholder={t("m.modifier.priceDeltaPlaceholder")} className="h-7 text-sm w-20" />
                     <Button size="sm" className="h-7 px-2" onClick={() => handleUpdateOption(opt.id, group.id)}><Check className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingOptionId(null)}><X className="h-3.5 w-3.5" /></Button>
                   </>
@@ -310,14 +313,14 @@ function VariationsEditor({ itemId }: { itemId: number }) {
                   <>
                     {/* ★ Default star button */}
                     <button
-                      title={defaults[group.id] === opt.id ? "Remove as default" : "Set as default for this item"}
+                      title={defaults[group.id] === opt.id ? t("m.modifier.removeDefaultTitle") : t("m.modifier.setDefaultTitle")}
                       onClick={() => handleSetDefault(group.id, opt.id)}
                       className={`shrink-0 transition-colors ${ defaults[group.id] === opt.id ? "text-amber-400" : "text-muted-foreground/40 hover:text-amber-300" }`}>
                       <Star className="h-3.5 w-3.5 fill-current" />
                     </button>
                     <span className="text-sm flex-1 truncate">{opt.label}</span>
                     <span className={`text-xs font-medium shrink-0 ${ opt.price_delta > 0 ? "text-emerald-600" : "text-muted-foreground" }`}>
-                      {opt.price_delta > 0 ? `+RM ${opt.price_delta.toFixed(2)}` : "Free"}
+                      {opt.price_delta > 0 ? `+RM ${opt.price_delta.toFixed(2)}` : t("m.modifier.free")}
                     </span>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0"
                       onClick={() => { setEditingOptionId(opt.id); setEditOptionLabel(opt.label); setEditOptionDelta(String(opt.price_delta)); }}>
@@ -335,20 +338,20 @@ function VariationsEditor({ itemId }: { itemId: number }) {
             {/* Add option inline */}
             {addingOptionGroupId === group.id ? (
               <div className="flex gap-2 mt-2 flex-wrap">
-                <Input autoFocus placeholder="Option label (e.g. Large)" value={newOptionLabel}
+                <Input autoFocus placeholder={t("m.modifier.optionLabelExample")} value={newOptionLabel}
                   onChange={e => setNewOptionLabel(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateOption(group.id); if (e.key === 'Escape') setAddingOptionGroupId(null); }}
                   className="h-7 text-sm flex-1 min-w-[120px]" />
-                <Input type="number" step="0.01" placeholder="+RM" value={newOptionDelta}
+                <Input type="number" step="0.01" placeholder={t("m.modifier.priceDeltaPlaceholder")} value={newOptionDelta}
                   onChange={e => setNewOptionDelta(e.target.value)}
                   className="h-7 text-sm w-20" />
-                <Button size="sm" className="h-7" onClick={() => handleCreateOption(group.id)} disabled={!newOptionLabel.trim()}>Add</Button>
-                <Button size="sm" variant="ghost" className="h-7" onClick={() => setAddingOptionGroupId(null)}>Cancel</Button>
+                <Button size="sm" className="h-7" onClick={() => handleCreateOption(group.id)} disabled={!newOptionLabel.trim()}>{t("m.modifier.add")}</Button>
+                <Button size="sm" variant="ghost" className="h-7" onClick={() => setAddingOptionGroupId(null)}>{t("m.cancel")}</Button>
               </div>
             ) : (
               <button className="text-xs text-primary flex items-center gap-1 mt-1 hover:underline"
                 onClick={() => { setAddingOptionGroupId(group.id); setNewOptionLabel(""); setNewOptionDelta("0"); }}>
-                <Plus className="h-3 w-3" /> Add option
+                <Plus className="h-3 w-3" /> {t("m.modifier.addOption")}
               </button>
             )}
           </div>
@@ -359,7 +362,7 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       {(libraryGroups.length > 0 || showNewGroupForm) && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Modifier Library — tap to apply
+            {t("m.modifier.library")}
           </p>
           <div className="flex flex-wrap gap-2">
             {libraryGroups.map(group => (
@@ -376,14 +379,14 @@ function VariationsEditor({ itemId }: { itemId: number }) {
                   }`}>
                   <Plus className="h-3 w-3 shrink-0" />
                   {group.name}
-                  <span className="text-[0.58rem] text-muted-foreground">{group.options.length} opts</span>
+                  <span className="text-[0.58rem] text-muted-foreground">{t("m.modifier.optionCount", { count: group.options.length })}</span>
                 </button>
                 {/* Global delete button (shown on long-press) */}
                 {longPressedId === group.id && (
                   <button
                     onClick={e => { e.stopPropagation(); handleGlobalDelete(group.id); }}
                     className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-white flex items-center justify-center shadow-md z-10 hover:bg-red-700"
-                    title="Delete globally">
+                    title={t("m.modifier.deleteGloballyTitle")}>
                     <Trash2 className="h-2.5 w-2.5" />
                   </button>
                 )}
@@ -396,30 +399,30 @@ function VariationsEditor({ itemId }: { itemId: number }) {
       {/* ── Create new global group ────────────────────────────────────────── */}
       {showNewGroupForm ? (
         <div className="border rounded-xl p-3 space-y-2 bg-accent/5">
-          <p className="text-xs font-semibold text-muted-foreground">New modifier group (added to library + applied here)</p>
-          <Input autoFocus placeholder="Group name (e.g. Size, Ice Level, Add-ons)"
+          <p className="text-xs font-semibold text-muted-foreground">{t("m.modifier.newGroupDescription")}</p>
+          <Input autoFocus placeholder={t("m.modifier.groupNameExample")}
             value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleCreateGlobalGroup(); if (e.key === 'Escape') setShowNewGroupForm(false); }}
             className="h-8" />
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
               <input type="checkbox" checked={newGroupRequired} onChange={e => setNewGroupRequired(e.target.checked)} className="accent-primary" />
-              Required (customer must choose)
+              {t("m.modifier.requiredCustomerChoice")}
             </label>
             <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
               <input type="checkbox" checked={newGroupMulti} onChange={e => setNewGroupMulti(e.target.checked)} className="accent-primary" />
-              Allow multiple selections
+              {t("m.modifier.allowMultiple")}
             </label>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleCreateGlobalGroup} disabled={!newGroupName.trim()}>Create &amp; Apply</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setShowNewGroupForm(false); setNewGroupName(""); }}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateGlobalGroup} disabled={!newGroupName.trim()}>{t("m.modifier.createAndApply")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowNewGroupForm(false); setNewGroupName(""); }}>{t("m.cancel")}</Button>
           </div>
         </div>
       ) : (
         <Button size="sm" variant="outline" className="gap-1.5 w-full mt-1"
           onClick={() => setShowNewGroupForm(true)}>
-          <Plus className="h-4 w-4" /> Create New Modifier
+          <Plus className="h-4 w-4" /> {t("m.modifier.createNew")}
         </Button>
       )}
     </div>
@@ -455,6 +458,7 @@ function SortableCategoryRow({
   assignDraft, assignSaving, onRenameStart, onRenameChange, onRenameConfirm,
   onRenameCancel, onDeleteRequest, onToggleOpen, onItemToggle, onSaveAssignments,
 }: SortableRowProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -474,7 +478,7 @@ function SortableCategoryRow({
         <button
           {...attributes} {...listeners}
           className="cursor-grab active:cursor-grabbing p-1.5 rounded hover:bg-muted text-muted-foreground touch-none shrink-0"
-          aria-label="Drag to reorder"
+          aria-label={t("m.category.dragToReorder")}
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -487,7 +491,7 @@ function SortableCategoryRow({
                 onKeyDown={e => { if (e.key === "Enter") onRenameConfirm(cat.id); if (e.key === "Escape") onRenameCancel(); }}
                 className="h-7 text-sm max-w-[200px]" />
               <Button size="sm" className="h-7 px-3" onClick={() => onRenameConfirm(cat.id)}><Check className="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onRenameCancel}>Cancel</Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onRenameCancel}>{t("m.cancel")}</Button>
             </div>
           ) : (
             <button
@@ -495,7 +499,7 @@ function SortableCategoryRow({
               onClick={() => onToggleOpen(cat.id, !isOpen)}
             >
               <span className="font-semibold truncate">{cat.name}</span>
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full shrink-0">{catItems.length} items</span>
+              <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full shrink-0">{t("m.category.itemCount", { count: catItems.length })}</span>
               {isOpen
                 ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground ml-auto shrink-0" />
                 : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />}
@@ -507,11 +511,11 @@ function SortableCategoryRow({
         {!isRenaming && (
           <div className="flex gap-1 shrink-0 ml-2">
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => onRenameStart(cat)} title="Rename">
+              onClick={() => onRenameStart(cat)} title={t("m.category.rename")}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-              onClick={() => onDeleteRequest(cat)} title="Delete section">
+              onClick={() => onDeleteRequest(cat)} title={t("m.category.deleteSection")}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -522,10 +526,10 @@ function SortableCategoryRow({
       {isOpen && !isRenaming && (
         <div className="px-6 pb-5 pt-2 border-t bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-150">
           <p className="text-xs text-muted-foreground mb-3">
-            Tick items that should belong to this section. Un-ticking moves them to the first other section.
+            {t("m.category.assignmentHelp")}
           </p>
           {items.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">No menu items yet.</p>
+            <p className="text-sm text-muted-foreground italic">{t("m.noMenuItemsYet")}</p>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
@@ -541,8 +545,8 @@ function SortableCategoryRow({
                         <p className="text-sm font-medium truncate">{item.name}</p>
                         <p className="text-[0.68rem] text-muted-foreground truncate">
                           {item.category_id !== cat.id
-                            ? `In: ${categories.find(c => c.id === item.category_id)?.name ?? "?"}`
-                            : "In this section"}
+                            ? t("m.category.inSection", { section: categories.find(c => c.id === item.category_id)?.name ?? "?" })
+                            : t("m.category.inThisSection")}
                         </p>
                       </div>
                     </label>
@@ -551,7 +555,7 @@ function SortableCategoryRow({
               </div>
               <Button className="mt-4" size="sm" disabled={assignSaving === cat.id}
                 onClick={() => onSaveAssignments(cat.id)}>
-                {assignSaving === cat.id ? "Saving…" : "Save assignments"}
+                {assignSaving === cat.id ? t("m.saving") : t("m.category.saveAssignments")}
               </Button>
             </>
           )}
@@ -604,13 +608,13 @@ export function MenuTab() {
       const data = await fetchPromotionTemplates();
       setPromoTemplates(data || []);
     } catch {
-      toast.error("Failed to load promotion templates");
+      toast.error(t("m.promotionTemplate.loadFailed"));
     }
   };
 
   const handleSavePromoTemplate = async () => {
     if (!editingItem?.promo_label) {
-      toast.error("Promotion label is required to save template");
+      toast.error(t("m.promotionTemplate.labelRequired"));
       return;
     }
     try {
@@ -619,29 +623,29 @@ export function MenuTab() {
       const promo_discount_percent = editingItem.promo_discount_percent || null;
 
       if (promoTemplates.some(t => t.promo_label === promo_label && t.promo_affects_price === promo_affects_price && t.promo_discount_percent === promo_discount_percent)) {
-        toast.info("This promotion template tag already exists");
+        toast.info(t("m.promotionTemplate.exists"));
         return;
       }
 
       await createPromotionTemplate({ promo_label, promo_affects_price, promo_discount_percent });
-      toast.success("Promotion template tag saved");
+      toast.success(t("m.promotionTemplate.saved"));
       loadPromoTemplates();
     } catch {
-      toast.error("Failed to save promotion template");
+      toast.error(t("m.promotionTemplate.saveFailed"));
     }
   };
 
   const handleApplyPromoToAll = async (promo: Omit<PromotionTemplate, "id">) => {
-    toast("Are you sure you want to apply this promotion to ALL products? This will override active promotions for all items.", {
+    toast(t("m.promotionTemplate.applyAllConfirmation"), {
       action: {
-        label: "Apply",
+        label: t("m.apply"),
         onClick: async () => {
           try {
             await applyPromotionToAll(promo);
-            toast.success("Promotion applied to all products successfully");
+            toast.success(t("m.promotionTemplate.appliedToAll"));
             loadData();
           } catch {
-            toast.error("Failed to apply promotion to all products");
+            toast.error(t("m.promotionTemplate.applyToAllFailed"));
           }
         },
       },
@@ -706,7 +710,7 @@ export function MenuTab() {
       const data = await fetchRepoSections();
       setRepoSections(data || []);
     } catch {
-      toast.error("Failed to load repository sections");
+      toast.error(t("m.repo.loadFailed"));
     }
   };
 
@@ -717,11 +721,12 @@ export function MenuTab() {
       await createRepoSection(newRepoSectionName.trim(), (Number(newRepoSectionMaxBytes) || 100) * 1024);
       setNewRepoSectionName("");
       setNewRepoSectionMaxBytes("100");
-      toast.success("Repository section created");
+      toast.success(t("m.repo.sectionCreated"));
       loadRepoSections();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to create repository section";
-      toast.error(msg.includes("409") ? "A repository section with that name already exists" : msg);
+      const msg = e instanceof Error ? e.message : "";
+      safeConsoleError("Failed to create repository section", e);
+      toast.error(msg.includes("409") ? t("m.repo.sectionNameExists") : t("m.repo.createSectionFailed", { error: t("m.unknown") }));
     } finally {
       setRepoSectionLoading(false);
     }
@@ -732,11 +737,12 @@ export function MenuTab() {
     setRepoImageUploadingSection(sectionId);
     try {
       await uploadRepoImage(sectionId, file, file.name);
-      toast.success("Repository image uploaded");
+      toast.success(t("m.repo.imageUploaded"));
       loadRepoSections();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to upload repository image";
-      toast.error(msg.includes("413") ? "Image exceeds section size limit" : msg);
+      const msg = e instanceof Error ? e.message : "";
+      safeConsoleError("Failed to upload repository image", e);
+      toast.error(msg.includes("413") ? t("m.repo.imageSizeExceeded") : t("m.repo.uploadImageFailed", { error: t("m.unknown") }));
     } finally {
       setRepoImageUploadingSection(null);
     }
@@ -762,29 +768,30 @@ export function MenuTab() {
         name: editingRepoSectionName.trim(),
         max_bytes: (Number(editingRepoSectionMaxBytes) || 100) * 1024,
       });
-      toast.success("Repository section updated");
+      toast.success(t("m.repo.sectionUpdated"));
       cancelEditRepoSection();
       loadRepoSections();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to update repository section";
-      toast.error(msg.includes("409") ? "A repository section with that name already exists" : msg);
+      const msg = e instanceof Error ? e.message : "";
+      safeConsoleError("Failed to update repository section", e);
+      toast.error(msg.includes("409") ? t("m.repo.sectionNameExists") : t("m.repo.updateSectionFailed", { error: t("m.unknown") }));
     } finally {
       setRepoSectionSaveLoading(false);
     }
   };
 
   const handleDeleteRepoSection = async (sectionId: number) => {
-    toast("Delete this repository section and all its images?", {
+    toast(t("m.repo.deleteSectionConfirmation"), {
       action: {
-        label: "Delete",
+        label: t("m.delete"),
         onClick: async () => {
           setRepoSectionDeleteLoading(sectionId);
           try {
             await deleteRepoSection(sectionId);
-            toast.success("Repository section deleted");
+            toast.success(t("m.repo.sectionDeleted"));
             loadRepoSections();
           } catch {
-            toast.error("Failed to delete repository section");
+            toast.error(t("m.repo.deleteSectionFailed"));
           } finally {
             setRepoSectionDeleteLoading(null);
           }
@@ -794,9 +801,9 @@ export function MenuTab() {
   };
 
   const handleDeleteRepoImage = async (imageId: number) => {
-    toast("Delete this repository image?", {
+    toast(t("m.repo.deleteImageConfirmation"), {
       action: {
-        label: "Delete",
+        label: t("m.delete"),
         onClick: async () => {
           setRepoImageDeletingId(imageId);
           try {
@@ -806,10 +813,10 @@ export function MenuTab() {
               next.delete(imageId);
               return next;
             });
-            toast.success("Repository image deleted");
+            toast.success(t("m.repo.imageDeleted"));
             loadRepoSections();
           } catch {
-            toast.error("Failed to delete repository image");
+            toast.error(t("m.repo.deleteImageFailed"));
           } finally {
             setRepoImageDeletingId(null);
           }
@@ -844,9 +851,9 @@ export function MenuTab() {
   const handleDeleteSelectedRepoImages = async (section: RepoSection) => {
     const selected = section.images.filter(image => selectedRepoImageIds.has(image.id));
     if (selected.length === 0) return;
-    toast(`Delete ${selected.length} selected repository image${selected.length === 1 ? "" : "s"} from '${section.name}'? This cannot be undone.`, {
+    toast(t("m.repo.deleteSelectedConfirmation", { count: selected.length, section: section.name }), {
       action: {
-        label: "Delete",
+        label: t("m.delete"),
         onClick: async () => {
           setRepoImageBulkDeleting(true);
           try {
@@ -856,10 +863,10 @@ export function MenuTab() {
               selected.forEach(image => next.delete(image.id));
               return next;
             });
-            toast.success(`Deleted ${selected.length} selected repository image${selected.length === 1 ? "" : "s"}`);
+            toast.success(t("m.repo.deletedSelected", { count: selected.length }));
             loadRepoSections();
           } catch {
-            toast.error("Failed to delete selected repository images");
+            toast.error(t("m.repo.deleteSelectedFailed"));
           } finally {
             setRepoImageBulkDeleting(false);
           }
@@ -893,7 +900,7 @@ export function MenuTab() {
     try {
       await reorderCategories(reordered.map((c, i) => ({ id: c.id, display_order: i })));
     } catch {
-      toast.error("Failed to reorder");
+      toast.error(t("m.category.reorderFailed"));
       loadData(); // Revert on failure
     }
   };
@@ -904,11 +911,12 @@ export function MenuTab() {
     try {
       await createCategory(newSectionName.trim());
       setNewSectionName(""); setAddingSection(false);
-      toast.success("Section created");
+      toast.success(t("m.category.created"));
       loadData();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
-      toast.error(msg.includes("409") ? "A section with that name already exists" : "Failed to create section");
+      safeConsoleError("Failed to create menu section", e);
+      toast.error(msg.includes("409") ? t("m.category.nameExists") : t("m.category.createFailed"));
     }
   };
 
@@ -917,11 +925,12 @@ export function MenuTab() {
     try {
       await updateCategory(id, { name: renameValue.trim() });
       setRenamingId(null); setRenameValue("");
-      toast.success("Section renamed");
+      toast.success(t("m.category.renamed"));
       loadData();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
-      toast.error(msg.includes("409") ? "A section with that name already exists" : "Failed to rename");
+      safeConsoleError("Failed to rename menu section", e);
+      toast.error(msg.includes("409") ? t("m.category.nameExists") : t("m.category.renameFailed"));
     }
   };
 
@@ -930,11 +939,12 @@ export function MenuTab() {
     try {
       await deleteCategory(deletingCategory.id);
       setDeletingCategory(null);
-      toast.success("Section deleted. Items moved to the next available section.");
+      toast.success(t("m.category.deleted"));
       loadData();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "";
-      toast.error(msg.includes("400") ? "Cannot delete the only remaining section." : "Failed to delete section");
+      safeConsoleError("Failed to delete menu section", e);
+      toast.error(msg.includes("400") ? t("m.category.cannotDeleteOnlySection") : t("m.category.deleteFailed"));
     }
   };
 
@@ -966,9 +976,9 @@ export function MenuTab() {
         }),
       ];
       await Promise.all(updates);
-      toast.success("Assignments saved");
+      toast.success(t("m.category.assignmentsSaved"));
       loadData();
-    } catch { toast.error("Failed to save assignments"); }
+    } catch { toast.error(t("m.category.assignmentsFailed")); }
     finally { setAssignSaving(null); }
   };
 
@@ -989,9 +999,9 @@ export function MenuTab() {
           setEditingItem(p => ({ ...p, pattern_id: result.pattern.id, pattern_image_url: result.pattern.image_url }));
         }
       }
-      toast.success("Pattern uploaded");
+      toast.success(t("m.pattern.uploaded"));
     } catch {
-      toast.error("Failed to upload pattern");
+      toast.error(t("m.pattern.uploadFailed"));
     } finally {
       if (patternInputRef.current) patternInputRef.current.value = "";
     }
@@ -1085,8 +1095,8 @@ export function MenuTab() {
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <div>
-              <h3 className="font-semibold text-lg leading-none">Repo</h3>
-              <p className="text-sm text-muted-foreground mt-1">Manage both Pattern and Image repositories in one place</p>
+              <h3 className="font-semibold text-lg leading-none">{t("m.repo.title")}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{t("m.repo.description")}</p>
             </div>
           </div>
           {showRepoRepository ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1100,14 +1110,14 @@ export function MenuTab() {
                 size="sm"
                 onClick={() => setRepoRepositoryTab("pattern")}
               >
-                Pattern repository
+                {t("m.pattern.title")}
               </Button>
               <Button
                 variant={repoRepositoryTab === "image" ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => setRepoRepositoryTab("image")}
               >
-                Image repository
+                {t("m.repo.imageRepository")}
               </Button>
             </div>
 
@@ -1119,15 +1129,15 @@ export function MenuTab() {
               <div className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end">
                   <div className="grid gap-2">
-                    <Label>Section name</Label>
+                    <Label>{t("m.repo.sectionName")}</Label>
                     <Input
                       value={newRepoSectionName}
                       onChange={e => setNewRepoSectionName(e.target.value)}
-                      placeholder="New repository section name…"
+                      placeholder={t("m.repo.newSectionPlaceholder")}
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label>Max size (KB)</Label>
+                    <Label>{t("m.repo.maxSizeKb")}</Label>
                     <Input
                       type="number"
                       value={newRepoSectionMaxBytes}
@@ -1136,13 +1146,13 @@ export function MenuTab() {
                     />
                   </div>
                   <Button size="sm" onClick={handleCreateRepoSection} disabled={!newRepoSectionName.trim() || repoSectionLoading}>
-                    {repoSectionLoading ? "Creating…" : "Create section"}
+                    {repoSectionLoading ? t("m.creating") : t("m.repo.createSection")}
                   </Button>
                 </div>
 
                 {repoSections.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    No repository sections have been created yet. Use the form above to add one.
+                    {t("m.repo.noSections")}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1151,14 +1161,14 @@ export function MenuTab() {
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                           <div className="min-w-0">
                             <p className="font-semibold">{section.name}</p>
-                            <p className="text-xs text-muted-foreground">Max {(section.max_bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KB · {section.images.length} image{section.images.length === 1 ? "" : "s"}</p>
+                            <p className="text-xs text-muted-foreground">{t("m.repo.maxImageSize", { size: (section.max_bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 }), count: section.images.length })}</p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <Button size="sm" variant="outline" onClick={() => startEditRepoSection(section)}>
-                              Edit
+                              {t("m.edit")}
                             </Button>
                             <Button size="sm" variant="destructive" onClick={() => handleDeleteRepoSection(section.id)} disabled={repoSectionDeleteLoading === section.id}>
-                              {repoSectionDeleteLoading === section.id ? "Deleting…" : "Delete section"}
+                              {repoSectionDeleteLoading === section.id ? t("m.deleting") : t("m.repo.deleteSection")}
                             </Button>
                             <label className="inline-flex">
                               <input type="file" accept="image/*" className="hidden"
@@ -1168,7 +1178,7 @@ export function MenuTab() {
                                   if (e.target) e.target.value = "";
                                 }} />
                               <Button size="sm" variant="outline" disabled={repoImageUploadingSection === section.id}>
-                                {repoImageUploadingSection === section.id ? "Uploading…" : "Upload image"}
+                                {repoImageUploadingSection === section.id ? t("m.uploading") : t("m.repo.uploadImage")}
                               </Button>
                             </label>
                           </div>
@@ -1178,13 +1188,13 @@ export function MenuTab() {
                           <div className="mt-4 rounded-xl border border-border bg-white p-4 space-y-3">
                             <div className="grid gap-2 sm:grid-cols-2">
                               <div className="grid gap-2">
-                                <Label>Section name</Label>
+                                <Label>{t("m.repo.sectionName")}</Label>
                                 <Input value={editingRepoSectionName}
                                   onChange={e => setEditingRepoSectionName(e.target.value)}
-                                  placeholder="Section name" />
+                                  placeholder={t("m.repo.sectionName")} />
                               </div>
                               <div className="grid gap-2">
-                                <Label>Max size (KB)</Label>
+                                <Label>{t("m.repo.maxSizeKb")}</Label>
                                 <Input type="number" value={editingRepoSectionMaxBytes}
                                   onChange={e => setEditingRepoSectionMaxBytes(e.target.value)}
                                   placeholder="100" />
@@ -1192,9 +1202,9 @@ export function MenuTab() {
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button size="sm" onClick={() => handleSaveRepoSection(section.id)} disabled={repoSectionSaveLoading}>
-                                {repoSectionSaveLoading ? "Saving…" : "Save changes"}
+                                {repoSectionSaveLoading ? t("m.saving") : t("m.saveChanges")}
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={cancelEditRepoSection}>Cancel</Button>
+                              <Button size="sm" variant="ghost" onClick={cancelEditRepoSection}>{t("m.cancel")}</Button>
                             </div>
                           </div>
                         ) : null}
@@ -1204,14 +1214,14 @@ export function MenuTab() {
                             <div className="flex flex-wrap items-center justify-between gap-2 mt-4">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Button size="sm" variant="outline" onClick={() => toggleSelectAllRepoImages(section)}>
-                                  {section.images.every(image => selectedRepoImageIds.has(image.id)) ? "Clear all" : `Select all (${section.images.length})`}
+                                  {section.images.every(image => selectedRepoImageIds.has(image.id)) ? t("m.repo.clearAll") : t("m.repo.selectAll", { count: section.images.length })}
                                 </Button>
-                                <span className="text-xs text-muted-foreground">{section.images.filter(image => selectedRepoImageIds.has(image.id)).length} selected</span>
+                                <span className="text-xs text-muted-foreground">{t("m.repo.selectedCount", { count: section.images.filter(image => selectedRepoImageIds.has(image.id)).length })}</span>
                               </div>
                               <Button size="sm" variant="destructive"
                                 disabled={section.images.filter(image => selectedRepoImageIds.has(image.id)).length === 0 || repoImageBulkDeleting}
                                 onClick={() => handleDeleteSelectedRepoImages(section)}>
-                                {repoImageBulkDeleting ? "Deleting…" : "Delete selected"}
+                                {repoImageBulkDeleting ? t("m.deleting") : t("m.repo.deleteSelected")}
                               </Button>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
@@ -1222,7 +1232,7 @@ export function MenuTab() {
                                       onChange={() => toggleSelectRepoImage(image.id)}
                                       className="h-4 w-4 rounded border"
                                     />
-                                    <span>Select</span>
+                                    <span>{t("m.select")}</span>
                                   </label>
                                   <button
                                     className="absolute right-2 top-2 z-10 rounded-full bg-white/90 p-1 text-destructive shadow-sm hover:bg-destructive/10"
@@ -1242,7 +1252,7 @@ export function MenuTab() {
                             </div>
                           </>
                         ) : (
-                          <p className="text-xs text-muted-foreground mt-3">No images yet. Upload one to make it available for menu items.</p>
+                          <p className="text-xs text-muted-foreground mt-3">{t("m.repo.noImages")}</p>
                         )}
                       </div>
                     ))}
@@ -1260,23 +1270,23 @@ export function MenuTab() {
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <div>
-              <h3 className="font-semibold text-lg leading-none">Menu Sections</h3>
-              <p className="text-sm text-muted-foreground mt-1">Drag to reorder · Click a section to assign items</p>
+              <h3 className="font-semibold text-lg leading-none">{t("m.menuSections")}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{t("m.category.reorderAndAssignHelp")}</p>
             </div>
           </div>
           <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setAddingSection(v => !v)}>
-            <Plus className="h-4 w-4" /> Add Section
+            <Plus className="h-4 w-4" /> {t("m.category.addSection")}
           </Button>
         </div>
 
         {addingSection && (
           <div className="px-6 py-4 border-b bg-accent/5 flex gap-3 items-center">
-            <Input autoFocus placeholder="New section name…" value={newSectionName}
+            <Input autoFocus placeholder={t("m.category.newSectionName")} value={newSectionName}
               onChange={e => setNewSectionName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleCreateSection(); if (e.key === "Escape") setAddingSection(false); }}
               className="max-w-xs" />
-            <Button size="sm" onClick={handleCreateSection} disabled={!newSectionName.trim()}>Create</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setAddingSection(false); setNewSectionName(""); }}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateSection} disabled={!newSectionName.trim()}>{t("m.create")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setAddingSection(false); setNewSectionName(""); }}>{t("m.cancel")}</Button>
           </div>
         )}
 
@@ -1286,7 +1296,7 @@ export function MenuTab() {
             <CardSkeleton />
           </div>
         ) : sorted.length === 0 ? (
-          <div className="px-6 py-8 text-center text-muted-foreground">No sections yet.</div>
+          <div className="px-6 py-8 text-center text-muted-foreground">{t("m.category.noSections")}</div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={sorted.map(c => c.id)} strategy={verticalListSortingStrategy}>
@@ -1354,7 +1364,7 @@ export function MenuTab() {
                 {patternImage && (
                   <div className="absolute inset-0 z-0 pointer-events-none">
                     <img src={patternImage}
-                      alt="Pattern overlay"
+                      alt={t("m.pattern.overlayAlt")}
                       className="h-full w-full object-cover"
                       style={{
                         opacity: pattern?.opacity ?? 0.4,
@@ -1396,7 +1406,7 @@ export function MenuTab() {
                             setIsDialogOpen(true);
                           }}
                           className="bg-violet-100 text-violet-700 p-1.5 rounded-full shadow-sm hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                          title={`${item.option_groups.length} variation group(s)`}
+                          title={t("m.modifier.groupCount", { count: item.option_groups.length })}
                         >
                           <Settings2 className="h-3.5 w-3.5" />
                         </button>
@@ -1462,7 +1472,7 @@ export function MenuTab() {
                 {patternImage && (
                   <div className="absolute inset-0 z-0 pointer-events-none">
                     <img src={patternImage}
-                      alt="Pattern overlay"
+                      alt={t("m.pattern.overlayAlt")}
                       className="h-full w-full object-cover"
                       style={{
                         opacity: pattern?.opacity ?? 0.4,
@@ -1543,21 +1553,21 @@ export function MenuTab() {
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" /> Delete Section
+              <AlertTriangle className="h-5 w-5" /> {t("m.category.deleteSection")}
             </DialogTitle>
             <DialogDescription className="pt-2">
-              Are you sure you want to delete <strong>"{deletingCategory?.name}"</strong>?
+              {t("m.category.deleteConfirmation", { section: deletingCategory?.name })}
               {deleteFallback ? (
-                <> Items currently in this section will be moved to <strong>"{deleteFallback.name}"</strong> and can be reassigned afterwards.</>
+                <> {t("m.category.deleteMoveHelp", { section: deleteFallback.name })}</>
               ) : (
-                <> <span className="text-destructive font-medium">This is your only section and cannot be deleted.</span></>
+                <> <span className="text-destructive font-medium">{t("m.category.cannotDeleteOnlySection")}</span></>
               )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeletingCategory(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeletingCategory(null)}>{t("m.cancel")}</Button>
             <Button variant="destructive" disabled={!deleteFallback} onClick={handleDeleteSection}>
-              Delete Section
+              {t("m.category.deleteSection")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1576,11 +1586,11 @@ export function MenuTab() {
             <div className="flex gap-1 bg-muted/50 rounded-lg p-1 mt-1">
               <button onClick={() => setVariationsTab(false)}
                 className={`flex-1 text-sm rounded-md py-1.5 font-medium transition-colors ${!variationsTab ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                Details
+                {t("m.menuItem.detailsTab")}
               </button>
               <button onClick={() => setVariationsTab(true)}
                 className={`flex-1 text-sm rounded-md py-1.5 font-medium transition-colors ${variationsTab ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                Variations
+                {t("m.menuItem.variationsTab")}
               </button>
             </div>
           )}
@@ -1589,7 +1599,7 @@ export function MenuTab() {
           {variationsTab && editingItem?.id ? (
             <div className="py-4">
               <p className="text-sm text-muted-foreground mb-4">
-                Create option groups (e.g. "Size", "Ice Level") and the choices within them. Set a price delta if a choice changes the cost.
+                {t("m.menuItem.variationsHelp")}
               </p>
               <VariationsEditor itemId={editingItem.id} />
             </div>
@@ -1737,7 +1747,7 @@ export function MenuTab() {
                               type="number" 
                               min={1} 
                               max={100} 
-                              placeholder="e.g. 20" 
+                              placeholder="20"
                               value={editingItem?.promo_discount_percent ?? ""}
                               onChange={e => {
                                 const val = parseInt(e.target.value, 10);
@@ -1773,7 +1783,7 @@ export function MenuTab() {
                           size="sm" 
                           onClick={handleSavePromoTemplate}
                           className="text-xs bg-pink-50/50 hover:bg-pink-50 text-pink-700 border-pink-200"
-                          title="Save this promotion configuration as a reusable tag"
+                          title={t("m.promotionTemplate.saveAsTagTitle")}
                         >
                           <Plus className="h-3 w-3 mr-1" /> {t("m.saveAsTag", "Save as Tag")}
                         </Button>
@@ -1788,7 +1798,7 @@ export function MenuTab() {
                             handleApplyPromoToAll({ promo_label, promo_affects_price, promo_discount_percent });
                           }}
                           className="text-xs ml-auto font-semibold"
-                          title="Apply this promotion to all items in the restaurant menu"
+                          title={t("m.promotionTemplate.applyAllTitle")}
                         >
                           <Layers className="h-3 w-3 mr-1" /> {t("m.applyToAll", "Apply to All Products")}
                         </Button>
@@ -1814,7 +1824,7 @@ export function MenuTab() {
                                       promo_affects_price: !!tpl.promo_affects_price,
                                       promo_discount_percent: tpl.promo_discount_percent
                                     }));
-                                    toast.success("Applied promotion configuration");
+                                    toast.success(t("m.promotionTemplate.applied"));
                                   }}
                                   className="font-medium hover:underline text-left"
                                 >
@@ -1824,23 +1834,23 @@ export function MenuTab() {
                                   type="button"
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    toast(`Delete '${tpl.promo_label}' template tag?`, {
+                                    toast(t("m.promotionTemplate.deleteConfirmation", { name: tpl.promo_label }), {
                                       action: {
-                                        label: "Delete",
+                                        label: t("m.delete"),
                                         onClick: async () => {
                                           try {
                                             await deletePromotionTemplate(tpl.id);
-                                            toast.success("Template tag deleted");
+                                            toast.success(t("m.promotionTemplate.deleted"));
                                             loadPromoTemplates();
                                           } catch {
-                                            toast.error("Failed to delete template tag");
+                                            toast.error(t("m.promotionTemplate.deleteFailed"));
                                           }
                                         },
                                       },
                                     });
                                   }}
                                   className="text-pink-400 hover:text-pink-600 rounded-full hover:bg-pink-100 p-0.5 ml-0.5 transition-colors"
-                                  title="Delete Tag"
+                                  title={t("m.promotionTemplate.deleteTagTitle")}
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -1853,17 +1863,17 @@ export function MenuTab() {
                   )}
                   <div className="grid gap-2 pt-1">
                     <div>
-                      <Label>Pattern overlay</Label>
-                      <p className="text-xs text-muted-foreground mt-1">Select a pattern from the repository. Patterns can be edited (zoom, rotate, flip, opacity, fade effects) in the Pattern Repository tab.</p>
+                      <Label>{t("m.pattern.overlayLabel")}</Label>
+                      <p className="text-xs text-muted-foreground mt-1">{t("m.pattern.overlayHelp")}</p>
                     </div>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
                         <div className="flex-1 min-w-0">
                           <Select value={editingItem?.pattern_id ? String(editingItem.pattern_id) : "none"}
                             onValueChange={value => setEditingItem(p => ({ ...p, pattern_id: value === "none" ? null : parseInt(value, 10) }))}>
-                            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder={t("m.pattern.none")} /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">None</SelectItem>
+                              <SelectItem value="none">{t("m.pattern.none")}</SelectItem>
                               {patterns.map(pattern => (
                                 <SelectItem key={pattern.id} value={String(pattern.id)}>{pattern.name}</SelectItem>
                               ))}
@@ -1872,32 +1882,32 @@ export function MenuTab() {
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" variant="ghost" onClick={() => setEditingItem(p => ({ ...p, pattern_id: null }))}>
-                            Clear
+                            {t("m.pattern.clear")}
                           </Button>
                         </div>
                       </div>
                       {selectedPatternImage ? (
                         <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">
                           <div className="h-20 w-20 overflow-hidden rounded-xl bg-white shadow-sm">
-                            <img src={selectedPatternImage} alt="Selected pattern" className="h-full w-full object-cover" />
+                            <img src={selectedPatternImage} alt={t("m.pattern.selectedAlt")} className="h-full w-full object-cover" />
                           </div>
                           <div className="min-w-0">
-                            <p className="font-medium text-sm">{editingItem?.pattern_id ? "Selected pattern" : "Default pattern fallback"}</p>
-                            <p className="text-xs text-muted-foreground">This overlay will appear on the menu card.</p>
+                            <p className="font-medium text-sm">{editingItem?.pattern_id ? t("m.pattern.selected") : t("m.pattern.defaultFallback")}</p>
+                            <p className="text-xs text-muted-foreground">{t("m.pattern.overlayAppearsOnCard")}</p>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-xs text-muted-foreground">No pattern selected. If a default pattern is configured, it will be used on the card.</p>
+                        <p className="text-xs text-muted-foreground">{t("m.pattern.noneSelected")}</p>
                       )}
                     </div>
                   </div>
                   <div className="grid gap-2 pt-1">
-                    <Label>Repository image</Label>
+                    <Label>{t("m.repo.image")}</Label>
                     <Select value={editingItem?.repo_image_id ? String(editingItem.repo_image_id) : "none"}
                       onValueChange={value => setEditingItem(p => ({ ...p, repo_image_id: value === "none" ? null : parseInt(value, 10) }))}>
-                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("m.pattern.none")} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="none">{t("m.pattern.none")}</SelectItem>
                         {repoSections.flatMap(section => section.images.map(image => (
                           <SelectItem key={image.id} value={String(image.id)}>{`${section.name}: ${image.name}`}</SelectItem>
                         )))}
@@ -1905,38 +1915,38 @@ export function MenuTab() {
                     </Select>
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" variant="ghost" onClick={() => setEditingItem(p => ({ ...p, repo_image_id: null }))}>
-                        Clear
+                        {t("m.pattern.clear")}
                       </Button>
                     </div>
                     {selectedRepoImage ? (
                       <div className="flex items-center gap-3 rounded-xl border border-border p-3 bg-muted/60">
                         <div className="h-20 w-20 overflow-hidden rounded-xl bg-white shadow-sm">
-                          <img src={selectedRepoImage.image_url} alt="Selected repository image" className="h-full w-full object-cover" />
+                          <img src={selectedRepoImage.image_url} alt={t("m.repo.selectedImageAlt")} className="h-full w-full object-cover" />
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium text-sm">{selectedRepoImage.name}</p>
-                          <p className="text-xs text-muted-foreground">Section: {repoSections.find(s => s.id === selectedRepoImage.section_id)?.name ?? "Unknown"}</p>
+                          <p className="text-xs text-muted-foreground">{t("m.repo.sectionLabel", { section: repoSections.find(s => s.id === selectedRepoImage.section_id)?.name ?? t("m.unknown") })}</p>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No repository image selected. Choose one to reuse managed image assets.</p>
+                      <p className="text-xs text-muted-foreground">{t("m.repo.noImageSelected")}</p>
                     )}
                   </div>
                   <div className="grid gap-2 pt-1">
-                    <Label>Card size</Label>
+                    <Label>{t("m.menuCard.size")}</Label>
                     <Select value={editingItem?.card_size || "normal"} onValueChange={v => {
                       if (v === "normal" || v === "large" || v === "extra_large") {
                         setEditingItem(p => p ? { ...p, card_size: v } : p);
                       }
                     }}>
-                      <SelectTrigger><SelectValue placeholder="Normal" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("m.menuCard.normal")} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="normal">Normal — compact</SelectItem>
-                        <SelectItem value="large">Large — taller</SelectItem>
-                        <SelectItem value="extra_large">Extra Large — wide advertising</SelectItem>
+                        <SelectItem value="normal">{t("m.menuCard.normal")}</SelectItem>
+                        <SelectItem value="large">{t("m.menuCard.large")}</SelectItem>
+                        <SelectItem value="extra_large">{t("m.menuCard.extraLarge")}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Choose how this item appears on the customer-facing menu.</p>
+                    <p className="text-xs text-muted-foreground">{t("m.menuCard.sizeHelp")}</p>
                   </div>
                 </div>
               </div>

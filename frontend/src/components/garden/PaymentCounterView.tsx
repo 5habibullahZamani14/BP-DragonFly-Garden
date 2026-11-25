@@ -113,10 +113,10 @@ const getTenderSuggestions = (remaining: number) => {
   const roundedAmount = roundedToFive === 0 ? 0 : roundedToFive;
 
   return [
-    { label: "Exact due", value: Number(baseAmount.toFixed(2)) },
-    { label: "Nearest round", value: Number(roundedAmount.toFixed(2)) },
-    { label: "+RM 5", value: Number((roundedAmount + 5).toFixed(2)) },
-    { label: "+RM 10", value: Number((roundedAmount + 10).toFixed(2)) },
+    Number(baseAmount.toFixed(2)),
+    Number(roundedAmount.toFixed(2)),
+    Number((roundedAmount + 5).toFixed(2)),
+    Number((roundedAmount + 10).toFixed(2)),
   ];
 };
 
@@ -209,7 +209,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   };
 
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [workHours, setWorkHours] = useState<{ start: string; end: string } | null>(null);
+  const [workHours, setWorkHours] = useState<{ start: string; end: string; open_days?: number[] } | null>(null);
   const [isWithinWorkHours, setIsWithinWorkHours] = useState<boolean>(true);
   const unacknowledgedAssistanceCount = assistanceRequests.filter((request) => !request.acknowledged_at).length;
 
@@ -242,7 +242,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
     const currentTimeStr = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
 
     if (workHours) {
-      return isTimeInRange(currentTimeStr, workHours.start, workHours.end) ? "workingTime" : "outsideWorking";
+      const openDays = Array.isArray(workHours.open_days)
+        ? workHours.open_days
+        : [0, 1, 2, 3, 4, 5, 6];
+      const isOperatingDay = openDays.includes(currentTime.getDay());
+      return isOperatingDay && isTimeInRange(currentTimeStr, workHours.start, workHours.end) ? "workingTime" : "outsideWorking";
     }
 
     if (currentHour >= 9 && currentHour < 18) return "workingTime";
@@ -346,7 +350,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           const currentHour = now.getHours();
           const currentMinute = now.getMinutes();
           const currentTimeStr = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
-          const inside = isTimeInRange(currentTimeStr, settings.work_hours.start, settings.work_hours.end);
+          const openDays = Array.isArray(settings.work_hours.open_days)
+            ? settings.work_hours.open_days
+            : [0, 1, 2, 3, 4, 5, 6];
+          const inside = openDays.includes(now.getDay()) &&
+            isTimeInRange(currentTimeStr, settings.work_hours.start, settings.work_hours.end);
           setIsWithinWorkHours(inside);
 
           if (!inside) {
@@ -872,7 +880,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                   setFeedbackModalOpen(true);
                 }} 
                 className="rounded-full bg-white hover:bg-gray-50 border-gray-200"
-                title="Send general feedback"
+                title={t("payment.sendGeneralFeedback")}
               >
                 <MessageSquare className="h-4 w-4 text-gray-600" />
               </Button>
@@ -948,7 +956,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                               setFeedbackModalOpen(true);
                             }}
                             className="h-8 px-2 text-xs text-gray-500 hover:text-green-700 hover:bg-green-50 rounded-full gap-1 flex items-center bg-white/60 backdrop-blur-sm shadow-sm border border-gray-100"
-                            title="Report order issue"
+                            title={t("payment.reportOrderIssue")}
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
                             <span>{t("payment.reportIssue", "Feedback")}</span>
@@ -1099,7 +1107,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                             <div className="flex-1">
                                               <p className="text-sm font-medium">{item.item_name}</p>
                                               <p className="text-xs text-gray-500">
-                                                RM {(item.price_at_order_time ?? 0).toFixed(2)} each
+                                                RM {(item.price_at_order_time ?? 0).toFixed(2)} {t("customer.priceEach")}
                                               </p>
                                             </div>
                                           </div>
@@ -1160,16 +1168,16 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                   className="text-lg"
                                 />
                                 <div className="flex flex-wrap gap-2 pt-2">
-                                  {getTenderSuggestions(order.remaining).map((suggestion) => (
+                                  {getTenderSuggestions(order.remaining).map((suggestion, index) => (
                                     <Button
-                                      key={`${suggestion.label}-${suggestion.value}`}
+                                      key={index}
                                       type="button"
                                       variant="outline"
                                       size="sm"
                                       className="h-8 px-3 text-sm"
-                                      onClick={() => setPaymentAmount(suggestion.value.toFixed(2))}
+                                      onClick={() => setPaymentAmount(suggestion.toFixed(2))}
                                     >
-                                      RM {suggestion.value.toFixed(2)}
+                                      RM {suggestion.toFixed(2)}
                                     </Button>
                                   ))}
                                 </div>
@@ -1261,7 +1269,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                                 setFeedbackModalOpen(true);
                               }}
                               className="h-8 px-2 text-xs text-gray-500 hover:text-green-700 hover:bg-green-50 rounded-full gap-1 flex items-center"
-                              title="Report order issue"
+                              title={t("payment.reportOrderIssue")}
                             >
                               <MessageSquare className="h-3.5 w-3.5" />
                               <span>{t("payment.reportIssue", "Feedback")}</span>
@@ -1413,7 +1421,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
               <Label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">{t("feedback.sender", "Sender")}</Label>
               <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100 text-sm font-medium text-gray-700">
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                {loggedInEmployee?.name} (ID: {loggedInEmployee?.id})
+                {loggedInEmployee?.name} ({t("m.idLabel")}: {loggedInEmployee?.id})
               </div>
             </div>
 

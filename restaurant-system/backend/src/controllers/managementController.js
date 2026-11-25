@@ -34,6 +34,7 @@ const { setAuthCookie } = require("../middleware/authCookies");
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 const { redactText } = require("../middleware/secretRedaction");
 const { createSystemUpdateService } = require("../services/systemUpdateService");
+const { ensureSystemTables } = require("../utils/systemTables");
 const {
   validateManagerPassword,
   hashManagerPassword,
@@ -370,6 +371,19 @@ const updateSetting = async (req, res, next) => {
   try {
     const { key } = req.params;
     const { value } = req.body;
+    if (key === "work_hours") {
+      const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      if (!value || typeof value !== "object" || !timePattern.test(value.start) || !timePattern.test(value.end)) {
+        return next(createHttpError(400, "Opening and closing times must use HH:MM format."));
+      }
+      if (!Array.isArray(value.open_days) || value.open_days.length === 0 ||
+          value.open_days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+        return next(createHttpError(400, "Choose at least one valid operating day."));
+      }
+      if (!["monday", "saturday", "sunday"].includes(value.first_day_of_week)) {
+        return next(createHttpError(400, "Choose a valid first day of the week."));
+      }
+    }
     const stringValue = typeof value === "object" ? JSON.stringify(value) : String(value);
     await run(
       "INSERT INTO restaurant_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -541,7 +555,7 @@ const performDataReset = async (req, res, next) => {
     const cleanupWarnings = [];
     const insertResetSettings = async () => {
       const defaultSettings = [
-        ["work_hours", '{"start":"09:00","end":"22:00"}'],
+        ["work_hours", '{"start":"09:00","end":"22:00","open_days":[1,2,3,4,5,6,0],"first_day_of_week":"monday"}'],
         ["sst_enabled", "true"],
         ["sst_rate", "0.06"],
         ["service_charge_enabled", "true"],
@@ -691,10 +705,8 @@ const performDataReset = async (req, res, next) => {
         await run(`DELETE FROM employees`);
         await run(`DELETE FROM payment_methods`);
         await run(`DELETE FROM grand_archive_logs`);
-        await run(`DELETE FROM tables WHERE id <> 999`);
-        await run(
-          "INSERT OR IGNORE INTO tables (id, table_number, qr_code) VALUES (999, 'Counter Order', 'counter-orders')"
-        );
+        await run(`DELETE FROM tables WHERE id <> 999 AND UPPER(TRIM(table_number)) <> 'R4M'`);
+        await ensureSystemTables(run);
         for (const method of ["Cash", "Visa Card", "Mastercard", "eWallet"]) {
           await run("INSERT INTO payment_methods (name) VALUES (?)", [method]);
         }

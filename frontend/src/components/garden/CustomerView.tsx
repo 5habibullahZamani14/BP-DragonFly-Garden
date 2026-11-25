@@ -979,7 +979,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
 
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="countdown-display countdown-emboss" style={{ fontSize: 44, fontWeight: 800, lineHeight: 1 }}>{confirmCountdown}</span>
-                <span className="mt-1 text-[11px] text-foreground/60 uppercase tracking-wider">confirm</span>
+                <span className="mt-1 text-[11px] text-foreground/60 uppercase tracking-wider">{t("customer.confirming")}</span>
               </div>
             </div>
           </div>
@@ -1475,7 +1475,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                             <div className="absolute inset-0 z-0 pointer-events-none">
                               <img
                                 src={patternImage}
-                                alt="Pattern overlay"
+                                alt={t("m.pattern.overlayAlt")}
                                 className="h-full w-full object-cover"
                                 style={{
                                   opacity: pattern?.opacity ?? 0.4,
@@ -1539,7 +1539,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                                     ) : (
                                       <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                                     )}
-                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">Special</p>}
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">{t("customer.special")}</p>}
                                   </div>
                                   <button
                                     disabled={item.is_sold_out}
@@ -1592,7 +1592,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                                     ) : (
                                       <p className="font-1 text-base font-bold text-primary">{formatRM(item.price)}</p>
                                     )}
-                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">Special</p>}
+                                    {item.is_promo && <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-amber-600 mt-0.5">{t("customer.special")}</p>}
                                   </div>
                                   <button
                                     disabled={item.is_sold_out}
@@ -1634,7 +1634,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                   <div className="absolute inset-0 z-0 pointer-events-none">
                     <img
                       src={patternImage}
-                      alt="Pattern overlay"
+                      alt={t("m.pattern.overlayAlt")}
                       className="h-full w-full object-cover"
                       style={{
                         opacity: pattern?.opacity ?? 0.4,
@@ -1798,7 +1798,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                 <p>{selectedMenuItem?.description || t("customer.descriptionFallback")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
-                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Price</p>
+                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">{t("customer.price")}</p>
                     {selectedMenuItem && selectedMenuItem.is_promo && selectedMenuItem.promo_affects_price && selectedMenuItem.promo_discount_percent ? (
                       <div className="flex items-center gap-2 mt-2">
                         <span className="text-sm text-foreground/45 line-through leading-none">{formatRM(selectedMenuItem.price)}</span>
@@ -1809,23 +1809,23 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                     )}
                   </div>
                   <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
-                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">Status</p>
+                    <p className="text-xs uppercase tracking-[0.24em] text-foreground/60">{t("customer.status")}</p>
                     <p className={`mt-2 text-lg font-semibold ${selectedMenuItem?.is_sold_out ? "text-destructive" : "text-foreground"}`}>
-                      {selectedMenuItem?.is_sold_out ? t("customer.soldOut") : "Available"}
+                      {selectedMenuItem?.is_sold_out ? t("customer.soldOut") : t("customer.available")}
                     </p>
                   </div>
                 </div>
                 {selectedMenuItem?.option_groups?.length ? (
                   <div className="rounded-3xl border border-border/70 bg-muted/50 p-4">
-                    <p className="font-semibold">Customizations</p>
-                    <p className="mt-1 text-sm text-foreground/70">This item has extra choices available when added to the cart.</p>
+                    <p className="font-semibold">{t("customer.customizations")}</p>
+                    <p className="mt-1 text-sm text-foreground/70">{t("customer.customizationHelp")}</p>
                   </div>
                 ) : null}
               </div>
             </div>
             <div className="space-y-4">
               <div className="rounded-3xl border border-border/70 bg-card/80 p-4">
-                <p className="text-sm uppercase tracking-[0.24em] text-foreground/60">Quick view</p>
+                <p className="text-sm uppercase tracking-[0.24em] text-foreground/60">{t("customer.quickView")}</p>
                 <ul className="mt-3 space-y-3 text-sm text-foreground/80">
                   {selectedMenuItem?.is_promo && <li className="font-semibold text-accent">{t("customer.new")}</li>}
                   {selectedMenuItem?.is_popular && <li className="font-semibold text-primary">{t("customer.popular")}</li>}
@@ -1845,7 +1845,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                   onClick={() => setSelectedMenuItem(null)}
                   className="rounded-full border border-border bg-background px-4 py-3 text-sm font-semibold"
                 >
-                  Close
+                  {t("customer.close")}
                 </button>
               </div>
             </div>
@@ -2025,7 +2025,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
             <div className="mx-5 mb-8">
               <div className="mb-2 flex items-end justify-between">
                 <span className="eyebrow">{t("customer.history")}</span>
-                <span className="text-[0.65rem] text-foreground/40">{history.length} past</span>
+                <span className="text-[0.65rem] text-foreground/40">{t("customer.historyPastCount", { count: history.length })}</span>
               </div>
               <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card/70">
                 {history.map((o) => (
@@ -2033,7 +2033,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                     <div className="flex items-center gap-2 min-w-0">
                       <Check className="h-3.5 w-3.5 shrink-0 text-leaf" />
                       <span className="truncate font-medium text-foreground/70">{t("customer.ticketLabel", { number: o.daily_ticket_number || o.id })}</span>
-                      <span className="truncate text-foreground/40">· {t((o.items?.length || 0) === 1 ? "customer.historyItemCount_one" : "customer.historyItemCount_other", { count: o.items?.length || 0 })}</span>
+                      <span className="truncate text-foreground/40">· {t("customer.historyItemCount", { count: o.items?.length || 0 })}</span>
                     </div>
                     <span className="shrink-0 font-1 text-foreground/55">{formatRM(Number((o as OrderWithVat).total_with_vat || (() => {
                       const st = Number(o.total_price);
@@ -2273,8 +2273,8 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-semibold text-sm">{group.name}</span>
                     {group.is_required
-                      ? <span className="text-[0.6rem] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Required</span>
-                      : <span className="text-[0.6rem] font-medium text-muted-foreground">Optional</span>
+                      ? <span className="text-[0.6rem] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{t("customer.optionRequired")}</span>
+                      : <span className="text-[0.6rem] font-medium text-muted-foreground">{t("customer.optionOptional")}</span>
                     }
                   </div>
                   <div className="space-y-2">

@@ -123,7 +123,7 @@ export const CardFilters: React.FC<CardFiltersProps> = ({
               value={startDate}
               onChange={(e) => onStartDateChange(e.target.value)}
             />
-            <span className="text-[10px] text-gray-400">to</span>
+            <span className="text-[10px] text-gray-400">{t("ui.dateRangeTo")}</span>
             <Input
               type="date"
               className="h-8 text-xs bg-white rounded-lg border-gray-200 w-[120px]"

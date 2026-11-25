@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ interface HelpModalProps {
 
 export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const { t } = useTranslation();
 
   const filteredSections = useMemo(() => {
     if (!searchQuery.trim()) return sections;
@@ -35,7 +37,7 @@ export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button id="global-help-btn" variant="ghost" size="icon" className="rounded-full bg-white/50 hover:bg-white/80 shadow-sm border border-gray-200" title="Information & Help">
+        <Button id="global-help-btn" variant="ghost" size="icon" className="rounded-full bg-white/50 hover:bg-white/80 shadow-sm border border-gray-200" title={t("ui.informationHelp")}>
           <Info className="h-6 w-6 text-blue-600" />
         </Button>
       </DialogTrigger>
@@ -44,7 +46,7 @@ export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
           <div className="flex items-center justify-between">
             <DialogTitle className="text-2xl flex items-center gap-2">
               <Info className="h-6 w-6 text-blue-600" />
-              {title} Instruction Guide
+              {t("ui.instructionGuideTitle", { title })}
             </DialogTitle>
             {version && (
               <span className="text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-md">
@@ -53,12 +55,12 @@ export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
             )}
           </div>
           <DialogDescription className="text-sm text-gray-500 mt-2">
-            Search help topics or browse the instructions below to learn how to use every manager and payment feature.
+            {t("ui.helpDescription")}
           </DialogDescription>
           <div className="relative mt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search instructions..."
+              placeholder={t("ui.searchInstructions")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 bg-white"
@@ -69,7 +71,7 @@ export const HelpModal = ({ title, sections, version }: HelpModalProps) => {
         <div className="p-6 overflow-y-auto flex-1 bg-white">
           {filteredSections.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
-              No instructions found matching "{searchQuery}"
+              {t("ui.noInstructionsFound", { query: searchQuery })}
             </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">

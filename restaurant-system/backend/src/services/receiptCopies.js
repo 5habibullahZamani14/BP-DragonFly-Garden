@@ -8,6 +8,7 @@ const DEFAULT_RECEIPT_COPY_COUNTS = Object.freeze({
 });
 
 const MAX_RECEIPT_COPIES = 5;
+const MIN_RECEIPT_COPIES = 0;
 
 const normalizeReceiptCopyCounts = (preferences) => {
   const receiptCopies = preferences?.receipt_copies;
@@ -28,8 +29,8 @@ const normalizeReceiptCopyCounts = (preferences) => {
       : typeof rawCount === "string" && rawCount.trim()
         ? Number(rawCount)
         : NaN;
-    if (!Number.isInteger(count) || count < 1 || count > MAX_RECEIPT_COPIES) {
-      throw new Error(`${type} copy count must be a whole number between 1 and ${MAX_RECEIPT_COPIES}.`);
+    if (!Number.isInteger(count) || count < MIN_RECEIPT_COPIES || count > MAX_RECEIPT_COPIES) {
+      throw new Error(`${type} copy count must be a whole number between ${MIN_RECEIPT_COPIES} and ${MAX_RECEIPT_COPIES}.`);
     }
     normalized[type] = count;
   }
@@ -38,8 +39,8 @@ const normalizeReceiptCopyCounts = (preferences) => {
 };
 
 const printCopies = async (count, printCopy) => {
-  if (!Number.isInteger(count) || count < 1 || count > MAX_RECEIPT_COPIES) {
-    throw new Error(`Receipt copy count must be a whole number between 1 and ${MAX_RECEIPT_COPIES}.`);
+  if (!Number.isInteger(count) || count < MIN_RECEIPT_COPIES || count > MAX_RECEIPT_COPIES) {
+    throw new Error(`Receipt copy count must be a whole number between ${MIN_RECEIPT_COPIES} and ${MAX_RECEIPT_COPIES}.`);
   }
   if (typeof printCopy !== "function") {
     throw new Error("A print function is required.");
@@ -54,6 +55,7 @@ const printCopies = async (count, printCopy) => {
 
 module.exports = {
   DEFAULT_RECEIPT_COPY_COUNTS,
+  MIN_RECEIPT_COPIES,
   MAX_RECEIPT_COPIES,
   normalizeReceiptCopyCounts,
   printCopies

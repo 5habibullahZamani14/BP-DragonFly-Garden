@@ -22,14 +22,25 @@ test("normalizes persisted copy counts and defaults only missing receipt types",
   });
 });
 
+test("preserves zero as an explicit no-print setting", async () => {
+  const counts = normalizeReceiptCopyCounts({
+    receipt_copies: { global: { addon_customer: 0 } }
+  });
+
+  assert.equal(counts.addon_customer, 0);
+  assert.deepEqual(await printCopies(0, async () => {
+    throw new Error("A zero-copy setting must not submit a print job.");
+  }), []);
+});
+
 test("rejects invalid persisted copy counts instead of silently printing one copy", () => {
   assert.throws(
-    () => normalizeReceiptCopyCounts({ receipt_copies: { global: { order_customer: 0 } } }),
-    /between 1 and 5/
+    () => normalizeReceiptCopyCounts({ receipt_copies: { global: { order_customer: -1 } } }),
+    /between 0 and 5/
   );
   assert.throws(
     () => normalizeReceiptCopyCounts({ receipt_copies: { global: { order_customer: 1.5 } } }),
-    /between 1 and 5/
+    /between 0 and 5/
   );
 });
 
@@ -47,6 +58,6 @@ test("does not submit any copy when the requested count is invalid", async () =>
   let submitted = 0;
   await assert.rejects(printCopies(6, async () => {
     submitted += 1;
-  }), /between 1 and 5/);
+  }), /between 0 and 5/);
   assert.equal(submitted, 0);
 });

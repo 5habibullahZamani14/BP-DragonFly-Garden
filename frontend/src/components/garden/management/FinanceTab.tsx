@@ -501,7 +501,7 @@ export const FinanceTab = () => {
 
       {/* Overview Metrics Section Filter */}
       <CardFilters
-        label="Filter for Financial Metrics"
+        label={t("m.finance.filterMetrics")}
         timeframe={metricsTimeframe}
         onTimeframeChange={setMetricsTimeframe}
         productType={metricsProductType}
@@ -576,7 +576,7 @@ export const FinanceTab = () => {
               <Activity className="h-5 w-5 text-accent" />
               <div>
                 <h3 className="font-1 text-xl font-bold text-[#142d1f]">{t("m.revenueTimeline")}</h3>
-                <p className="text-xs text-foreground/50 mt-1">Daily revenue trends over time</p>
+                <p className="text-xs text-foreground/50 mt-1">{t("m.finance.dailyRevenueTrends")}</p>
               </div>
             </div>
             <ChartHeaderExport
@@ -587,7 +587,7 @@ export const FinanceTab = () => {
           </div>
 
           <CardFilters
-            label="Filter for Revenue Timeline"
+            label={t("m.finance.filterRevenue")}
             timeframe={timelineTimeframe}
             onTimeframeChange={setTimelineTimeframe}
             productType={timelineProductType}
@@ -672,7 +672,7 @@ export const FinanceTab = () => {
           </div>
 
           <CardFilters
-            label="Filter for Top Profit Drivers"
+            label={t("m.finance.filterTopProfitDrivers")}
             timeframe={driversTimeframe}
             onTimeframeChange={setDriversTimeframe}
             productType={driversProductType}
@@ -733,8 +733,8 @@ export const FinanceTab = () => {
               <div className="flex items-center gap-2">
                 <PieChart className="w-5 h-5 text-indigo-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Customer Satisfaction Dimensions</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Average ratings from customer feedback submissions (1.0 to 5.0 scale).</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.finance.customerSatisfactionDimensions")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.finance.customerSatisfactionDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -745,7 +745,7 @@ export const FinanceTab = () => {
             </div>
 
             <CardFilters
-              label="Filter for Customer Satisfaction"
+              label={t("m.finance.filterCustomerSatisfaction")}
               timeframe={feedbackTimeframe}
               onTimeframeChange={setFeedbackTimeframe}
               productType={feedbackProductType}
@@ -797,8 +797,8 @@ export const FinanceTab = () => {
               <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-amber-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Floor Assistance Peak Days</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Total customer calls for floor staff assistance grouped by day of the week.</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.finance.floorAssistancePeakDays")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.finance.floorAssistanceDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -809,7 +809,7 @@ export const FinanceTab = () => {
             </div>
 
             <CardFilters
-              label="Filter for Floor Assistance"
+              label={t("m.finance.filterFloorAssistance")}
               timeframe={assistanceTimeframe}
               onTimeframeChange={setAssistanceTimeframe}
               productType={assistanceProductType}
@@ -855,8 +855,8 @@ export const FinanceTab = () => {
               <div className="flex items-center gap-2">
                 <Utensils className="w-5 h-5 text-emerald-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Order Type Popularity Trends</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Timeline plotting order volumes across Dine-In, Takeaway, Delivery, and Counter Orders.</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.finance.orderPopularityTrends")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.finance.orderPopularityDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -867,7 +867,7 @@ export const FinanceTab = () => {
             </div>
 
             <CardFilters
-              label="Filter for Order Type Popularity"
+              label={t("m.finance.filterOrderPopularity")}
               timeframe={popularityTimeframe}
               onTimeframeChange={setPopularityTimeframe}
               productType={popularityProductType}
@@ -890,10 +890,10 @@ export const FinanceTab = () => {
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(140, 20%, 40%)', fontSize: 11 }} />
                       <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: 'bold' }} />
                       <Legend wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', paddingTop: '10px' }} />
-                      <Line type="monotone" dataKey="dine_in" name="Dine-In" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="takeaway" name="Takeaway" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="delivery" name="Delivery / Pickup" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="counter" name="Counter Order" stroke="#ec4899" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="dine_in" name={t("pos.orderTypeDineIn")} stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="takeaway" name={t("pos.orderTypeTakeaway")} stroke="#f59e0b" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="delivery" name={`${t("pos.orderTypeDelivery")} / ${t("pos.orderTypePickup")}`} stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="counter" name={t("pos.orderTypeCounter")} stroke="#ec4899" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </div>
                 )}
@@ -910,8 +910,8 @@ export const FinanceTab = () => {
               <div className="flex items-center gap-2">
                 <PackageOpen className="w-5 h-5 text-rose-500" />
                 <div>
-                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">Raw Stock Depletion Forecast</h3>
-                  <p className="text-xs text-foreground/50 mt-1">Calculates days of stock remaining based on daily burn rate computed from custom order ingredient consumption.</p>
+                  <h3 className="font-1 text-lg font-bold text-[#142d1f]">{t("m.finance.stockDepletionForecast")}</h3>
+                  <p className="text-xs text-foreground/50 mt-1">{t("m.finance.stockDepletionDescription")}</p>
                 </div>
               </div>
               <ChartHeaderExport
@@ -922,7 +922,7 @@ export const FinanceTab = () => {
             </div>
 
             <CardFilters
-              label="Filter for Stock Depletion"
+              label={t("m.finance.filterStockDepletion")}
               timeframe={stockTimeframe}
               onTimeframeChange={setStockTimeframe}
               productType={stockProductType}
@@ -937,17 +937,17 @@ export const FinanceTab = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                    <th className="pb-3 pl-2">Ingredient</th>
-                    <th className="pb-3 text-right">Current Stock</th>
-                    <th className="pb-3 text-right">Burn Rate (Day)</th>
-                    <th className="pb-3 text-right">Estimated Days Left</th>
-                    <th className="pb-3 text-right pr-2">Action Recommendation</th>
+                    <th className="pb-3 pl-2">{t("m.finance.ingredient")}</th>
+                    <th className="pb-3 text-right">{t("m.currStock")}</th>
+                    <th className="pb-3 text-right">{t("m.finance.burnRateDay")}</th>
+                    <th className="pb-3 text-right">{t("m.finance.estimatedDaysLeft")}</th>
+                    <th className="pb-3 text-right pr-2">{t("m.finance.actionRecommendation")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm text-slate-700 font-medium">
                   {restockingForecastData.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-gray-400 italic">No inventory consumption statistics available for this criteria.</td>
+                      <td colSpan={5} className="py-8 text-center text-gray-400 italic">{t("m.finance.noInventoryConsumption")}</td>
                     </tr>
                   ) : restockingForecastData.map((item) => {
                     const daysLeft = item.days_remaining;
@@ -956,9 +956,9 @@ export const FinanceTab = () => {
                       <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-4 pl-2 font-semibold text-slate-800">{item.name}</td>
                         <td className="py-4 text-right">{item.current_stock.toFixed(1)} {item.unit}</td>
-                        <td className="py-4 text-right text-gray-500">{item.burn_rate_day.toFixed(2)} {item.unit}/day</td>
+                        <td className="py-4 text-right text-gray-500">{item.burn_rate_day.toFixed(2)} {item.unit}{t("m.finance.perDay")}</td>
                         <td className="py-4 text-right">
-                          {daysLeft === null ? "N/A (No Usage)" : `${daysLeft} days`}
+                          {daysLeft === null ? t("m.finance.noUsage") : t("m.finance.daysLeft", { count: daysLeft })}
                         </td>
                         <td className="py-4 text-right pr-2">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${badgeClass}`}>

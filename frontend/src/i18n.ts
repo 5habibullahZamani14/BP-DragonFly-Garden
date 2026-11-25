@@ -26,6 +26,7 @@ i18n.on('languageChanged', (lng) => {
   localStorage.setItem('a11y-language', lng);
   const rtlLanguages = ['ar', 'fa'];
   document.documentElement.dir = rtlLanguages.includes(lng) ? 'rtl' : 'ltr';
+  document.documentElement.lang = lng;
 });
 
 // Set initial direction
@@ -33,5 +34,6 @@ const initialLng = localStorage.getItem('a11y-language') || 'en';
 if (['ar', 'fa'].includes(initialLng)) {
   document.documentElement.dir = 'rtl';
 }
+document.documentElement.lang = initialLng;
 
 export default i18n;
