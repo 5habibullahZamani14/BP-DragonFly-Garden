@@ -8,8 +8,9 @@ test.after(async () => {
   await db.close();
 });
 
-test("receipt layout uses no extra top margin with balanced side and bottom margins", () => {
+test("receipt layout uses the same printer-supported margin on all sides", () => {
   const { marginsMm } = RECEIPT_LAYOUT;
+  assert.equal(RECEIPT_LAYOUT.columns, 40);
   assert.equal(RECEIPT_LAYOUT.fontFamily, "Roboto Condensed");
   assert.equal(RECEIPT_LAYOUT.brandFontFamily, "Cinzel");
   assert.equal(RECEIPT_LAYOUT.numericFontFamily, "Bodoni Moda");
@@ -18,14 +19,13 @@ test("receipt layout uses no extra top margin with balanced side and bottom marg
   assert.equal(RECEIPT_LAYOUT.brandFontWeight, 700);
   assert.equal(RECEIPT_LAYOUT.numericFontWeight, 400);
   assert.equal(RECEIPT_LAYOUT.numericBoldFontWeight, 700);
-  assert.equal(RECEIPT_LAYOUT.baseFontSizePt, 10);
-  assert.equal(RECEIPT_LAYOUT.brandFontSizePt, 15);
-  assert.equal(RECEIPT_LAYOUT.totalFontSizePt, 12);
+  assert.equal(RECEIPT_LAYOUT.baseFontSizePt, 11);
+  assert.equal(RECEIPT_LAYOUT.brandFontSizePt, 20);
+  assert.equal(RECEIPT_LAYOUT.totalFontSizePt, 13);
   assert.equal(RECEIPT_LAYOUT.logoSizeMm, 30);
   assert.equal(RECEIPT_LAYOUT.qrCodeSizeMm, 40);
-  assert.equal(marginsMm.top, 0);
-  for (const margin of [marginsMm.left, marginsMm.right, marginsMm.bottom]) {
-    assert.ok(Math.abs(margin - 1) < 0.02);
+  for (const margin of [marginsMm.left, marginsMm.right, marginsMm.top, marginsMm.bottom]) {
+    assert.ok(Math.abs(margin - 1.75) < 0.05);
   }
 });
 

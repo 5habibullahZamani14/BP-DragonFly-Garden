@@ -189,7 +189,6 @@ const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
 };
 
 const getReceiptContentStyle = (layout: ReceiptLayout): CSSProperties => ({
-  containerType: "inline-size",
   marginLeft: `${layout.marginsMm.left}mm`,
   marginRight: `${layout.marginsMm.right}mm`,
   marginTop: `${layout.marginsMm.top}mm`,
@@ -207,7 +206,7 @@ const getReceiptTextStyle = (
       : layout.baseFontSizePt;
   return {
     fontFamily: emphasis === "brand" ? layout.brandFontFamily : layout.fontFamily,
-    fontSize: `${(100 / (layout.columns * 0.6)) * (fontSize / layout.baseFontSizePt)}cqi`,
+    fontSize: `${fontSize}pt`,
     fontWeight: emphasis === "brand"
       ? layout.brandFontWeight
       : emphasis
@@ -2169,8 +2168,9 @@ export const SettingsTab = () => {
                                     <div key={index} className="flex justify-center">
                                       <QRCodeSVG
                                         value={line.url}
-                                        size={264}
+                                        size={512}
                                         level="M"
+                                        includeMargin
                                         title="Facebook page QR code"
                                         style={{
                                           width: `${receiptLayout.qrCodeSizeMm}mm`,

@@ -32,9 +32,6 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
   const ticketText = String(ticket);
   const spawnProcess = options.spawnProcess || spawn;
   const tempDirectory = options.tempDirectory || os.tmpdir();
-  const columns = Number.isInteger(options.columns) && options.columns > 0
-    ? options.columns
-    : RECEIPT_LAYOUT.columns;
   const tempFilePath = path.join(
     tempDirectory,
     `dragonfly-print-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
@@ -57,8 +54,8 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     }
     qrCodeBuffer = await QRCode.toBuffer(qrUrl, {
       type: "png",
-      width: 264,
-      margin: 2,
+      width: 512,
+      margin: 4,
       errorCorrectionLevel: "M",
     });
   }
@@ -91,12 +88,14 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "  $document.DocumentName = 'Dragonfly Garden receipt'",
     "  $document.PrintController = New-Object System.Drawing.Printing.StandardPrintController",
     "  $margins = New-Object System.Drawing.Printing.Margins",
-    `  $margins.Left = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}; $margins.Right = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}; $margins.Top = 0; $margins.Bottom = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
+    `  $margins.Left = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
+    `  $margins.Right = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
+    `  $margins.Top = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
+    `  $margins.Bottom = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
     "  $document.DefaultPageSettings.Margins = $margins",
     "  $document.OriginAtMargins = $false",
     "  $script:sourceLines = @($content.Trim([char[]]\"`r`n\") -split \"`r?`n\")",
     "  $script:printLineIndex = 0",
-    `  $script:columnCount = ${columns}`,
     `  $script:baseFontSize = ${RECEIPT_LAYOUT.baseFontSizePt}`,
     "  $script:bodyLightFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Roboto Condensed Light' } | Select-Object -First 1",
     "  $script:bodyBoldFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Roboto Condensed' } | Select-Object -First 1",
@@ -157,16 +156,14 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "  }",
     "  $document.add_PrintPage({",
     "    param($sender, $eventArgs)",
+    "    $eventArgs.Graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit",
     "    $printableArea = $eventArgs.PageSettings.PrintableArea",
     "    $contentX = [single]$margins.Left",
     "    $contentY = [single]$margins.Top",
     "    $contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)",
     "    $contentHeight = [single]($printableArea.Height - $margins.Top - $margins.Bottom)",
-    "    $probeFont = [System.Drawing.Font]::new($script:baseFontFamily, $script:baseFontSize, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point)",
-    "    try { $probeWidth = $eventArgs.Graphics.MeasureString(('M' * $script:columnCount), $probeFont).Width } finally { $probeFont.Dispose() }",
     "    if ($contentWidth -le 0 -or $contentHeight -le 0) { throw 'The printer driver did not report a usable printable area after margins' }",
-    "    if ($probeWidth -le 0) { throw 'Could not measure the receipt font against the printable page width' }",
-    "    $fontSize = [single]($script:baseFontSize * $contentWidth / $probeWidth)",
+    "    $fontSize = [single]$script:baseFontSize",
     "    if ($script:font.Size -ne $fontSize) { $script:font.Dispose(); $script:font = [System.Drawing.Font]::new($script:baseFontFamily, $fontSize, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Point) }",
     "    $baseLineHeight = $script:font.GetHeight($eventArgs.Graphics)",
     "    if ($baseLineHeight -le 0 -or $baseLineHeight -gt $contentHeight) { throw 'The printer page is too small for the selected font' }",
@@ -220,7 +217,7 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "          $colorMatrix.Matrix20 = 0.114; $colorMatrix.Matrix21 = 0.114; $colorMatrix.Matrix22 = 0.114",
     "          $logoAttributes.SetColorMatrix($colorMatrix)",
     "          $logoBounds = [System.Drawing.Rectangle]::new([int]($contentX + (($contentWidth - $logoWidth) / 2)), [int]$y, [int]$logoWidth, [int]$logoHeight)",
-    "          $eventArgs.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic",
+    "          $eventArgs.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor",
     "          $eventArgs.Graphics.DrawImage($logo, $logoBounds, 0, 0, $logo.Width, $logo.Height, [System.Drawing.GraphicsUnit]::Pixel, $logoAttributes)",
     "          $y += $logoHeight",
     "        } finally { $logoAttributes.Dispose(); $logo.Dispose() }",
@@ -265,6 +262,13 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "        $labelMetrics = New-ReceiptTextMetrics $label $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
     "        $amountMetrics = New-ReceiptTextMetrics $amount $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
     "        try {",
+    "          $rowWidth = [single]($labelMetrics.Width + $amountMetrics.Width)",
+    "          if ($rowWidth -gt $contentWidth) {",
+    "            $lineFontSize = [single]($lineFontSize * $contentWidth / $rowWidth)",
+    "            Dispose-ReceiptTextMetrics $labelMetrics; Dispose-ReceiptTextMetrics $amountMetrics",
+    "            $labelMetrics = New-ReceiptTextMetrics $label $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
+    "            $amountMetrics = New-ReceiptTextMetrics $amount $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
+    "          }",
     "          $drawHeight = [single][Math]::Max($labelMetrics.Height, $amountMetrics.Height)",
     "          if ($drawHeight -gt $contentHeight) { throw 'A receipt line is taller than the printable area after margins' }",
     "          if ($y + $drawHeight -gt ($contentY + $contentHeight)) { $eventArgs.HasMorePages = $true; return }",
@@ -275,6 +279,11 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "      } else {",
     "        $lineMetrics = New-ReceiptTextMetrics $line $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
     "        try {",
+    "          if ($lineMetrics.Width -gt $contentWidth) {",
+    "            $lineFontSize = [single]($lineFontSize * $contentWidth / $lineMetrics.Width)",
+    "            Dispose-ReceiptTextMetrics $lineMetrics",
+    "            $lineMetrics = New-ReceiptTextMetrics $line $fontFamily $numericFontFamily $lineFontSize $fontStyle $eventArgs.Graphics",
+    "          }",
     "          $drawHeight = $lineMetrics.Height",
     "          if ($drawHeight -gt $contentHeight) { throw 'A receipt line is taller than the printable area after margins' }",
     "          if ($y + $drawHeight -gt ($contentY + $contentHeight)) { $eventArgs.HasMorePages = $true; return }",

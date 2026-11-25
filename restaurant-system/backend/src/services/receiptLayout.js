@@ -1,14 +1,15 @@
-const RECEIPT_MARGIN_MM = 1;
+const RECEIPT_MARGIN_MM = 1.75;
 const RECEIPT_MARGIN_HUNDREDTHS_INCH = Math.round((RECEIPT_MARGIN_MM / 25.4) * 100);
+const RECEIPT_EFFECTIVE_MARGIN_MM = (RECEIPT_MARGIN_HUNDREDTHS_INCH / 100) * 25.4;
 
 const RECEIPT_LAYOUT = Object.freeze({
-  columns: 44,
+  columns: 40,
   fontFamily: "Roboto Condensed",
   brandFontFamily: "Cinzel",
   numericFontFamily: "Bodoni Moda",
-  baseFontSizePt: 10,
-  brandFontSizePt: 15,
-  totalFontSizePt: 12,
+  baseFontSizePt: 11,
+  brandFontSizePt: 20,
+  totalFontSizePt: 13,
   logoSizeMm: 30,
   qrCodeSizeMm: 40,
   fontWeight: 300,
@@ -17,10 +18,10 @@ const RECEIPT_LAYOUT = Object.freeze({
   numericFontWeight: 400,
   numericBoldFontWeight: 700,
   marginsMm: Object.freeze({
-    left: (RECEIPT_MARGIN_HUNDREDTHS_INCH / 100) * 25.4,
-    right: (RECEIPT_MARGIN_HUNDREDTHS_INCH / 100) * 25.4,
-    top: 0,
-    bottom: (RECEIPT_MARGIN_HUNDREDTHS_INCH / 100) * 25.4,
+    left: RECEIPT_EFFECTIVE_MARGIN_MM,
+    right: RECEIPT_EFFECTIVE_MARGIN_MM,
+    top: RECEIPT_EFFECTIVE_MARGIN_MM,
+    bottom: RECEIPT_EFFECTIVE_MARGIN_MM,
   }),
 });
 
