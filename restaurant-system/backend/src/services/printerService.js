@@ -13,15 +13,13 @@ const { normalizeReceiptCopyCounts } = require("./receiptCopies");
 const { RECEIPT_LAYOUT, RESTAURANT_FACEBOOK_URL } = require("./receiptLayout");
 
 const DEFAULT_PRINTER_COLUMNS = RECEIPT_LAYOUT.columns;
-const formatBrandHeader = (includeLogo = false, includeSeparator = true) => [
-  ...(includeLogo ? ["[LOGO]"] : []),
+const formatFinalReceiptHeader = () => [
+  "[LOGO]",
   "[BRAND]BP DRAGONFLY GARDEN",
   "[CENTER]Solok Pondok Upih, Taman Kristal",
-  "[CENTER]11020 Balik Pulau, Pulau Pinang",
-  ...(includeSeparator ? ["[THICK_RULE]"] : [])
+  "[CENTER]11020 Balik Pulau, Pulau Pinang"
 ].join("\n");
 const DEFAULT_TEST_TICKET = [
-  "BP DRAGONFLY GARDEN",
   "PRINTER TEST",
   "--------------------------------",
   "This is a printer test ticket.",
@@ -176,6 +174,10 @@ const stripGdiTags = (ticket, width = DEFAULT_PRINTER_COLUMNS) => {
         } else if (cleanLine.startsWith("[SQUARE]")) {
           isSquare = true;
           cleanLine = cleanLine.substring(8).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[CHECKITEM]")) {
+          cleanLine = "[ ] " + cleanLine.substring(11).replace(/^\s+/, "");
+        } else if (cleanLine.startsWith("[ITEMDETAIL]")) {
+          cleanLine = "    " + cleanLine.substring(12).replace(/^\s+/, "");
         } else {
           break;
         }
@@ -376,7 +378,7 @@ const formatDailySalesReport = (todayOrders, now = new Date(), reportDate = null
   const reportDateObj = reportDate instanceof Date ? reportDate : now;
   const todayDateStr = reportDateObj.toLocaleDateString('en-GB');
 
-  let ticket = `${formatBrandHeader()}\n`;
+  let ticket = "";
   ticket += "[BOLD][CENTER]DAILY SALES REPORT\n";
   ticket += "[THIN_RULE]\n";
   ticket += `DATE: ${todayDateStr}\n`;
@@ -455,7 +457,6 @@ const printerService = {
     else if (order.order_type === 'COUNTER') orderTypeStr = isAddOn ? "ADD-ON ORDER (COUNTER)" : "COUNTER ORDER";
     else if (isAddOn) orderTypeStr = "ADD-ON ORDER";
 
-    ticket += `${formatBrandHeader()}\n`;
     ticket += `[BOLD][CENTER]${orderTypeStr}\n`;
     if (copyTitle) ticket += `[CENTER]${copyTitle}\n`;
     ticket += "[THIN_RULE]\n";
@@ -478,11 +479,11 @@ const printerService = {
 
     ticket += "[THIN_RULE]\n";
     itemsToPrint.forEach(item => {
-      ticket += `${item.quantity} x ${item.item_name || ""}\n`;
-      if (item.notes) ticket += `  Note: ${item.notes}\n`;
+      ticket += `[CHECKITEM]${item.quantity} x ${item.item_name || ""}\n`;
+      if (item.notes) ticket += `[ITEMDETAIL]Note: ${item.notes}\n`;
       for (const option of parseItemOptions(item)) {
         const suffix = option.delta > 0 ? ` (+RM ${parseFloat(option.delta).toFixed(2)})` : '';
-        ticket += `  Option: ${option.option}${suffix}\n`;
+        ticket += `[ITEMDETAIL]Option: ${option.option}${suffix}\n`;
       }
     });
 
@@ -497,7 +498,7 @@ const printerService = {
     const timestamp = formatDateTime(new Date());
     let ticket = "";
 
-    ticket += `${formatBrandHeader(true, false)}\n`;
+    ticket += `${formatFinalReceiptHeader()}\n`;
     ticket += "[CENTER]CONTACT: 017-488 2220\n";
     ticket += "[THICK_RULE]\n";
 

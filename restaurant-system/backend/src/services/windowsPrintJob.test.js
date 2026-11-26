@@ -42,24 +42,27 @@ test("Windows print job succeeds only after the spooler command confirms submiss
     assert.ok(argumentsList[4].includes("DrawString"));
     assert.ok(argumentsList[4].includes("$document.DefaultPageSettings.Margins = $margins"));
     assert.ok(argumentsList[4].includes("$margins.Left = 7"));
-    assert.ok(argumentsList[4].includes("$margins.Right = 7"));
+    assert.ok(argumentsList[4].includes("$margins.Right = 16"));
     assert.ok(argumentsList[4].includes("$margins.Top = 7"));
     assert.ok(argumentsList[4].includes("$margins.Bottom = 7"));
     assert.ok(argumentsList[4].includes("$printableArea = $eventArgs.PageSettings.PrintableArea"));
     assert.ok(argumentsList[4].includes("$contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)"));
-    assert.ok(argumentsList[4].includes("$contentY = [single]$margins.Top"));
+    assert.ok(argumentsList[4].includes("$contentY = [single]($printableArea.Y + $margins.Top)"));
     assert.ok(argumentsList[4].includes("$contentHeight = [single]($printableArea.Height - $margins.Top - $margins.Bottom)"));
     assert.ok(argumentsList[4].includes("$content.Trim([char[]]\"`r`n\")"));
-    assert.ok(argumentsList[4].includes("$script:baseFontSize = 11"));
+    assert.ok(argumentsList[4].includes("$script:baseFontSize = 10"));
     assert.ok(argumentsList[4].includes("$script:brandFontSize = 20"));
     assert.ok(argumentsList[4].includes("$script:totalFontSize = 13"));
     assert.ok(argumentsList[4].includes("$eventArgs.Graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit"));
     assert.ok(argumentsList[4].includes("$fontSize = [single]$script:baseFontSize"));
     assert.ok(!argumentsList[4].includes("$probeWidth"));
     assert.ok(argumentsList[4].includes("System.Drawing.Text.PrivateFontCollection"));
-    assert.ok(argumentsList[4].includes("RobotoCondensed-Light.ttf"));
-    assert.ok(argumentsList[4].includes("RobotoCondensed-Bold.ttf"));
+    assert.ok(argumentsList[4].includes("Oranienbaum-Regular.ttf"));
+    assert.ok(argumentsList[4].includes("$_.Name -eq 'Oranienbaum'"));
+    assert.ok(argumentsList[4].includes("AbhayaLibre-Bold.ttf"));
+    assert.ok(argumentsList[4].includes("$_.Name -eq 'Abhaya Libre'"));
     assert.ok(argumentsList[4].includes("Cinzel-Bold.ttf"));
+    assert.ok(argumentsList[4].includes("if ($isBrand) { Draw-ReceiptTextMetrics $lineMetrics ($contentX + [single]0.5)"));
     assert.ok(argumentsList[4].includes("BodoniModa-Regular.ttf"));
     assert.ok(argumentsList[4].includes("New-ReceiptTextMetrics"));
     assert.ok(argumentsList[4].includes("Draw-ReceiptTextMetrics"));
@@ -108,7 +111,7 @@ test("Windows receipt jobs render final-receipt logo, QR, and aligned amount row
   let logoImagePrepared = false;
   try {
     await submitWindowsPrintJob(
-      "[LOGO]\n[BRAND]BP DRAGONFLY GARDEN\n[BOLD][CENTER]NEW ORDER\n[THIN_RULE]\n[ROW]TOTAL\tRM 5.00\n[TOTAL][ROW]TOTAL DUE\tRM 5.00\n[THICK_RULE]\n[QRCODE]https://www.facebook.com/BPDragonflyGarden/\n",
+        "[LOGO]\n[BRAND]BP DRAGONFLY GARDEN\n[BOLD][CENTER]NEW ORDER\n[THIN_RULE]\n[CHECKITEM]1 x Sample item\n[ITEMDETAIL]Note: no onion\n[ROW]TOTAL\tRM 5.00\n[TOTAL][ROW]TOTAL DUE\tRM 5.00\n[THICK_RULE]\n[QRCODE]https://www.facebook.com/BPDragonflyGarden/\n",
       "USB Printer",
       "receipt.txt",
       {
@@ -134,24 +137,32 @@ test("Windows receipt jobs render final-receipt logo, QR, and aligned amount row
     assert.ok(script.includes("$line.StartsWith('[ROW]')"));
     assert.ok(script.includes("$line.StartsWith('[TOTAL]')"));
     assert.ok(script.includes("$line.StartsWith('[QRCODE]')"));
-    assert.ok(script.includes("$line.Trim() -ieq 'BP DRAGONFLY GARDEN'"));
+    assert.ok(script.includes("$line.StartsWith('[CHECKITEM]')"));
+    assert.ok(script.includes("$line.StartsWith('[ITEMDETAIL]')"));
+    assert.ok(!script.includes("$line.Trim() -ieq 'BP DRAGONFLY GARDEN'"));
     assert.ok(script.includes("System.Drawing.StringAlignment]::Center"));
     assert.ok(script.includes("System.Drawing.StringAlignment]::Far"));
     assert.ok(script.includes("System.Drawing.FontStyle]::Bold"));
+    assert.ok(script.includes("if ($isBrand) { Draw-ReceiptTextMetrics $lineMetrics ($contentX + [single]0.5)"));
     assert.ok(script.includes("$eventArgs.Graphics.DrawImage($logo, $logoBounds)"));
     assert.ok(script.includes("$logoBounds = [System.Drawing.RectangleF]::new"));
     assert.ok(!script.includes("$logoAttributes"));
     assert.ok(script.includes("InterpolationMode]::NearestNeighbor"));
     assert.ok(script.includes("$eventArgs.Graphics.DrawLine($pen"));
+    assert.ok(script.includes("[single]$printableArea.X, ($y + ($baseLineHeight / 2)), [single]($printableArea.X + $printableArea.Width)"));
+    assert.ok(script.includes("$contentX = [single]($printableArea.X + $margins.Left)"));
+    assert.ok(script.includes("Draw-ReceiptCheckBox $eventArgs.Graphics"));
+    assert.ok(script.includes("$eventArgs.Graphics.MeasureString('H', $checkBoxFont).Height"));
+    assert.ok(script.includes("[single]($printableArea.X + $printableArea.Width)"));
     assert.ok(script.includes("$logoPath = '"));
     assert.ok(script.includes("$line.IndexOf([char]9)"));
     assert.ok(script.includes("$eventArgs.Graphics.DrawImage($qrImage, $qrBounds)"));
     assert.ok(script.includes("InterpolationMode]::NearestNeighbor"));
     assert.ok(script.includes("$rowWidth = [single]($labelMetrics.Width + $amountMetrics.Width)"));
-    assert.ok(script.includes("if ($lineMetrics.Width -gt $contentWidth)"));
+    assert.ok(script.includes("if ($lineMetrics.Width -gt $lineContentWidth)"));
     assert.ok(!script.includes("InterpolationMode]::HighQualityBicubic"));
-    assert.ok(script.includes("$contentX = [single]$margins.Left"));
-    assert.ok(script.includes("$contentY = [single]$margins.Top"));
+    assert.ok(script.includes("$contentX = [single]($printableArea.X + $margins.Left)"));
+    assert.ok(script.includes("$contentY = [single]($printableArea.Y + $margins.Top)"));
     assert.ok(qrImagePrepared);
     assert.ok(logoImagePrepared);
     assert.deepEqual(fs.readdirSync(tempDirectory), []);
