@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('manager', 'customer', 'payment', 'home', 'none')]
+    [ValidateSet('manager', 'payment', 'home', 'none')]
     [string]$Role = 'manager'
 )
 
@@ -154,7 +154,6 @@ function Get-AppUrl {
 
     $page = switch ($Role) {
         'manager' { '/?view=manager' }
-        'customer' { '/?qr=table-1' }
         'payment' { '/?view=payment' }
         'home' { '/' }
     }

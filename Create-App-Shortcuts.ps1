@@ -39,15 +39,10 @@ $applications = @(
         Icon = 'ICONS\ICO\EMPLOYEE.ico'
         Description = 'Open the employee payment-counter application'
     }
-    [pscustomobject]@{
-        Name = 'Customer'
-        Role = 'customer'
-        Icon = 'ICONS\ICO\CUSTOMER.ico'
-        Description = 'Open the customer ordering application'
-    }
 )
 
 $previousShortcutNames = @(
+    'Customer.lnk'
     'DragonFly Garden - Manager.lnk'
     'DragonFly Garden - Employee.lnk'
     'DragonFly Garden - Customer.lnk'

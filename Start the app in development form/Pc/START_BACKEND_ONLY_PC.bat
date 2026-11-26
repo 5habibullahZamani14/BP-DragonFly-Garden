@@ -32,10 +32,8 @@ echo 1. Go to the "DragonFly Backend" window that opened
 echo 2. Press Ctrl+C to stop the backend server
 echo 3. The backend window will close automatically
 echo.
-echo If the backend does not respond to Ctrl+C:
-echo 1. Press Ctrl+Shift+Esc to open Task Manager
-echo 2. Find and end the "node.exe" process
-echo 3. Or run: taskkill /F /IM node.exe
+echo If the backend does not respond, stop its own DragonFly terminal process.
+echo Do not terminate unrelated Node.js processes.
 echo.
 echo DO NOT simply close this window or the backend window directly!
 echo Doing so may leave processes running in the background.
@@ -56,12 +54,10 @@ if errorlevel 1 (
     echo.
     echo Options:
     echo [1] Keep monitoring (check again in 10 seconds)
-    echo [2] Force kill backend process
-    echo [3] Close this window anyway (NOT RECOMMENDED)
+    echo [2] Close this monitor (the backend will continue running)
     echo.
-    choice /C 123 /N /M "Select option (1-3): "
-    if errorlevel 3 goto :FORCE_CLOSE
-    if errorlevel 2 goto :KILL_BACKEND
+    choice /C 12 /N /M "Select option (1-2): "
+    if errorlevel 2 goto :CLOSE_MONITOR
     if errorlevel 1 goto :WAIT_AND_CHECK
 )
 
@@ -69,24 +65,9 @@ if errorlevel 1 (
 timeout /t 10 /nobreak >nul
 goto :MONITOR_LOOP
 
-:KILL_BACKEND
+:CLOSE_MONITOR
 echo.
-echo Attempting to kill backend process...
-taskkill /F /IM node.exe >nul 2>&1
-if errorlevel 1 (
-    echo No node processes found or already killed.
-) else (
-    echo Backend process killed successfully.
-)
-timeout /t 2 /nobreak >nul
-goto :MONITOR_LOOP
-
-:FORCE_CLOSE
-echo.
-echo WARNING: You are closing this window while backend may still be running!
-echo This may leave processes running in the background.
-echo.
-timeout /t 3 /nobreak >nul
+echo Monitor closed. The backend remains in its own terminal window.
 exit
 
 :SAFE_TO_CLOSE

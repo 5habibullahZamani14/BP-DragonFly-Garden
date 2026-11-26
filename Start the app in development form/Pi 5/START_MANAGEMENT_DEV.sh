@@ -40,7 +40,7 @@ fi
 echo "Using server IP: $SERVER_IP"
 echo ""
 echo "Opening browser to Management View..."
-xdg-open "http://$SERVER_IP:3000/?qr=manager-1"
+xdg-open "http://$SERVER_IP:3000/?view=manager"
 
 echo ""
 echo "========================================"
@@ -52,10 +52,8 @@ echo "1. Go to the backend terminal window and press Ctrl+C"
 echo "2. Go to the frontend terminal window and press Ctrl+C"
 echo "3. Both terminal windows will close automatically"
 echo ""
-echo "If servers do not respond to Ctrl+C:"
-echo "1. Press Ctrl+Alt+Delete to open System Monitor"
-echo "2. Find and end 'node' processes"
-echo "3. Or run: pkill -9 node"
+echo "If a server does not respond, stop its own terminal process."
+echo "Do not terminate unrelated Node.js processes."
 echo ""
 echo "DO NOT simply close the terminal windows directly!"
 echo "Doing so may leave processes running in the background."
@@ -103,35 +101,18 @@ while true; do
     echo ""
     echo "Options:"
     echo "[1] Keep monitoring (check again in 10 seconds)"
-    echo "[2] Force kill all node processes"
-    echo "[3] Close this window anyway (NOT RECOMMENDED)"
+    echo "[2] Close this monitor (servers will continue running)"
     echo ""
-    read -p "Select option (1-3): " choice
+    read -p "Select option (1-2): " choice
     case $choice in
         1)
             sleep 10
             ;;
         2)
-            echo ""
-            echo "Attempting to kill all node processes..."
-            pkill -9 node
-            if [ $? -eq 0 ]; then
-                echo "All node processes killed successfully."
-            else
-                echo "No node processes found or already killed."
-            fi
-            sleep 2
-            ;;
-        3)
-            echo ""
-            echo "WARNING: You are closing this window while servers may still be running!"
-            echo "This may leave processes running in the background."
-            echo ""
-            sleep 3
             exit 0
             ;;
         *)
-            echo "Invalid option. Please select 1, 2, or 3."
+            echo "Invalid option. Please select 1 or 2."
             ;;
     esac
 done

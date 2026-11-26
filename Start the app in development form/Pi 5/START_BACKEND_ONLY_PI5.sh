@@ -28,10 +28,8 @@ echo "1. Go to the terminal window that opened"
 echo "2. Press Ctrl+C to stop the backend server"
 echo "3. The terminal window will close automatically"
 echo ""
-echo "If the backend does not respond to Ctrl+C:"
-echo "1. Press Ctrl+Alt+Delete to open System Monitor"
-echo "2. Find and end the 'node' process"
-echo "3. Or run: pkill -9 node"
+echo "If the backend does not respond, stop its own DragonFly terminal process."
+echo "Do not terminate unrelated Node.js processes."
 echo ""
 echo "DO NOT simply close the terminal window directly!"
 echo "Doing so may leave processes running in the background."
@@ -48,35 +46,18 @@ while true; do
         echo ""
         echo "Options:"
         echo "[1] Keep monitoring (check again in 10 seconds)"
-        echo "[2] Force kill all node processes"
-        echo "[3] Close this window anyway (NOT RECOMMENDED)"
+        echo "[2] Close this monitor (the backend will continue running)"
         echo ""
-        read -p "Select option (1-3): " choice
+        read -p "Select option (1-2): " choice
         case $choice in
             1)
                 sleep 10
                 ;;
             2)
-                echo ""
-                echo "Attempting to kill all node processes..."
-                pkill -9 node
-                if [ $? -eq 0 ]; then
-                    echo "All node processes killed successfully."
-                else
-                    echo "No node processes found or already killed."
-                fi
-                sleep 2
-                ;;
-            3)
-                echo ""
-                echo "WARNING: You are closing this window while backend may still be running!"
-                echo "This may leave processes running in the background."
-                echo ""
-                sleep 3
                 exit 0
                 ;;
             *)
-                echo "Invalid option. Please select 1, 2, or 3."
+                echo "Invalid option. Please select 1 or 2."
                 ;;
         esac
     else

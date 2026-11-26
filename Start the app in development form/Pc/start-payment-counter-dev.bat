@@ -50,7 +50,7 @@ if "%SERVER_IP%"=="" (
 echo Using server IP: %SERVER_IP%
 echo.
 echo Opening browser to Payment Counter View...
-start http://%SERVER_IP%:3000/?qr=payment-counter-1
+start http://%SERVER_IP%:3000/?view=payment
 
 echo.
 echo ========================================
@@ -62,10 +62,8 @@ echo 1. Go to the "DragonFly Backend" window and press Ctrl+C
 echo 2. Go to the "DragonFly Frontend" window and press Ctrl+C
 echo 3. Both windows will close automatically
 echo.
-echo If servers do not respond to Ctrl+C:
-echo 1. Press Ctrl+Shift+Esc to open Task Manager
-echo 2. Find and end "node.exe" processes
-echo 3. Or run: taskkill /F /IM node.exe
+echo If a server does not respond, stop its own DragonFly terminal process.
+echo Do not terminate unrelated Node.js processes.
 echo.
 echo DO NOT simply close this window or the server windows directly!
 echo Doing so may leave processes running in the background.
@@ -105,36 +103,19 @@ if !FRONTEND_RUNNING! equ 0 (
 echo.
 echo Options:
 echo [1] Keep monitoring (check again in 10 seconds)
-echo [2] Force kill all node processes
-echo [3] Close this window anyway (NOT RECOMMENDED)
+echo [2] Close this monitor (servers will continue running)
 echo.
-choice /C 123 /N /M "Select option (1-3): "
-if errorlevel 3 goto :FORCE_CLOSE
-if errorlevel 2 goto :KILL_ALL
+choice /C 12 /N /M "Select option (1-2): "
+if errorlevel 2 goto :CLOSE_MONITOR
 if errorlevel 1 goto :WAIT_AND_CHECK
 
 :WAIT_AND_CHECK
 timeout /t 10 /nobreak >nul
 goto :MONITOR_LOOP
 
-:KILL_ALL
+:CLOSE_MONITOR
 echo.
-echo Attempting to kill all node processes...
-taskkill /F /IM node.exe >nul 2>&1
-if errorlevel 1 (
-    echo No node processes found or already killed.
-) else (
-    echo All node processes killed successfully.
-)
-timeout /t 2 /nobreak >nul
-goto :MONITOR_LOOP
-
-:FORCE_CLOSE
-echo.
-echo WARNING: You are closing this window while servers may still be running!
-echo This may leave processes running in the background.
-echo.
-timeout /t 3 /nobreak >nul
+echo Monitor closed. Running servers remain in their own terminal windows.
 exit
 
 :SAFE_TO_CLOSE

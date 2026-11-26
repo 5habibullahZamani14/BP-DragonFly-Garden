@@ -87,12 +87,13 @@ cd frontend
 npm ci
 npm run dev
 ```
-The frontend dev server starts on port 5173. It proxies API requests to the backend at
+The frontend dev server starts on port 3000. It proxies API requests to the backend at
 port 5000, so both must be running at the same time during development.
 
-Open http://localhost:5173 in your browser. Customer ordering is triggered by a table QR code
-like `?qr=table-1`. Staff and manager access is opened through the dedicated login screens and
-requires a valid username/password login plus the server-issued JWT session.
+Open http://localhost:3000 in your browser. Customers enter by scanning a table's QR code,
+which contains a unique credential; placeholder links such as `?qr=table-1` are rejected.
+Staff and manager access uses dedicated login screens and requires valid credentials plus
+a server-issued session.
 
 ---
 
@@ -142,8 +143,8 @@ non-loopback backend.
 ## Deployment on a Windows PC or laptop
 
 Install Node.js 20 or newer and create a machine-specific backend `.env` file. Use
-the Manager, Employee, or Customer desktop shortcut for a no-console launch; the
-manager batch launcher is also available at
+the Manager or Employee desktop shortcut for a no-console launch; customers enter by
+scanning their table's QR code. The manager batch launcher is also available at
 [`START_DRAGONFLY_GARDEN.bat`](./Start%20the%20app%20in%20deployment%20form/Pc/START_DRAGONFLY_GARDEN.bat).
 The desktop shortcuts start the backend without a visible command window and open
 the selected role in a browser. Each launcher checks the readiness endpoint and
@@ -165,7 +166,7 @@ page open during an outage; do not refresh it or repeat an order or payment
 until the connection returns and you have confirmed whether the first attempt
 succeeded.
 
-To create Manager, Employee, and Customer desktop icons, double-click
+To create Manager and Employee desktop icons, double-click
 [`CREATE_APP_SHORTCUTS.bat`](./CREATE_APP_SHORTCUTS.bat) in the repository root.
 It runs `Create-App-Shortcuts.ps1`, uses the icons in `ICONS\ICO`, and creates
 shortcuts that launch the hidden PowerShell startup script directly. After cloning

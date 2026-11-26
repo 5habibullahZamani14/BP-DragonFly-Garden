@@ -74,3 +74,26 @@ describe("Index customer QR routing", () => {
     expect(screen.getByTestId("customer-view")).toHaveAttribute("data-qr-code", qrCode);
   });
 });
+
+describe("Index rejects retired shortcut URLs", () => {
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState({}, "", "/");
+    vi.clearAllMocks();
+  });
+
+  it.each(["?qr=table-1", "?qr=manager-1", "?qr=payment-counter-1"])(
+    "does not enter a role from the obsolete URL %s",
+    (query) => {
+      window.history.replaceState({}, "", `/${query}`);
+      vi.mocked(useServerConnectionNotice).mockReturnValue(null);
+
+      render(<Index />);
+
+      expect(screen.getByTestId("landing-view")).toBeInTheDocument();
+      expect(screen.queryByTestId("customer-view")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("payment-view")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("manager-view")).not.toBeInTheDocument();
+    },
+  );
+});
