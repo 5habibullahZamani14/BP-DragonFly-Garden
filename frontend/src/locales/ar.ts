@@ -226,8 +226,8 @@ export default {
     "payment.appendItem": "إضافة عنصر إلى الطلب قبل الدفع النهائي.",
     "payment.menuItem": "عنصر القائمة",
     "payment.quantity": "الكمية",
-    "payment.addToOrderBtn": "إضافة إلى الطلب"
-,
+    "payment.addToOrderBtn": "إضافة إلى الطلب",
+
     "payment.enterShiftCash": "إدخال نقدية المناوبة",
     "payment.finalCash": "النقد النهائي في الدرج لـ",
     "payment.cashAmount": "المبلغ النقدي (RM)",
@@ -257,9 +257,9 @@ export default {
     "customer.failedSendOrder": "مشكلة في الشبكة — فشل إرسال الطلب.",
     "customer.staffNotified": "تم إخطار الموظفين. سنكون معك قريباً.",
     "customer.failedNotifyStaff": "فشل إخطار الموظفين. يرجى المحاولة مرة أخرى.",
-    "customer.addToOrder": "أضف إلى الطلب"
+    "customer.addToOrder": "أضف إلى الطلب",
+    "customer.addedToCart": "أُضيف إلى السلة · {{count}}",
 
-,
     "m.empDir": "دليل الموظفين والتحليلات",
     "m.addEmp": "إضافة موظف",
     "m.fullName": "الاسم الكامل",

@@ -43,7 +43,7 @@ test("Windows print job succeeds only after the spooler command confirms submiss
     assert.ok(argumentsList[4].includes("$document.DefaultPageSettings.Margins = $margins"));
     assert.ok(argumentsList[4].includes("$margins.Left = 0"));
     assert.ok(argumentsList[4].includes("$margins.Right = 24"));
-    assert.ok(argumentsList[4].includes("$margins.Top = 7"));
+    assert.ok(argumentsList[4].includes("$margins.Top = 0"));
     assert.ok(argumentsList[4].includes("$margins.Bottom = 7"));
     assert.ok(argumentsList[4].includes("$printableArea = $eventArgs.PageSettings.PrintableArea"));
     assert.ok(argumentsList[4].includes("$contentWidth = [single]($printableArea.Width - $margins.Left - $margins.Right)"));
@@ -151,12 +151,12 @@ test("Windows receipt jobs render final-receipt logo, QR, and aligned amount row
     assert.ok(script.includes("PixelOffsetMode]::HighQuality"));
     assert.ok(script.includes("CompositingQuality]::HighQuality"));
     assert.ok(script.includes("InterpolationMode]::NearestNeighbor"));
-    assert.ok(script.includes("$eventArgs.Graphics.DrawLine($pen"));
-    assert.ok(script.includes("[single]$printableArea.X, ($y + ($baseLineHeight / 2)), [single]($printableArea.X + $printableArea.Width)"));
+    assert.ok(script.includes("$eventArgs.Graphics.DrawLine($pen, [single]$contentX"));
+    assert.ok(script.includes("[single]($contentX + $contentWidth), ($y + ($baseLineHeight / 2))"));
+    assert.ok(!script.includes("$eventArgs.Graphics.DrawLine($pen, [single]$printableArea.X"));
     assert.ok(script.includes("$contentX = [single]($printableArea.X + $margins.Left)"));
     assert.ok(script.includes("Draw-ReceiptCheckBox $eventArgs.Graphics"));
     assert.ok(script.includes("$eventArgs.Graphics.MeasureString('H', $checkBoxFont).Height"));
-    assert.ok(script.includes("[single]($printableArea.X + $printableArea.Width)"));
     assert.ok(script.includes("$logoPath = '"));
     assert.ok(script.includes("$line.IndexOf([char]9)"));
     assert.ok(script.includes("$eventArgs.Graphics.DrawImage($qrImage, $qrBounds)"));

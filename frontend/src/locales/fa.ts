@@ -226,8 +226,8 @@ export default {
     "payment.appendItem": "پیش از پرداخت نهایی، یک مورد به سفارش اضافه کنید.",
     "payment.menuItem": "مورد منو",
     "payment.quantity": "تعداد",
-    "payment.addToOrderBtn": "افزودن به سفارش"
-,
+    "payment.addToOrderBtn": "افزودن به سفارش",
+
     "payment.enterShiftCash": "وارد کردن پول نقد شیفت",
     "payment.finalCash": "پول نقد نهایی در کشو برای",
     "payment.cashAmount": "مبلغ نقدی (RM)",
@@ -257,9 +257,9 @@ export default {
     "customer.failedSendOrder": "مشکل شبکه — ارسال سفارش انجام نشد.",
     "customer.staffNotified": "به پرسنل اطلاع داده شد. به زودی به شما مراجعه می‌کنیم.",
     "customer.failedNotifyStaff": "اطلاع به پرسنل انجام نشد. لطفاً دوباره امتحان کنید.",
-    "customer.addToOrder": "افزودن به سفارش"
+    "customer.addToOrder": "افزودن به سفارش",
+    "customer.addedToCart": "به سبد اضافه شد · {{count}}",
 
-,
     "m.empDir": "لیست کارمندان و تحلیل‌ها",
     "m.addEmp": "افزودن کارمند",
     "m.fullName": "نام کامل",

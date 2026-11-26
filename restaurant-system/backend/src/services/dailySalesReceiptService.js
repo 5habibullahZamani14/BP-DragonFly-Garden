@@ -131,7 +131,7 @@ const upsertStatus = async (salesDate, status, fields = {}) => {
   );
 };
 
-const printDailySalesReportForDate = async (salesDate, ignoredBy = null) => {
+const printDailySalesReportForDate = async (salesDate, { allowReprint = false } = {}) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(salesDate))) {
     throw new Error("Invalid sales date.");
   }
@@ -143,7 +143,7 @@ const printDailySalesReportForDate = async (salesDate, ignoredBy = null) => {
   }
 
   const existing = await get("SELECT status FROM daily_sales_receipt_logs WHERE sales_date = ?", [salesDate]);
-  if (existing?.status === "printed") {
+  if (existing?.status === "printed" && allowReprint !== true) {
     return { success: false, alreadyPrinted: true, message: `The daily sales receipt for ${salesDate} has already been printed.` };
   }
   if (existing?.status === "ignored") {

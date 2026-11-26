@@ -336,6 +336,7 @@ const orderRoutes = (broadcast) => {
         }
         return printResult;
       });
+
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("Receipt print failed after payment completed:", message);
@@ -357,6 +358,13 @@ const orderRoutes = (broadcast) => {
         paymentCompleted: true,
         message: `Payment completed, but receipt printing failed: ${message}`
       });
+    }
+
+    if (finalReceiptCopies > 0 && order.payment_status === "paid") {
+      const customerArchivedOrder = await customerArchiveOrder(order.id);
+      if (customerArchivedOrder) {
+        broadcast({ type: "ORDER_STATUS_UPDATE", payload: customerArchivedOrder });
+      }
     }
     
     res.json(order);

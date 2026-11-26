@@ -242,6 +242,16 @@ const getReceiptTextStyle = (
   };
 };
 
+export const getReceiptRuleStyle = (layout: ReceiptLayout): CSSProperties => ({
+  width: `calc(100% - ${layout.marginsMm.left + layout.marginsMm.right}mm)`,
+  boxSizing: "border-box",
+  marginLeft: `${layout.marginsMm.left}mm`,
+  marginRight: `${layout.marginsMm.right}mm`,
+  height: "1.2em",
+  display: "flex",
+  alignItems: "center",
+});
+
 const renderReceiptText = (
   text: string,
   layout: ReceiptLayout,
@@ -324,13 +334,7 @@ const renderReceiptPreview = (ticket: string, layout: ReceiptLayout): ReactNode 
           <div
             key={index}
             aria-hidden="true"
-            style={{
-              marginLeft: `${-layout.marginsMm.left}mm`,
-              marginRight: `${-layout.marginsMm.right}mm`,
-              height: "1.2em",
-              display: "flex",
-              alignItems: "center",
-            }}
+            style={getReceiptRuleStyle(layout)}
           >
             <span
               style={{

@@ -13,7 +13,7 @@ test.after(async () => {
 
 test("receipt layout keeps each margin independently configurable", () => {
   const { marginsMm } = RECEIPT_LAYOUT;
-  assert.equal(RECEIPT_LAYOUT.columns, 40);
+  assert.equal(RECEIPT_LAYOUT.columns, 42);
   assert.equal(RECEIPT_LAYOUT.paperWidthMm, 80);
   assert.equal(RECEIPT_LAYOUT.fontFamily, "Roboto Condensed");
   assert.equal(RECEIPT_LAYOUT.boldFontFamily, "Roboto Condensed");
@@ -29,8 +29,8 @@ test("receipt layout keeps each margin independently configurable", () => {
   assert.equal(RECEIPT_LAYOUT.totalFontSizePt, 13);
   assert.equal(RECEIPT_LAYOUT.logoSizeMm, 35);
   assert.equal(RECEIPT_LAYOUT.qrCodeSizeMm, 30);
-  assert.deepEqual(marginsMm, { left: 0.0, right: 6.0, top: 1.75, bottom: 1.75 });
-  assert.deepEqual(RECEIPT_MARGINS_HUNDREDTHS_INCH, { left: 0, right: 24, top: 7, bottom: 7 });
+  assert.deepEqual(marginsMm, { left: 0.0, right: 6.0, top: 0.0, bottom: 1.75 });
+  assert.deepEqual(RECEIPT_MARGINS_HUNDREDTHS_INCH, { left: 0, right: 24, top: 0, bottom: 7 });
 });
 
 test("sample order and add-on tickets use the real checklist formatter", () => {

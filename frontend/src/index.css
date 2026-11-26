@@ -89,35 +89,35 @@
     --body-weight: 400;
 
     /* Surfaces — refined warm cream paper, slightly creamier & more luminous */
-    --background: 42 55% 95%;
-    --background-deep: 38 42% 89%;
-    --foreground: 158 38% 9%;            /* deeper forest ink, more legible */
+    --background: 42 32% 94%;
+    --background-deep: 38 28% 87%;
+    --foreground: 155 34% 11%;
 
-    --card: 44 65% 97.5%;                /* near-white cream with warmth */
-    --card-foreground: 158 38% 9%;
+    --card: 43 42% 97%;
+    --card-foreground: 155 34% 11%;
 
-    --popover: 44 65% 97.5%;
-    --popover-foreground: 158 38% 9%;
+    --popover: 43 42% 97%;
+    --popover-foreground: 155 34% 11%;
 
     /* Brand — emerald gains a touch more depth & saturation */
-    --primary: 160 60% 14%;
-    --primary-foreground: 42 60% 96%;
-    --primary-glow: 152 50% 30%;
+    --primary: 156 46% 15%;
+    --primary-foreground: 43 45% 96%;
+    --primary-glow: 151 35% 27%;
 
-    --secondary: 40 65% 90%;             /* warmer parchment */
-    --secondary-foreground: 160 60% 14%;
+    --secondary: 39 38% 89%;
+    --secondary-foreground: 156 46% 15%;
 
-    --muted: 40 35% 87%;
-    --muted-foreground: 158 22% 28%;
+    --muted: 38 26% 87%;
+    --muted-foreground: 155 18% 31%;
 
     /* Accent — refined warm gold, slightly more saturated, antique-feel */
-    --accent: 36 85% 56%;
-    --accent-foreground: 160 60% 10%;
-    --accent-soft: 40 90% 80%;
-    --accent-deep: 28 80% 46%;           /* burnt honey */
+    --accent: 31 68% 48%;
+    --accent-foreground: 154 42% 10%;
+    --accent-soft: 36 57% 78%;
+    --accent-deep: 25 61% 40%;
 
-    --berry: 348 68% 46%;
-    --berry-foreground: 42 60% 96%;
+    --berry: 4 52% 43%;
+    --berry-foreground: 43 45% 96%;
 
     --leaf: 96 42% 36%;
 
@@ -125,31 +125,31 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Hairline borders with a hint of warmth */
-    --border: 38 30% 80%;
-    --input: 38 30% 80%;
-    --ring: 36 85% 56%;                  /* gold focus ring */
+    --border: 37 25% 79%;
+    --input: 37 25% 79%;
+    --ring: 31 68% 48%;
 
     --radius: 1.25rem;
 
     /* Gradients — richer, more cinematic */
-    --gradient-canopy: radial-gradient(120% 80% at 50% 0%, hsl(152 45% 22% / 0.18) 0%, transparent 60%),
-                       linear-gradient(180deg, hsl(42 55% 95%) 0%, hsl(38 42% 89%) 100%);
-    --gradient-emerald: linear-gradient(135deg, hsl(160 60% 12%) 0%, hsl(154 50% 22%) 50%, hsl(96 40% 28%) 100%);
-    --gradient-gold: linear-gradient(135deg, hsl(40 95% 65%) 0%, hsl(32 90% 56%) 55%, hsl(24 85% 48%) 100%);
-    --gradient-spotlight: linear-gradient(135deg, hsl(160 60% 12%) 0%, hsl(154 50% 20%) 55%, hsl(36 85% 50%) 140%);
-    --gradient-hero: linear-gradient(120deg, hsl(160 62% 12%) 0%, hsl(154 52% 20%) 42%, hsl(36 82% 48%) 110%);
-    --gradient-berry: linear-gradient(135deg, hsl(348 72% 48%) 0%, hsl(24 82% 54%) 100%);
-    --gradient-soft: linear-gradient(135deg, hsl(44 80% 94%) 0%, hsl(38 70% 86%) 100%);
-    --gradient-cream: linear-gradient(180deg, hsl(44 70% 97.5%) 0%, hsl(40 55% 93%) 100%);
-    --gradient-gilded-edge: linear-gradient(180deg, hsl(40 90% 80% / 0.7) 0%, hsl(40 60% 70% / 0) 30%);
+    --gradient-canopy: radial-gradient(120% 80% at 50% 0%, hsl(152 35% 22% / 0.1) 0%, transparent 60%),
+                       linear-gradient(180deg, hsl(42 32% 94%) 0%, hsl(38 28% 87%) 100%);
+    --gradient-emerald: linear-gradient(135deg, hsl(156 46% 12%) 0%, hsl(151 36% 21%) 58%, hsl(132 27% 28%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(37 60% 68%) 0%, hsl(31 68% 52%) 60%, hsl(25 61% 42%) 100%);
+    --gradient-spotlight: linear-gradient(135deg, hsl(156 46% 12%) 0%, hsl(151 35% 20%) 55%, hsl(31 62% 48%) 140%);
+    --gradient-hero: linear-gradient(120deg, hsl(156 46% 12%) 0%, hsl(151 35% 20%) 48%, hsl(31 62% 46%) 140%);
+    --gradient-berry: linear-gradient(135deg, hsl(4 52% 43%) 0%, hsl(17 57% 48%) 100%);
+    --gradient-soft: linear-gradient(135deg, hsl(43 50% 94%) 0%, hsl(38 34% 87%) 100%);
+    --gradient-cream: linear-gradient(180deg, hsl(43 42% 97%) 0%, hsl(40 34% 92%) 100%);
+    --gradient-gilded-edge: linear-gradient(180deg, hsl(37 58% 78% / 0.52) 0%, hsl(31 42% 68% / 0) 30%);
 
     /* Shadows — softer, layered, more refined */
-    --shadow-soft: 0 2px 8px -3px hsl(160 40% 10% / 0.12), 0 8px 24px -12px hsl(160 40% 10% / 0.18);
-    --shadow-card: 0 1px 0 0 hsl(40 80% 96% / 0.9) inset, 0 14px 36px -22px hsl(160 40% 10% / 0.32), 0 3px 10px -5px hsl(160 40% 10% / 0.10);
-    --shadow-deep: 0 30px 60px -28px hsl(160 60% 8% / 0.55), 0 8px 20px -12px hsl(160 60% 8% / 0.30);
-    --shadow-gold: 0 1px 0 0 hsl(40 100% 85% / 0.6) inset, 0 12px 28px -10px hsl(32 90% 45% / 0.50), 0 4px 10px -4px hsl(32 90% 40% / 0.25);
-    --shadow-pop: 0 24px 48px -16px hsl(160 60% 8% / 0.32), 0 4px 12px -4px hsl(160 60% 8% / 0.18);
-    --shadow-inset-light: 0 1px 0 0 hsl(40 90% 96% / 0.9) inset;
+    --shadow-soft: 0 2px 8px -3px hsl(156 34% 10% / 0.1), 0 8px 24px -12px hsl(156 34% 10% / 0.16);
+    --shadow-card: 0 1px 0 0 hsl(43 55% 98% / 0.9) inset, 0 14px 36px -22px hsl(156 34% 10% / 0.28), 0 3px 10px -5px hsl(156 34% 10% / 0.09);
+    --shadow-deep: 0 30px 60px -28px hsl(156 40% 8% / 0.48), 0 8px 20px -12px hsl(156 40% 8% / 0.26);
+    --shadow-gold: 0 1px 0 0 hsl(43 70% 88% / 0.6) inset, 0 12px 28px -10px hsl(31 68% 42% / 0.38), 0 4px 10px -4px hsl(31 68% 38% / 0.2);
+    --shadow-pop: 0 24px 48px -16px hsl(156 40% 8% / 0.28), 0 4px 12px -4px hsl(156 40% 8% / 0.16);
+    --shadow-inset-light: 0 1px 0 0 hsl(43 55% 98% / 0.9) inset;
 
     /* Safe areas (mobile) */
     --safe-top: env(safe-area-inset-top, 0px);
@@ -183,19 +183,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    /* Creamy-gold ocean — richer pools of warm honey light drifting on
-       a luminous cream canvas. Deeper layers, slower motion, more luxe. */
     background:
-      radial-gradient(58% 42% at 18% 28%, hsl(40 88% 78% / 0.62), transparent 65%),
-      radial-gradient(52% 38% at 82% 18%, hsl(34 90% 72% / 0.55), transparent 65%),
-      radial-gradient(72% 52% at 50% 88%, hsl(38 78% 74% / 0.58), transparent 68%),
-      radial-gradient(42% 32% at 92% 72%, hsl(30 70% 78% / 0.48), transparent 65%),
-      radial-gradient(38% 28% at 8% 78%, hsl(44 75% 80% / 0.42), transparent 65%),
-      linear-gradient(180deg, hsl(44 65% 95%) 0%, hsl(40 50% 90%) 100%);
-    background-size: 240% 240%, 220% 220%, 260% 260%, 200% 200%, 220% 220%, 100% 100%;
-    background-repeat: no-repeat;
+      radial-gradient(ellipse at 12% 8%, hsl(153 28% 58% / 0.13), transparent 36rem),
+      radial-gradient(ellipse at 92% 80%, hsl(29 57% 55% / 0.11), transparent 34rem),
+      linear-gradient(145deg, hsl(42 32% 94%) 0%, hsl(39 30% 91%) 48%, hsl(37 27% 88%) 100%);
     background-attachment: fixed;
-    animation: ocean-cream 48s ease-in-out infinite;
   }
 
   h1, h2, h3, h4 {
@@ -783,6 +775,12 @@
   animation: r4m-rainbow 7s ease infinite;
 }
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
   .r4m-rainbow { animation: none; }
 }
 @keyframes gilded-spin { to { transform: rotate(360deg); } }

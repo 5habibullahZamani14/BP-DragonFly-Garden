@@ -798,7 +798,7 @@ router.post("/printers/daily-sales-report", requireManagerToken, async (req, res
     const salesDate = typeof req.body?.salesDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.salesDate)
       ? req.body.salesDate
       : today;
-    const result = await dailySales.printDailySalesReportForDate(salesDate);
+    const result = await dailySales.printDailySalesReportForDate(salesDate, { allowReprint: salesDate === today });
     res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -554,7 +554,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col p-6">
+      <div className="min-h-screen bg-transparent flex flex-col p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal restrictLanguages={true} />
           <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} />
@@ -643,7 +643,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-3 sm:p-6">
+    <div className="min-h-screen bg-transparent p-3 sm:p-6">
       <style>{`
         @keyframes redFlashPulseThreeTimes {
           0% { opacity: 0; }
@@ -809,32 +809,34 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           </div>
         </div>
 
-        <nav
-          aria-label={t("manager.sectionNavigation")}
-          className="mb-4 overflow-x-auto rounded-2xl border border-white/70 bg-white/50 p-1.5 shadow-sm backdrop-blur sm:mb-6"
-        >
-          <div className="flex min-w-max gap-1">
-            {MANAGER_NAV_ITEMS.map(({ tab, labelKey, icon: Icon }) => {
-              const isActive = activeTab === tab;
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  aria-current={isActive ? "page" : undefined}
-                  onClick={() => goToTab(tab)}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2 ${
-                    isActive
-                      ? "bg-green-700 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-white/80 hover:text-green-800"
-                  }`}
-                >
-                  <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-                  <span>{t(labelKey)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        {activeTab !== "overview" && (
+          <nav
+            aria-label={t("manager.sectionNavigation")}
+            className="mb-4 overflow-x-auto rounded-2xl border border-white/70 bg-white/50 p-1.5 shadow-sm backdrop-blur sm:mb-6"
+          >
+            <div className="flex min-w-max gap-1">
+              {MANAGER_NAV_ITEMS.map(({ tab, labelKey, icon: Icon }) => {
+                const isActive = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => goToTab(tab)}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2 ${
+                      isActive
+                        ? "bg-green-700 text-white shadow-sm"
+                        : "text-gray-600 hover:bg-white/80 hover:text-green-800"
+                    }`}
+                  >
+                    <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                    <span>{t(labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
 
         <Dialog
           open={shutdownConfirmationOpen}

@@ -230,8 +230,8 @@ export default {
     "payment.appendItem": "Tambahkan item pada pesanan sebelum pembayaran akhir.",
     "payment.menuItem": "Item Menu",
     "payment.quantity": "Kuantiti",
-    "payment.addToOrderBtn": "Tambah pada Pesanan"
-,
+    "payment.addToOrderBtn": "Tambah pada Pesanan",
+
     "payment.enterShiftCash": "Masukkan Tunai Syif",
     "payment.finalCash": "Tunai akhir dalam laci untuk",
     "payment.cashAmount": "Jumlah Tunai (RM)",
@@ -261,9 +261,9 @@ export default {
     "customer.failedSendOrder": "Isu rangkaian — pesanan gagal dihantar.",
     "customer.staffNotified": "Kakitangan telah dimaklumkan. Kami akan segera datang kepada anda.",
     "customer.failedNotifyStaff": "Gagal memaklumkan kakitangan. Sila cuba lagi.",
-    "customer.addToOrder": "Tambah ke Pesanan"
+    "customer.addToOrder": "Tambah ke Pesanan",
+    "customer.addedToCart": "Ditambah ke troli · {{count}}",
 
-,
     "m.empDir": "Direktori Pekerja & Analitik",
     "m.addEmp": "Tambah Pekerja",
     "m.fullName": "Nama Penuh",

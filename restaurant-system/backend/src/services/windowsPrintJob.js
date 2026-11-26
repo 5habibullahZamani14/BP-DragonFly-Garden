@@ -271,7 +271,7 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "      if ($ruleThickness -gt 0) {",
     "        if ($y + $baseLineHeight -gt ($contentY + $contentHeight)) { $eventArgs.HasMorePages = $true; return }",
     "        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::Black, $ruleThickness)",
-    "        try { $eventArgs.Graphics.DrawLine($pen, [single]$printableArea.X, ($y + ($baseLineHeight / 2)), [single]($printableArea.X + $printableArea.Width), ($y + ($baseLineHeight / 2))) } finally { $pen.Dispose() }",
+    "        try { $eventArgs.Graphics.DrawLine($pen, [single]$contentX, ($y + ($baseLineHeight / 2)), [single]($contentX + $contentWidth), ($y + ($baseLineHeight / 2))) } finally { $pen.Dispose() }",
     "        $y += $baseLineHeight",
     "        $script:printLineIndex++",
     "        continue",

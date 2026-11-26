@@ -226,8 +226,8 @@ export default {
     "payment.appendItem": "अंतिम भुगतान से पहले ऑर्डर में एक आइटम जोड़ें।",
     "payment.menuItem": "मेनू आइटम",
     "payment.quantity": "मात्रा",
-    "payment.addToOrderBtn": "ऑर्डर में जोड़ें"
-,
+    "payment.addToOrderBtn": "ऑर्डर में जोड़ें",
+
     "payment.enterShiftCash": "शिफ्ट कैश दर्ज करें",
     "payment.finalCash": "दराज में अंतिम नकद",
     "payment.cashAmount": "नकद राशि (RM)",
@@ -257,9 +257,9 @@ export default {
     "customer.failedSendOrder": "नेटवर्क समस्या - आदेश भेजने में विफल रहा।",
     "customer.staffNotified": "कर्मचारियों को सूचित कर दिया गया है। हम जल्द ही आपके साथ होंगे।",
     "customer.failedNotifyStaff": "कर्मचारियों को सूचित करने में विफल। कृपया पुनः प्रयास करें।",
-    "customer.addToOrder": "ऑर्डर में जोड़ें"
+    "customer.addToOrder": "ऑर्डर में जोड़ें",
+    "customer.addedToCart": "कार्ट में जोड़ा गया · {{count}}",
 
-,
     "m.empDir": "कर्मचारी निर्देशिका और विश्लेषिकी",
     "m.addEmp": "कर्मचारी जोड़ें",
     "m.fullName": "पूरा नाम",

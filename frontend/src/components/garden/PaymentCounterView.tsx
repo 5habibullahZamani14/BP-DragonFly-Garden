@@ -736,7 +736,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
   // Render Login Screen if not logged in
   if (!loggedInEmployee) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex flex-col px-4 py-6 sm:p-6">
+      <div className="min-h-screen bg-transparent flex flex-col px-4 py-6 sm:p-6">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-auto">
           <SettingsModal />
           <HelpModal title={t("payment.title")} sections={getPaymentHelpSections(t)} />
@@ -779,7 +779,7 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
 
   // Main UI when logged in
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 px-4 py-6 sm:p-6">
+    <div className="min-h-screen bg-transparent px-4 py-6 sm:p-6">
       {activeAssistanceRequest && (
         <div className="fixed right-5 top-5 z-50 w-[min(22rem,calc(100vw-2.5rem))] rounded-2xl border border-green-200 bg-white p-4 shadow-2xl">
           <div className="flex items-start gap-3">
@@ -806,8 +806,8 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             <SettingsModal />
             <h1 className="text-3xl font-bold text-gray-900 mr-2 min-w-0 truncate">{t("payment.title")}</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-3 bg-white/60 px-4 py-3 rounded-2xl shadow-sm w-full xl:w-auto">
-            <div className="flex flex-wrap items-center gap-3 shrink-0 min-w-0">
+          <div className="flex w-full flex-wrap items-center justify-between gap-4 rounded-2xl bg-white/60 px-4 py-3 shadow-sm xl:w-auto xl:flex-1 xl:flex-nowrap">
+            <div className="flex min-w-0 shrink items-center gap-3">
               <span className="text-sm font-semibold text-gray-800 min-w-0">
                 {formatDateTime12Hour(currentTime, true)}
               </span>
@@ -821,10 +821,10 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                 {operationStatus === "outsideWorking" && t("payment.outsideWorking")}
               </Badge>
             </div>
-            <span className="text-sm font-medium text-gray-700 border-l border-gray-300 pl-4 shrink-0 min-w-0">
+            <span className="shrink-0 border-l border-gray-300 pl-4 text-sm font-medium text-gray-700">
               {t("payment.shift")}: <span className="text-green-700">{loggedInEmployee.name}</span>
             </span>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-white/80" title={t("payment.staffAssistance")}>
@@ -915,31 +915,6 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
           </div>
         </div>
 
-        <nav
-          aria-label={t("payment.orderNavigation")}
-          className="sticky top-2 z-20 mb-4 flex gap-2 overflow-x-auto rounded-xl border border-gray-100 bg-white/95 p-2 shadow-sm backdrop-blur"
-        >
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => document.getElementById("unpaid-orders-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          >
-            {t("payment.unpaidOrders")}
-          </Button>
-          <Button
-            type="button"
-            variant={showPaidOrders ? "default" : "outline"}
-            aria-controls="paid-orders-list"
-            aria-expanded={showPaidOrders}
-            onClick={() => {
-              setShowPaidOrders(true);
-              document.getElementById("paid-orders-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-          >
-            {t("payment.paidOrders")}
-          </Button>
-        </nav>
-        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <section id="unpaid-orders-section" className="scroll-mt-20 space-y-4">
             <h2 className="text-2xl font-semibold text-gray-800">{t("payment.unpaidOrders")}</h2>

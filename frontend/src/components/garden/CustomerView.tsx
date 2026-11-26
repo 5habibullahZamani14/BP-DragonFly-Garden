@@ -323,7 +323,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
     
     fetchRecs();
     return () => { alive = false; };
-  }, [cartOpen, cart.length, qrCode]);
+  }, [cartOpen, cart, qrCode]);
 
   // Mark manager responses as seen when the user visits the feedback tab
   useEffect(() => {
@@ -606,6 +606,9 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
   const recommended = useMemo(() => menu.filter((i) => i.image_url).slice(0, 6), [menu]);
   const cartCount = cart.reduce((n, c) => n + c.quantity, 0);
   const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  const selectedMenuItemCartCount = selectedMenuItem
+    ? cart.reduce((count, line) => line.id === selectedMenuItem.id ? count + line.quantity : count, 0)
+    : 0;
 
   // Build a cartKey from item id + sorted selected option ids
   const buildCartKey = (itemId: number, opts: SelectedOption[]) =>
@@ -839,7 +842,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
   // The system relies on physical printed tickets for order fulfillment.
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background text-foreground animate-fade-in" dir={i18n.dir()}>
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-transparent text-foreground animate-fade-in" dir={i18n.dir()}>
       <aside className="basis-1/5 sm:basis-[23%] md:basis-1/5 lg:basis-[11%] xl:basis-[10%] min-w-[3.25rem] max-w-[5rem] sm:max-w-[7rem] md:max-w-none h-full border-e border-border/60 bg-card/30 flex flex-col shrink-0 overflow-y-auto px-1 pt-[max(0.75rem,var(--safe-top))] pb-[max(0.75rem,var(--safe-bottom))] sm:px-2 sm:pt-4 sm:pb-4 md:pt-5 md:pb-5 shadow-[var(--shadow-soft)] z-50 no-scrollbar">
         <nav className="flex flex-col gap-1 sm:gap-1.5">
           {([
@@ -1010,7 +1013,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
 
       {/* ══ DUPLICATE ORDER WARNING DIALOG ══════════════════════════════════ */}
       {showDuplicateWarning && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-5" style={{ background: "rgba(0,0,0,0.60)" }}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-5 backdrop-blur-md" style={{ background: "rgba(2,6,23,0.72)" }}>
           <div className="w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up" style={{ background: "hsl(44,70%,97%)", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
             <div className="px-6 pt-6 pb-4" style={{ background: "var(--gradient-hero)" }}>
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
@@ -1837,10 +1840,16 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
                 <button
                   disabled={selectedMenuItem?.is_sold_out}
                   onClick={() => selectedMenuItem && handleAddPress(selectedMenuItem)}
-                  className={`inline-flex items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-white transition ${selectedMenuItem?.is_sold_out ? "bg-muted text-foreground/50 pointer-events-none" : "bg-primary hover:bg-primary-glow"}`}
+                  aria-live="polite"
+                  className={`inline-flex items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-white transition ${selectedMenuItem?.is_sold_out ? "bg-muted text-foreground/50 pointer-events-none" : selectedMenuItemCartCount > 0 ? "bg-emerald-700 hover:bg-emerald-800" : "bg-primary hover:bg-primary-glow"}`}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {selectedMenuItem?.is_sold_out ? t("customer.soldOut") : t("customer.add")}
+                  {selectedMenuItem?.is_sold_out ? (
+                    <>{t("customer.soldOut")}</>
+                  ) : selectedMenuItemCartCount > 0 ? (
+                    <><Check className="mr-2 h-4 w-4" />{t("customer.addedToCart", { count: selectedMenuItemCartCount })}</>
+                  ) : (
+                    <><Plus className="mr-2 h-4 w-4" />{t("customer.addToOrder")}</>
+                  )}
                 </button>
                 <button
                   onClick={() => setSelectedMenuItem(null)}
@@ -1869,7 +1878,11 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
               }} />
             ))}
             <h1 className="font-1 text-[2rem] font-bold leading-[0.95] tracking-tight text-center">
-              <span className="italic text-accent">🌸{t("customer.yourOrders")}🌸</span>
+              <span className="italic text-accent">
+                <span className="not-italic" aria-hidden="true">🌸</span>
+                {t("customer.yourOrders")}
+                <span className="not-italic" aria-hidden="true">🌸</span>
+              </span>
             </h1>
           </header>
 
@@ -2074,8 +2087,8 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
       {/* ============ CART SHEET ============ */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
-          <div className="absolute inset-0 bg-primary/40 backdrop-blur-sm animate-fade-up" onClick={() => setCartOpen(false)} />
-          <div className="relative w-full max-w-2xl h-[88vh] rounded-t-[32px] bg-background shadow-2xl animate-slide-down md:rounded-[32px] md:mb-4 overflow-hidden">
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-fade-up" onClick={() => setCartOpen(false)} />
+          <div className="relative w-full max-w-2xl h-[88vh] rounded-t-[32px] border border-white/60 bg-background/98 shadow-2xl backdrop-blur-2xl animate-slide-down md:rounded-[32px] md:mb-4 overflow-hidden">
             <div className="relative flex h-full flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-5 pb-[calc(10rem+env(safe-area-inset-bottom))]">
                 <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
@@ -2231,11 +2244,11 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
       {optionSheetItem && (
         <div
           className="fixed inset-0 z-[200] flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.55)" }}
+          style={{ background: "rgba(2,6,23,0.72)", backdropFilter: "blur(14px)" }}
           onClick={(e) => { if (e.target === e.currentTarget) setOptionSheetItem(null); }}
         >
           <div
-            className="w-full max-w-lg rounded-t-[32px] bg-background overflow-hidden"
+            className="w-full max-w-lg rounded-t-[32px] border border-white/60 bg-background/98 backdrop-blur-2xl overflow-hidden"
             style={{ boxShadow: "0 -8px 40px rgba(0,0,0,0.25)", maxHeight: "88dvh", display: "flex", flexDirection: "column" }}
           >
             {/* Sheet handle */}

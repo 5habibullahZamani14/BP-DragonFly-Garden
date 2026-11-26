@@ -231,8 +231,8 @@ export default {
     "payment.appendItem": "在最终付款前向订单附加一个项目。",
     "payment.menuItem": "菜单项目",
     "payment.quantity": "数量",
-    "payment.addToOrderBtn": "添加到订单"
-,
+    "payment.addToOrderBtn": "添加到订单",
+
     "payment.enterShiftCash": "输入交班现金",
     "payment.finalCash": "收银台最终现金",
     "payment.cashAmount": "现金金额 (RM)",
@@ -262,9 +262,9 @@ export default {
     "customer.failedSendOrder": "网络问题 — 订单发送失败。",
     "customer.staffNotified": "已通知工作人员。我们将尽快为您服务。",
     "customer.failedNotifyStaff": "通知工作人员失败。请重试。",
-    "customer.addToOrder": "加入订单"
+    "customer.addToOrder": "加入订单",
+    "customer.addedToCart": "已加入购物车 · {{count}}",
 
-,
     "m.empDir": "员工名录和分析",
     "m.addEmp": "添加员工",
     "m.fullName": "全名",
