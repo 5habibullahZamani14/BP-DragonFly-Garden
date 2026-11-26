@@ -1,7 +1,7 @@
 const toHundredthsInch = mm => Math.round((mm / 25.4) * 100);
 
 const RECEIPT_LAYOUT = Object.freeze({
-  columns: 40,
+  columns: 42,
   paperWidthMm: 80,
   fontFamily: "Roboto Condensed",
   boldFontFamily: "Roboto Condensed",
@@ -20,7 +20,7 @@ const RECEIPT_LAYOUT = Object.freeze({
   marginsMm: Object.freeze({
     left: 0.0,
     right: 6.0,
-    top: 1.75,
+    top: 0.0,
     bottom: 1.75,
   }),
 });

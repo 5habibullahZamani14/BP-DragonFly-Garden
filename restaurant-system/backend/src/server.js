@@ -397,15 +397,14 @@ app.get(/^(?!\/(?:menu|orders|tables|payments|management|menu-images|feedback-im
 
 /* Health and readiness endpoints */
 app.get('/health', (req, res) => res.json({ status: 'ok', time: Date.now() }));
-app.get('/ready', async (req, res) => {
-  try {
-    // quick DB ping
-    await initializeDatabase();
-    res.json({ ready: true });
-  } catch (err) {
-    console.error("Readiness check failed:", redactText(err && err.message ? err.message : "Unknown error"));
-    res.status(503).json({ ready: false, error: "Service is not ready" });
-  }
+app.get('/ready', (req, res) => {
+  db.get("SELECT 1 AS ready", (err) => {
+    if (err) {
+      console.error("Readiness check failed:", redactText(err.message || "Unknown error"));
+      return res.status(503).json({ ready: false, error: "Service is not ready" });
+    }
+    return res.json({ ready: true });
+  });
 });
 
 /* Global error handlers — these must be registered last. */
@@ -421,6 +420,7 @@ const scheduledTasks = {
   archiveInterval: null,
   cloudBackupTimeout: null,
   cloudBackupInterval: null,
+  imageOptimizationTimeout: null,
   salesReportInterval: null,
   inFlight: new Set(),
   shuttingDown: false,
@@ -461,6 +461,7 @@ const gracefulShutdown = (signal) => {
   if (shutdownPromise) return shutdownPromise;
 
   console.log(`\n${signal} received. Starting graceful shutdown...`);
+  const shutdownStartedAt = process.hrtime.bigint();
   const forceShutdownTimer = setTimeout(() => {
     console.error("Forced shutdown after 120 seconds.");
     process.exit(1);
@@ -475,6 +476,7 @@ const gracefulShutdown = (signal) => {
       if (scheduledTasks.archiveInterval) clearInterval(scheduledTasks.archiveInterval);
       if (scheduledTasks.cloudBackupTimeout) clearTimeout(scheduledTasks.cloudBackupTimeout);
       if (scheduledTasks.cloudBackupInterval) clearInterval(scheduledTasks.cloudBackupInterval);
+      if (scheduledTasks.imageOptimizationTimeout) clearTimeout(scheduledTasks.imageOptimizationTimeout);
       if (scheduledTasks.salesReportInterval) clearInterval(scheduledTasks.salesReportInterval);
       console.log("Scheduled tasks stopped; rejecting new requests and closing WebSocket clients.");
 
@@ -504,7 +506,8 @@ const gracefulShutdown = (signal) => {
 
       await db.close();
       console.log("Database connection closed");
-      console.log("Graceful shutdown completed successfully");
+      const shutdownDurationMs = Math.round(Number(process.hrtime.bigint() - shutdownStartedAt) / 1e6);
+      console.log(`Graceful shutdown completed successfully in ${shutdownDurationMs} ms.`);
       clearTimeout(forceShutdownTimer);
       process.exit(shutdownExitCode);
     } catch (err) {
@@ -556,31 +559,54 @@ process.on('unhandledRejection', (reason, promise) => {
  * be created before seeding, and old orders should be archived before any new
  * requests come in.
  */
+const runStartupStep = async (label, action) => {
+  const startedAt = process.hrtime.bigint();
+  try {
+    const result = await action();
+    const durationMs = Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+    console.log(`[Startup] ${label} completed in ${durationMs} ms.`);
+    return result;
+  } catch (error) {
+    const durationMs = Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+    console.error(`[Startup] ${label} failed after ${durationMs} ms.`);
+    throw error;
+  }
+};
+
 const startServer = async () => {
+  const startupStartedAt = process.hrtime.bigint();
   try {
     /* Create all tables if they do not already exist. */
-    await initializeDatabase();
+    await runStartupStep("Database initialization", initializeDatabase);
 
     /* Insert default menu items, tables, and settings if the database is empty. */
-    await seedDatabase();
+    await runStartupStep("Database seeding", seedDatabase);
 
     /* Move any leftover orders from yesterday into the Grand Archive. */
-    const leftoversCount = await forceArchiveLeftovers();
+    const leftoversCount = await runStartupStep("Leftover-order archival", forceArchiveLeftovers);
     if (leftoversCount > 0) {
       console.log(`[Startup] Cleaned up ${leftoversCount} leftover order(s) from previous days.`);
     }
-    const archivedAssistanceCount = await archiveStaffAssistanceRequests();
+    const archivedAssistanceCount = await runStartupStep("Staff-assistance archival", archiveStaffAssistanceRequests);
     if (archivedAssistanceCount > 0) {
       console.log(`[Startup] Archived ${archivedAssistanceCount} old staff assistance request(s).`);
     }
 
     const menuImagesDir = path.resolve(__dirname, "../../../frontend/public/menu-images");
     const feedbackImagesDir = path.resolve(__dirname, "../../../frontend/public/feedback-images");
-    await compressImagesInDirectory(menuImagesDir);
-    await compressImagesInDirectory(feedbackImagesDir);
 
     server.listen(PORT, HOST, () => {
       console.log(`Server running on http://${HOST}:${PORT}`);
+      const startupDurationMs = Math.round(Number(process.hrtime.bigint() - startupStartedAt) / 1e6);
+      console.log(`[Startup] Server accepting connections after ${startupDurationMs} ms.`);
+
+      scheduledTasks.imageOptimizationTimeout = setTimeout(() => {
+        scheduledTasks.imageOptimizationTimeout = null;
+        trackScheduledTask(async () => {
+          await runStartupStep("Menu image optimization", () => compressImagesInDirectory(menuImagesDir));
+          await runStartupStep("Feedback image optimization", () => compressImagesInDirectory(feedbackImagesDir));
+        });
+      }, 5000);
 
       /*
        * Schedule the nightly archive job. I calculate the milliseconds until

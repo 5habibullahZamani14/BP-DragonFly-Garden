@@ -131,6 +131,7 @@ export type WSEventType =
   | "LOG_UPDATE"
   | "BACKUP_UPDATE"
   | "DATA_REFRESH"
+  | "DAILY_SALES_REPORT_UPDATE"
   | "CONNECTION_RESTORED";
 
 interface WSEvent {

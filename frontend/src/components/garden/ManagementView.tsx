@@ -30,6 +30,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { formatDateTime12Hour } from "@/lib/timeFormat";
 import type { TFunction } from "i18next";
@@ -37,7 +38,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare, Image as ImageIcon } from "lucide-react";
+import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare, Image as ImageIcon, Power, Home } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { FeedbackTab } from "./management/FeedbackTab";
 import { SettingsTab } from "./management/SettingsTab";
 import { MenuTab } from "./management/MenuTab";
@@ -48,12 +50,14 @@ import { TablesTab } from "./management/TablesTab";
 import { FinanceTab } from "./management/FinanceTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
-import { managerAuth, logoutManager, getManagerSession, sendPasswordResetEmail, fetchInventory, checkSystemVersion } from "@/lib/api";
+import { managerAuth, logoutManager, getManagerSession, sendPasswordResetEmail, fetchInventory, checkSystemVersion, requestSystemShutdown } from "@/lib/api";
 import type { InventoryItem } from "@/lib/api";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Bell, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { notifyServerShutdownRequested } from "@/lib/useServerConnectionNotice";
 
 interface ManagementViewProps {
   qrCode: string;
@@ -62,6 +66,17 @@ interface ManagementViewProps {
 
 const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
+const MANAGER_NAV_ITEMS: { tab: ManagerTab; labelKey: string; icon: LucideIcon }[] = [
+  { tab: "overview", labelKey: "manager.overview", icon: Home },
+  { tab: "settings", labelKey: "manager.settings", icon: Settings },
+  { tab: "employees", labelKey: "manager.employees", icon: Users },
+  { tab: "inventory", labelKey: "manager.inventory", icon: PackageOpen },
+  { tab: "logs", labelKey: "manager.logs", icon: FileText },
+  { tab: "tables", labelKey: "manager.tables", icon: Grid3X3 },
+  { tab: "finance", labelKey: "manager.finance", icon: DollarSign },
+  { tab: "menu", labelKey: "manager.menu", icon: Utensils },
+  { tab: "feedback", labelKey: "manager.feedback.title", icon: MessageSquare },
+];
 type ManagerSystemIssue = {
   id: number;
   source: string;
@@ -196,6 +211,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
   }, [notify, t]);
 
   const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
+  const [shutdownRequested, setShutdownRequested] = useState(false);
+  const [shutdownConfirmationOpen, setShutdownConfirmationOpen] = useState(false);
+  const [shutdownPending, setShutdownPending] = useState(false);
+  const [settingsUpdateInProgress, setSettingsUpdateInProgress] = useState(false);
   const [inventoryAction, setInventoryAction] = useState<{subTab?: "overview" | "stock" | "recipes", editItemId?: number} | null>(null);
   const [settingsAlertRequest, setSettingsAlertRequest] = useState<{
     section: "printers" | "printer-job-review";
@@ -456,9 +475,36 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     releaseSessionLock(MANAGER_SESSION_LOCK_KEY);
   };
 
+  const handleConfirmShutdown = async () => {
+    setShutdownPending(true);
+    try {
+      const result = await requestSystemShutdown();
+      if (!result.success) {
+        throw new Error(result.message || "The server did not accept the shutdown request.");
+      }
+      setShutdownRequested(true);
+      setShutdownConfirmationOpen(false);
+      notifyServerShutdownRequested();
+    } catch (error: unknown) {
+      safeConsoleError("Server shutdown request failed", error);
+      const message = error instanceof Error ? error.message : String(error);
+      notify("error", t("m.settings.shutdownError", { error: message }));
+    } finally {
+      setShutdownPending(false);
+    }
+  };
+
   const goToTab = (tab: typeof activeTab) => {
     setActiveTab(tab);
     sessionStorage.setItem("mgr_active_tab", tab);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleOverviewCardKeyDown = (tab: ManagerTab) => (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      goToTab(tab);
+    }
   };
 
   const openSettingsAlert = (section: "printers" | "printer-job-review") => {
@@ -654,7 +700,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-green-700 shrink-0" />
                 <span className="truncate">{t("manager.dashboardTitle")}</span>
               </h1>
-              <p className="text-gray-500 mt-1 text-sm sm:text-base">{t("manager.subtitle")}</p>
+              <p className="text-gray-500 mt-1 text-sm sm:text-base management-header-subtitle">{t("manager.subtitle")}</p>
             </div>
           </div>
           
@@ -742,16 +788,109 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </div>
               </PopoverContent>
             </Popover>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-2 rounded-full px-4 font-bold tracking-wide shadow-sm transition-all hover:shadow-md active:scale-95"
+              title={t("m.settings.shutdownEveryone")}
+              aria-label={t("m.settings.shutdownEveryone")}
+              disabled={shutdownRequested || shutdownPending || settingsUpdateInProgress}
+              onClick={() => setShutdownConfirmationOpen(true)}
+            >
+              {shutdownPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Power className="h-4 w-4" />}
+              STOP
+            </Button>
             <HelpModal title={t("manager.helpTitle")} sections={getManagerHelpSections(t)} version={appVersion || "v1.0.0.0 Beta"} />
             <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full">
               <LogOut className="h-4 w-4 mr-2" /> {t("manager.logout")}
             </Button>
           </div>
         </div>
+
+        <nav
+          aria-label={t("manager.sectionNavigation")}
+          className="mb-4 overflow-x-auto rounded-2xl border border-white/70 bg-white/50 p-1.5 shadow-sm backdrop-blur sm:mb-6"
+        >
+          <div className="flex min-w-max gap-1">
+            {MANAGER_NAV_ITEMS.map(({ tab, labelKey, icon: Icon }) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => goToTab(tab)}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2 ${
+                    isActive
+                      ? "bg-green-700 text-white shadow-sm"
+                      : "text-gray-600 hover:bg-white/80 hover:text-green-800"
+                  }`}
+                >
+                  <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  <span>{t(labelKey)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <Dialog
+          open={shutdownConfirmationOpen}
+          onOpenChange={(open) => {
+            if (!shutdownPending) setShutdownConfirmationOpen(open);
+          }}
+        >
+          <DialogContent className="!h-auto !max-h-[90vh] !w-[min(94vw,36rem)] !max-w-none flex flex-col gap-0 overflow-y-auto rounded-2xl border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50 !p-0 sm:!p-0 shadow-2xl">
+            <div className="relative overflow-hidden rounded-t-2xl border-b border-amber-200 bg-gradient-to-r from-amber-100 via-rose-50 to-emerald-100 p-6 pr-14">
+              <div aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/60 blur-2xl" />
+              <DialogHeader className="relative flex-row items-start gap-4 space-y-0 text-left">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-white/80 text-rose-600 shadow-sm">
+                  <Power className="h-6 w-6" />
+                </div>
+                <div className="space-y-2">
+                  <DialogTitle className="text-xl font-bold text-slate-900">Stop DragonFly Garden?</DialogTitle>
+                  <DialogDescription className="text-sm leading-6 text-slate-600">
+                    This will stop the server for everyone using the system.
+                  </DialogDescription>
+                </div>
+              </DialogHeader>
+            </div>
+            <div className="p-6">
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200/80 bg-white/75 px-4 py-3 shadow-sm">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <p className="text-sm leading-6 text-slate-700">
+                  Make sure no orders or payments are in progress. The server will stop accepting requests, disconnect open browser sessions, finish active background work, and close the database. You will need to start it again using its normal startup method.
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="sticky bottom-0 mt-auto flex flex-col gap-2 border-t border-amber-200/70 bg-white/90 px-6 py-4 sm:flex-row sm:justify-end sm:space-x-0">
+              <Button
+                variant="outline"
+                className="w-full rounded-full border-amber-200 px-5 hover:bg-amber-50 sm:w-auto"
+                onClick={() => setShutdownConfirmationOpen(false)}
+                disabled={shutdownPending}
+              >
+                {t("m.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full rounded-full bg-rose-600 px-6 shadow-sm transition-all hover:bg-rose-700 hover:shadow-md active:scale-95 sm:w-auto"
+                onClick={() => void handleConfirmShutdown()}
+                disabled={shutdownPending}
+              >
+                {shutdownPending
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t("m.confirm")}</>
+                  : "STOP"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-6">
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("settings")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-green-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("settings")} onKeyDown={handleOverviewCardKeyDown("settings")}>
               <CardContent className="pt-6">
                 <Settings className="h-10 w-10 text-green-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.settings")}</CardTitle>
@@ -759,7 +898,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("employees")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-blue-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("employees")} onKeyDown={handleOverviewCardKeyDown("employees")}>
               <CardContent className="pt-6">
                 <Users className="h-10 w-10 text-blue-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.employees")}</CardTitle>
@@ -767,7 +906,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("inventory")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-orange-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("inventory")} onKeyDown={handleOverviewCardKeyDown("inventory")}>
               <CardContent className="pt-6">
                 <PackageOpen className="h-10 w-10 text-orange-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.inventory")}</CardTitle>
@@ -775,7 +914,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("tables")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-emerald-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("tables")} onKeyDown={handleOverviewCardKeyDown("tables")}>
               <CardContent className="pt-6">
                 <Grid3X3 className="h-10 w-10 text-emerald-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.tables")}</CardTitle>
@@ -783,7 +922,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("logs")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-purple-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("logs")} onKeyDown={handleOverviewCardKeyDown("logs")}>
               <CardContent className="pt-6">
                 <FileText className="h-10 w-10 text-purple-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.logs")}</CardTitle>
@@ -791,7 +930,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("menu")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-yellow-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("menu")} onKeyDown={handleOverviewCardKeyDown("menu")}>
               <CardContent className="pt-6">
                 <Utensils className="h-10 w-10 text-yellow-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.menu")}</CardTitle>
@@ -799,7 +938,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("finance")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-rose-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("finance")} onKeyDown={handleOverviewCardKeyDown("finance")}>
               <CardContent className="pt-6">
                 <DollarSign className="h-10 w-10 text-rose-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.finance")}</CardTitle>
@@ -807,7 +946,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow border-t-4 border-t-teal-500 cursor-pointer min-w-0 overflow-hidden" onClick={() => goToTab("feedback")}>
+            <Card role="button" tabIndex={0} className="hover:shadow-lg transition-shadow border-t-4 border-t-teal-500 cursor-pointer min-w-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2" onClick={() => goToTab("feedback")} onKeyDown={handleOverviewCardKeyDown("feedback")}>
               <CardContent className="pt-6">
                 <MessageSquare className="h-10 w-10 text-teal-500 mb-4" />
                 <CardTitle className="mb-2">{t("manager.feedback.title")}</CardTitle>
@@ -818,7 +957,12 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           </div>
         )}
 
-        {activeTab === "settings" && <SettingsTab alertRequest={settingsAlertRequest} />}
+        {activeTab === "settings" && (
+          <SettingsTab
+            alertRequest={settingsAlertRequest}
+            onUpdateInProgressChange={setSettingsUpdateInProgress}
+          />
+        )}
         {activeTab === "employees" && <EmployeesTab />}
         {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} onInventoryChanged={loadNotifications} />}
         {activeTab === "tables" && <TablesTab />}

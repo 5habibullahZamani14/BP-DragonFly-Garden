@@ -914,9 +914,34 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             </Button>
           </div>
         </div>
+
+        <nav
+          aria-label={t("payment.orderNavigation")}
+          className="sticky top-2 z-20 mb-4 flex gap-2 overflow-x-auto rounded-xl border border-gray-100 bg-white/95 p-2 shadow-sm backdrop-blur"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => document.getElementById("unpaid-orders-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          >
+            {t("payment.unpaidOrders")}
+          </Button>
+          <Button
+            type="button"
+            variant={showPaidOrders ? "default" : "outline"}
+            aria-controls="paid-orders-list"
+            aria-expanded={showPaidOrders}
+            onClick={() => {
+              setShowPaidOrders(true);
+              document.getElementById("paid-orders-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            {t("payment.paidOrders")}
+          </Button>
+        </nav>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <section className="space-y-4">
+          <section id="unpaid-orders-section" className="scroll-mt-20 space-y-4">
             <h2 className="text-2xl font-semibold text-gray-800">{t("payment.unpaidOrders")}</h2>
             {loading ? (
               <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">{t("common.loading")}</p></div>
@@ -1242,20 +1267,28 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
             )}
           </section>
 
-          <section className="space-y-4">
+          <section id="paid-orders-section" className="scroll-mt-20 space-y-4">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-semibold text-gray-800">{t("payment.paidOrders")}</h2>
-                <Button onClick={() => setShowPaidOrders(!showPaidOrders)} variant="outline" className="shadow-sm bg-white hover:bg-gray-50">
+                <Button
+                  type="button"
+                  aria-controls="paid-orders-list"
+                  aria-expanded={showPaidOrders}
+                  onClick={() => setShowPaidOrders(!showPaidOrders)}
+                  variant="outline"
+                  className="shadow-sm bg-white hover:bg-gray-50"
+                >
                     {showPaidOrders ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
                     {showPaidOrders ? t("payment.hide") : t("payment.show")}
                 </Button>
             </div>
-            {showPaidOrders && (
-              loading ? <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">{t("common.loading")}</p></div> : (
-                <div className="space-y-4 opacity-80">
-                  {paidOrders.length === 0 ? (
-                    <p className="text-gray-500 italic">{t("payment.noPaid")}</p>
-                  ) : paidOrders.map((order) => (
+            <div id="paid-orders-list">
+              {showPaidOrders && (
+                loading ? <div className="flex justify-center p-8"><p className="text-gray-500 animate-pulse">{t("common.loading")}</p></div> : (
+                  <div className="space-y-4 opacity-80">
+                    {paidOrders.length === 0 ? (
+                      <p className="text-gray-500 italic">{t("payment.noPaid")}</p>
+                    ) : paidOrders.map((order) => (
                     <Card key={order.id} className="bg-gray-50">
                       <CardHeader className="py-4">
                         <CardTitle className="flex items-center justify-between text-lg">
@@ -1312,10 +1345,11 @@ export const PaymentCounterView = ({ qrCode, notify }: PaymentCounterViewProps) 
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
-                </div>
-              )
-            )}
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
           </section>
         </div>
       </div>

@@ -78,6 +78,45 @@ function Invoke-NpmCommand {
     }
 }
 
+function Test-FrontendBuildCurrent {
+    $distIndexPath = Join-Path $frontendPath 'dist\index.html'
+    if (-not (Test-Path -LiteralPath $distIndexPath -PathType Leaf)) {
+        return $false
+    }
+
+    $buildTime = (Get-Item -LiteralPath $distIndexPath).LastWriteTimeUtc
+    $inputPaths = @(
+        $frontendPath,
+        (Join-Path $frontendPath 'src'),
+        (Join-Path $frontendPath 'public'),
+        (Join-Path $frontendPath 'scripts')
+    )
+
+    foreach ($inputPath in $inputPaths) {
+        if (-not (Test-Path -LiteralPath $inputPath -PathType Container)) {
+            continue
+        }
+
+        $isFrontendRoot = $inputPath -eq $frontendPath
+        $files = if ($isFrontendRoot) {
+            Get-ChildItem -LiteralPath $inputPath -File -Force -ErrorAction Stop
+        } else {
+            Get-ChildItem -LiteralPath $inputPath -File -Force -Recurse -ErrorAction Stop
+        }
+
+        foreach ($file in $files) {
+            if ($file.FullName -eq $distIndexPath) {
+                continue
+            }
+            if ($file.LastWriteTimeUtc -gt $buildTime) {
+                return $false
+            }
+        }
+    }
+
+    return $true
+}
+
 function Get-AppAddress {
     $ipAddress = $null
     try {
@@ -289,7 +328,17 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $frontendPath 'node_modules') -PathType Container)) {
         Invoke-NpmCommand -NpmPath $npmCommand.Source -WorkingDirectory $frontendPath -Arguments @('ci') -Description 'Installing frontend dependencies...'
     }
-    Invoke-NpmCommand -NpmPath $npmCommand.Source -WorkingDirectory $frontendPath -Arguments @('run', 'build') -Description 'Building the production frontend...'
+    if (Test-FrontendBuildCurrent) {
+        Add-Content -LiteralPath $setupLog -Value "[$(Get-Date -Format o)] Reusing the current production frontend build."
+        Set-LauncherStatus -State 'working' -Message 'Checking the existing frontend build...'
+        $secretScanPath = Join-Path $frontendPath 'scripts\check-client-secrets.cjs'
+        & $nodeCommand.Source $secretScanPath 2>&1 | Out-File -LiteralPath $setupLog -Encoding utf8 -Append
+        if ($LASTEXITCODE -ne 0) {
+            throw "Frontend build secret scan failed with exit code $LASTEXITCODE."
+        }
+    } else {
+        Invoke-NpmCommand -NpmPath $npmCommand.Source -WorkingDirectory $frontendPath -Arguments @('run', 'build') -Description 'Building the production frontend...'
+    }
 
     Set-LauncherStatus -State 'working' -Message 'Starting the backend...'
     $backendProcess = Start-Process `

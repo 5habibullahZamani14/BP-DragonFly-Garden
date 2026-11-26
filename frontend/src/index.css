@@ -982,10 +982,18 @@
 /* Prevent any text from causing horizontal overflow */
 body { overflow-wrap: anywhere; word-break: break-word; }
 
+/* Reduce both manager heading lines by exactly two typographic points. */
+.management-header-title { font-size: calc(1.875rem - 2pt) !important; }
+.management-header-subtitle { font-size: calc(1rem - 2pt) !important; }
+@media (max-width: 639px) {
+  .management-header-title { font-size: calc(1.25rem - 2pt) !important; }
+  .management-header-subtitle { font-size: calc(0.875rem - 2pt) !important; }
+}
+
 /* Very narrow phones (iPhone SE, slim aspect ratios ≤ 374px) */
 @media (max-width: 374px) {
   /* Scale down management dashboard */
-  .management-header-title { font-size: 1.5rem !important; }
+  .management-header-title { font-size: calc(1.5rem - 2pt) !important; }
 
   /* Ensure flex children don't force overflow */
   .min-w-0 { min-width: 0 !important; }
@@ -996,7 +1004,7 @@ body { overflow-wrap: anywhere; word-break: break-word; }
 
 /* Extremely narrow screens (≤ 319px) */
 @media (max-width: 319px) {
-  .management-header-title { font-size: 1.25rem !important; }
+  .management-header-title { font-size: calc(1.25rem - 2pt) !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

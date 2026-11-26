@@ -22,12 +22,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { CardSkeleton } from "@/components/ui/LoadingSkeletons";
 import { TimeInput12Hour } from "@/components/ui/TimeInput12Hour";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, requestSystemShutdown, VersionCheckResult } from "@/lib/api";
-import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, X, FileText, Power } from "lucide-react";
+import { fetchSettings, updateSetting, fetchManagerProfile, updateManagerProfile, fetchBackups, fetchCloudBackups, createBackup, restoreBackup, restoreCloudBackup, restoreUploadedBackup, downloadBackup, fetchDataResetOptions, performDataReset, applyDefaultCardSize, fetchPatterns, BackupFile, checkSystemVersion, performSystemUpdate, VersionCheckResult } from "@/lib/api";
+import { CheckCircle2, Eye, EyeOff, Loader2, Database, DownloadCloud, UploadCloud, CloudDownload, AlertCircle, Percent, AlertTriangle, RefreshCw, Printer, Wifi, Cable, Bluetooth, Search, Check, X, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useWebSocket } from "@/lib/useWebSocket";
-import { notifyServerShutdownRequested } from "@/lib/useServerConnectionNotice";
 import { safeConsoleError } from "@/lib/safeConsole";
 import { DataCleanupTab } from "./DataCleanupTab";
 import bpDragonflyGardenLogo from "@/assets/bp-dragonfly-garden-logo.png";
@@ -427,7 +426,13 @@ const getErrorStatus = (error: unknown) =>
 const isCardSize = (value: string): value is "normal" | "large" | "extra_large" =>
   value === "normal" || value === "large" || value === "extra_large";
 
-export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequest | null }) => {
+export const SettingsTab = ({
+  alertRequest,
+  onUpdateInProgressChange,
+}: {
+  alertRequest?: SettingsAlertRequest | null;
+  onUpdateInProgressChange?: (inProgress: boolean) => void;
+}) => {
   const { t } = useTranslation();
   const [hours, setHours] = useState({
     start: "09:00",
@@ -489,8 +494,6 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
   const [versionInfo, setVersionInfo] = useState<VersionCheckResult | null>(null);
   const [updateInProgress, setUpdateInProgress] = useState(false);
   const [updateMsg, setUpdateMsg] = useState<{ text: string; isError: boolean } | null>(null);
-  const [shutdownRequested, setShutdownRequested] = useState(false);
-  const [shutdownError, setShutdownError] = useState<string | null>(null);
 
   // Printer management state
   const [printers, setPrinters] = useState<DiscoveredPrinter[]>([]);
@@ -752,6 +755,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
       `DragonFly Garden will validate commit ${reviewedCommit.slice(0, 12)} in a separate temporary worktree, run backend tests, build the frontend, then fast-forward this installation. It will not change restaurant data or .env files. Make sure a current backup is verified and no orders or payments are in progress. The backend must be restarted afterward. Continue?`,
       async () => {
         setUpdateInProgress(true);
+        onUpdateInProgressChange?.(true);
         setUpdateMsg({ text: "Validating the update in a temporary workspace. This may take several minutes...", isError: false });
         try {
           const result = await performSystemUpdate(reviewedCommit);
@@ -772,27 +776,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
           setUpdateMsg({ text: `❌ Update failed: ${getErrorMessage(err)}`, isError: true });
         } finally {
           setUpdateInProgress(false);
-        }
-      }
-    );
-  };
-
-  const handleRequestShutdown = () => {
-    showConfirmation(
-      "Stop DragonFly Garden?",
-      "Make sure no orders or payments are in progress. This will stop new requests, disconnect open browser sessions, and then wait for active background work before closing the database. The app will not be available again until the server is started using its normal startup method. Proceed?",
-      async () => {
-        setShutdownError(null);
-        try {
-          const result = await requestSystemShutdown();
-          if (!result.success) {
-            throw new Error(result.message || "The server did not accept the shutdown request.");
-          }
-          setShutdownRequested(true);
-          notifyServerShutdownRequested();
-        } catch (err: unknown) {
-          safeConsoleError("Server shutdown request failed", err);
-          setShutdownError(getErrorMessage(err));
+          onUpdateInProgressChange?.(false);
         }
       }
     );
@@ -1587,34 +1571,6 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-2 border-amber-200 bg-amber-50/60">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Power className="h-5 w-5 text-amber-700" />
-            <CardTitle className="text-lg text-amber-950">{t("m.settings.serverControl")}</CardTitle>
-          </div>
-          <CardDescription>
-            {t("m.settings.shutdownDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {shutdownError && (
-            <div role="alert" className="rounded-lg border border-red-300 bg-red-100 p-3 text-sm text-red-800">
-              {t("m.settings.shutdownError", { error: shutdownError })}
-            </div>
-          )}
-          <Button
-            onClick={handleRequestShutdown}
-            disabled={updateInProgress || shutdownRequested}
-            variant="destructive"
-            className="gap-2"
-          >
-            <Power className="h-4 w-4" />
-            {t("m.settings.shutdownEveryone")}
-          </Button>
         </CardContent>
       </Card>
 
