@@ -4,7 +4,7 @@
  * This file exports two components:
  *
  *   GardenAtmosphere — The full-screen animated background layer. It renders
- *     soft glowing blobs (sun and moss), drifting leaves, and falling flowers.
+ *     soft moving ink washes, glowing blobs, drifting leaves, and falling flowers.
  *     All elements are purely decorative, marked aria-hidden, and use
  *     pointer-events: none so they never interfere with interaction.
  *     The leaf and flower arrays are generated once on mount (in useEffect)
@@ -55,6 +55,10 @@ export const GardenAtmosphere = ({ disableEffects = false }: { disableEffects?: 
         className="absolute -top-32 -right-32 h-80 w-80 rounded-full blur-3xl opacity-40"
         style={{ background: "radial-gradient(circle, hsl(38 90% 65%), transparent 70%)" }}
       />
+      {/* Slowly drifting color washes add depth without competing with content. */}
+      <div className="garden-ink-flow garden-ink-flow--jade" />
+      <div className="garden-ink-flow garden-ink-flow--amber" />
+
       {/* Cool mossy glow in the bottom-left — always visible. */}
       <div
         className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-30"

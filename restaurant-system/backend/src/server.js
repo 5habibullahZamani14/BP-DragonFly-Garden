@@ -21,7 +21,9 @@ const fs = require("fs");
 const os = require("os");
 const express = require("express");
 const http = require("http");
+const https = require("https");
 const cors = require("cors");
+const compression = require("compression");
 const { WebSocketServer } = require("ws");
 const { clientShouldReceive, sanitizeCustomerRealtimeEvent } = require("./websocketAccess");
 const helmet = require("helmet");
@@ -71,7 +73,17 @@ const { compressImagesInDirectory } = require("./utils/imageCompressor");
 const db = require("./database/db");
 const printerService = require("./services/printerService");
 
-const DEFAULT_CAPTIVE_PORTAL_TARGET = "http://10.42.0.1:5000/";
+const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH?.trim();
+const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH?.trim();
+if (Boolean(HTTPS_KEY_PATH) !== Boolean(HTTPS_CERT_PATH)) {
+  throw new Error("HTTPS_KEY_PATH and HTTPS_CERT_PATH must both be configured to enable HTTPS.");
+}
+const HTTPS_ENABLED = Boolean(HTTPS_KEY_PATH && HTTPS_CERT_PATH);
+const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(TRUST_PROXY_HOPS) || TRUST_PROXY_HOPS < 0) {
+  throw new Error("TRUST_PROXY_HOPS must be a non-negative integer.");
+}
+const DEFAULT_CAPTIVE_PORTAL_TARGET = `${HTTPS_ENABLED ? "https" : "http"}://10.42.0.1:5000/`;
 const normalizeUrl = (value) => {
   if (!value || typeof value !== "string") return DEFAULT_CAPTIVE_PORTAL_TARGET;
   const trimmed = value.trim();
@@ -110,7 +122,8 @@ const getServerBaseUrlFromRequest = (req) => {
   const localIp = getLocalNetworkAddress();
   const port = req.socket?.localPort || Number(process.env.PORT) || 5000;
   if (localIp) {
-    return `http://${localIp}:${port}`;
+    const protocol = req.secure || req.socket?.encrypted ? "https" : "http";
+    return `${protocol}://${localIp}:${port}`;
   }
 
   return null;
@@ -127,7 +140,10 @@ const resolveCaptivePortalTarget = async (req) => {
   if (localIp !== "10.42.0.1") {
     const requestHostUrl = getServerBaseUrlFromRequest(req);
     if (requestHostUrl) return normalizeUrl(requestHostUrl);
-    if (localIp) return normalizeUrl(`http://${localIp}:${port}`);
+    if (localIp) {
+      const protocol = req.secure || req.socket?.encrypted ? "https" : "http";
+      return normalizeUrl(`${protocol}://${localIp}:${port}`);
+    }
   }
 
   try {
@@ -155,7 +171,17 @@ const resolveCaptivePortalTarget = async (req) => {
  */
 let isShuttingDown = false;
 const app = express();
-const server = http.createServer(app);
+if (TRUST_PROXY_HOPS > 0) app.set("trust proxy", TRUST_PROXY_HOPS);
+const server = HTTPS_ENABLED
+  ? https.createServer({
+    key: fs.readFileSync(path.resolve(process.cwd(), HTTPS_KEY_PATH)),
+    cert: fs.readFileSync(path.resolve(process.cwd(), HTTPS_CERT_PATH)),
+  }, app)
+  : http.createServer(app);
+
+if (!HTTPS_ENABLED && !["127.0.0.1", "::1", "localhost"].includes(process.env.HOST || "0.0.0.0")) {
+  console.warn("[Security] Server is listening without TLS. Use HTTPS_KEY_PATH and HTTPS_CERT_PATH before exposing it to an untrusted network.");
+}
 
 /* Attach the WebSocket server to the same HTTP server. */
 const wss = new WebSocketServer({ server });
@@ -171,7 +197,10 @@ wss.on("connection", async (ws, req) => {
   }
 
   try {
-    const wsProtocol = req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || (req.socket.encrypted ? "https" : "http");
+    const forwardedProtocol = TRUST_PROXY_HOPS > 0
+      ? req.headers["x-forwarded-proto"]?.split(",")[0]?.trim()
+      : null;
+    const wsProtocol = forwardedProtocol || (req.socket.encrypted ? "https" : "http");
     if (!isTrustedOrigin(req.headers.origin, req.headers.host, allowedOrigins, allowDevelopmentPort, wsProtocol)) {
       ws.close(4003, "WebSocket origin is not allowed");
       return;
@@ -246,7 +275,12 @@ const frontendDistPath = path.resolve(__dirname, "../../../frontend/dist");
 /* Configure CORS: permissive in dev, restricted in production via CORS_ALLOWED_ORIGINS */
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean);
 const allowDevelopmentPort = process.env.VITE_DEV_MODE === "1";
-const getRequestProtocol = req => req.headers["x-forwarded-proto"]?.split(",")[0]?.trim() || req.protocol;
+const getRequestProtocol = req => {
+  const forwardedProtocol = TRUST_PROXY_HOPS > 0
+    ? req.headers["x-forwarded-proto"]?.split(",")[0]?.trim()
+    : null;
+  return forwardedProtocol || req.protocol;
+};
 app.use(cors((req, callback) => {
   const origin = req.get("Origin");
   if (!origin) return callback(null, { origin: false, credentials: true });
@@ -260,13 +294,32 @@ app.use(createTrustedOriginMiddleware(allowedOrigins, allowDevelopmentPort, getR
 // Apply basic security headers
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'self'"],
+        workerSrc: ["'self'", "blob:"],
+        upgradeInsecureRequests: null,
+      },
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
     originAgentCluster: false,
     referrerPolicy: { policy: "no-referrer" },
   }),
 );
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => req.originalUrl.startsWith("/assets/") && compression.filter(req, res),
+}));
 
 /* Parse incoming JSON request bodies, capped at 100 KB to prevent abuse. */
 app.use(express.json({ limit: "100kb" }));
@@ -370,13 +423,13 @@ app.get(
  * Express serves its contents. This is only active in production — during
  * development the Vite dev server handles the frontend separately.
  */
-app.use((req, res, next) => {
-  if (fs.existsSync(frontendDistPath)) {
-    express.static(frontendDistPath)(req, res, next);
-  } else {
-    next();
-  }
-});
+if (fs.existsSync(frontendDistPath)) {
+  app.use("/assets", express.static(path.join(frontendDistPath, "assets"), {
+    maxAge: "1y",
+    immutable: true,
+  }));
+  app.use(express.static(frontendDistPath));
+}
 
 /*
  * SPA fallback route. Any URL that does not match an API path gets served
@@ -596,7 +649,7 @@ const startServer = async () => {
     const feedbackImagesDir = path.resolve(__dirname, "../../../frontend/public/feedback-images");
 
     server.listen(PORT, HOST, () => {
-      console.log(`Server running on http://${HOST}:${PORT}`);
+      console.log(`Server running on ${HTTPS_ENABLED ? "https" : "http"}://${HOST}:${PORT}`);
       const startupDurationMs = Math.round(Number(process.hrtime.bigint() - startupStartedAt) / 1e6);
       console.log(`[Startup] Server accepting connections after ${startupDurationMs} ms.`);
 

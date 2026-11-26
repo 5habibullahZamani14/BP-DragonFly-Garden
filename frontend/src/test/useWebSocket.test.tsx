@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useWebSocket, useWebSocketConnectionStatus } from "@/lib/useWebSocket";
 
 class MockWebSocket {
+  static OPEN = 1;
   static instances: MockWebSocket[] = [];
   public onopen: (() => void) | null = null;
   public onmessage: ((event: { data: string }) => void) | null = null;
@@ -162,6 +163,34 @@ describe("useWebSocket", () => {
     });
 
     expect(onReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes subscribed views when a backgrounded tab becomes visible again", async () => {
+    const onReconnect = vi.fn();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    render(<ReconnectWrapper onReconnect={onReconnect} />);
+    const socket = MockWebSocket.instances[0];
+    socket.readyState = 1;
+
+    await act(async () => {
+      socket.onopen?.();
+    });
+    expect(onReconnect).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    expect(onReconnect).toHaveBeenCalledWith();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+      window.dispatchEvent(new Event("online"));
+    });
+    expect(onReconnect).toHaveBeenCalledTimes(2);
   });
 
   it("delivers server data-refresh events to subscribed views", async () => {

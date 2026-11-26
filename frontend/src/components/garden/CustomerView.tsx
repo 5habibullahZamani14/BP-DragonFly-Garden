@@ -1015,12 +1015,12 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
       {showDuplicateWarning && (
         <div className="popup-backdrop fixed inset-0 z-[100] flex items-center justify-center px-5">
           <div className="popup-surface w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up">
-            <div className="px-6 pt-6 pb-4" style={{ background: "var(--gradient-hero)" }}>
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
+            <div className="popup-frame-header px-6 py-5">
+              <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-amber-200 bg-white/80 text-amber-700 shadow-sm">
                 <span className="text-2xl">⚠️</span>
               </div>
-              <h2 className="font-1 text-xl font-bold text-primary-foreground leading-snug">{t("customer.dupTitle")}</h2>
-              <p className="mt-1 text-sm text-primary-foreground/75">{t("customer.dupDesc")}</p>
+              <h2 className="font-1 text-xl font-bold leading-snug text-slate-900">{t("customer.dupTitle")}</h2>
+              <p className="mt-1 text-sm text-slate-600">{t("customer.dupDesc")}</p>
             </div>
             <div className="px-5 py-4 flex flex-col gap-2.5">
               <button
@@ -2092,7 +2092,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
             <div className="relative flex h-full flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-5 pb-[calc(10rem+env(safe-area-inset-bottom))]">
                 <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
-            <div className="mb-4 flex items-center justify-between">
+            <div className="popup-dialog-header mb-4 flex items-center justify-between">
               <div>
                 <span className="eyebrow">{t("customer.checkout")}</span>
                 <h2 className="mt-1 font-1 text-2xl font-semibold">{t("customer.yourCart")}</h2>
@@ -2256,7 +2256,7 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
             </div>
 
             {/* Header */}
-            <div className="px-5 pb-3 pt-2 shrink-0 border-b">
+            <div className="popup-frame-header shrink-0 px-5 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="font-1 text-xl font-bold leading-tight truncate">{optionSheetItem.name}</h2>

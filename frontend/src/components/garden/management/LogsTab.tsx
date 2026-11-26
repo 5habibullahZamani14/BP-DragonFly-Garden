@@ -38,7 +38,6 @@ import CardFilters from "@/components/ui/CardFilters";
 import { ChartSkeleton, TableSkeleton } from "@/components/ui/LoadingSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { matchesTimeframe, type TimeframeValue } from "@/lib/parseDbTimestamp";
-import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { safeConsoleError } from "@/lib/safeConsole";
 import { useWebSocket } from "@/lib/useWebSocket";
@@ -239,7 +238,8 @@ export const LogsTab = () => {
 
   const downloadExcel = async () => {
     if (filteredLogs.length === 0) return;
-    
+
+    const { default: ExcelJS } = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Grand Archive Logs');
 

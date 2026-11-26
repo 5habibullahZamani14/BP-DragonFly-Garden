@@ -3,6 +3,7 @@ const test = require("node:test");
 const {
   clearAuthCookie,
   getAuthCookieValue,
+  PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS,
   setAuthCookie
 } = require("./authCookies");
 
@@ -29,7 +30,18 @@ test("logout clears the role cookie without requiring a secure transport", () =>
   assert.doesNotMatch(headers["Set-Cookie"], /; Secure$/);
 });
 
-test("auth cookies are Secure behind an HTTPS-terminating proxy", () => {
+test("auth cookies use Secure when Express marks the request as HTTPS", () => {
+  const headers = {};
+  setAuthCookie(
+    { setHeader: (name, value) => { headers[name] = value; } },
+    { secure: true },
+    "manager",
+    "a.jwt.value"
+  );
+  assert.match(headers["Set-Cookie"], /; Secure$/);
+});
+
+test("untrusted forwarded protocol headers do not mark cookies Secure", () => {
   const headers = {};
   setAuthCookie(
     { setHeader: (name, value) => { headers[name] = value; } },
@@ -37,7 +49,7 @@ test("auth cookies are Secure behind an HTTPS-terminating proxy", () => {
     "manager",
     "a.jwt.value"
   );
-  assert.match(headers["Set-Cookie"], /; Secure$/);
+  assert.doesNotMatch(headers["Set-Cookie"], /; Secure$/);
 });
 
 test("feedback access uses a long-lived HttpOnly cookie without overwriting other cookies", () => {
@@ -70,4 +82,16 @@ test("customer table sessions use an HttpOnly, short-lived, role-scoped cookie",
   assert.match(headers["Set-Cookie"], /HttpOnly/);
   assert.equal(getAuthCookieValue(headers["Set-Cookie"], "customer_table"), "table-session");
   assert.equal(getAuthCookieValue(headers["Set-Cookie"], "manager"), null);
+});
+
+test("payment counter sessions have a 12-hour maximum lifetime", () => {
+  const headers = {};
+  setAuthCookie(
+    { setHeader: (name, value) => { headers[name] = value; } },
+    { secure: true },
+    "payment_counter",
+    "payment-session",
+    PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS
+  );
+  assert.match(headers["Set-Cookie"], /Max-Age=43200/);
 });

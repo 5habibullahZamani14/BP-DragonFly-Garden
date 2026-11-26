@@ -98,6 +98,7 @@ const safeFetch = async <T>(path: string, init?: RequestInit, _qr?: string): Pro
   const finalInit: RequestInit = {
     ...init,
     headers,
+    cache: init?.cache ?? "no-store",
     credentials: init?.credentials ?? "include",
   };
 

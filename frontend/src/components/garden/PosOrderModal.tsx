@@ -74,7 +74,7 @@ export function PosOrderModal({ isOpen, onOpenChange, initialOrderType, menuItem
     if (isOpen) void loadTables();
   }, [isOpen, loadTables]);
 
-  useWebSocket(["TABLE_UPDATE", "DATA_REFRESH"], () => {
+  useWebSocket(["TABLE_UPDATE", "DATA_REFRESH", "CONNECTION_RESTORED"], () => {
     void loadTables();
   }, "payment_counter", isOpen);
 

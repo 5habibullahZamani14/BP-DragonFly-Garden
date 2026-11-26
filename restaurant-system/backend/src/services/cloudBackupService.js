@@ -35,6 +35,18 @@ const createS3Client = () => {
   });
 };
 
+const ensurePrivateDirectory = (directoryPath) => {
+  fs.mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") fs.chmodSync(directoryPath, 0o700);
+};
+
+const validateBackupEncryptionKey = (base64Key) => {
+  if (!base64Key) throw new Error("BACKUP_ENC_KEY not configured; cannot create backups");
+  const key = Buffer.from(base64Key, "base64");
+  if (key.length !== 32) throw new Error("BACKUP_ENC_KEY must be 32 bytes (base64-encoded)");
+  return key;
+};
+
 /**
  * Internal upload function (not wrapped with circuit breaker).
  * This is the actual implementation that gets wrapped.
@@ -85,9 +97,7 @@ const uploadToCloud = async (filePath) => {
 
 // Encrypt a file using AES-256-GCM. The provided key must be a base64-encoded 32-byte key.
 const encryptFile = (inputPath, outputPath, base64Key) => {
-  if (!base64Key) throw new Error("BACKUP_ENC_KEY not configured; cannot encrypt backups");
-  const key = Buffer.from(base64Key, "base64");
-  if (key.length !== 32) throw new Error("BACKUP_ENC_KEY must be 32 bytes (base64-encoded)");
+  const key = validateBackupEncryptionKey(base64Key);
 
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
@@ -98,13 +108,12 @@ const encryptFile = (inputPath, outputPath, base64Key) => {
 
   // Output format: [iv (12)][authTag (16)][ciphertext]
   const out = Buffer.concat([iv, authTag, encrypted]);
-  fs.writeFileSync(outputPath, out);
+  fs.writeFileSync(outputPath, out, { mode: 0o600 });
+  if (process.platform !== "win32") fs.chmodSync(outputPath, 0o600);
 };
 
 const decryptFile = (inputPath, outputPath, base64Key) => {
-  if (!base64Key) throw new Error("BACKUP_ENC_KEY not configured; cannot decrypt backups");
-  const key = Buffer.from(base64Key, "base64");
-  if (key.length !== 32) throw new Error("BACKUP_ENC_KEY must be 32 bytes (base64-encoded)");
+  const key = validateBackupEncryptionKey(base64Key);
 
   const data = fs.readFileSync(inputPath);
   const iv = data.slice(0, 12);
@@ -114,7 +123,8 @@ const decryptFile = (inputPath, outputPath, base64Key) => {
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(authTag);
   const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  fs.writeFileSync(outputPath, decrypted);
+  fs.writeFileSync(outputPath, decrypted, { mode: 0o600 });
+  if (process.platform !== "win32") fs.chmodSync(outputPath, 0o600);
 };
 
 const listCloudBackups = async () => {
@@ -137,9 +147,10 @@ const listCloudBackups = async () => {
 
 const downloadCloudBackup = async (key, destinationPath) => {
   const s3 = createS3Client();
+  ensurePrivateDirectory(path.dirname(destinationPath));
   return new Promise((resolve, reject) => {
     const readStream = s3.getObject({ Bucket: process.env.B2_BUCKET_NAME, Key: key }).createReadStream();
-    const writeStream = fs.createWriteStream(destinationPath);
+    const writeStream = fs.createWriteStream(destinationPath, { mode: 0o600 });
 
     readStream.on("error", reject);
     writeStream.on("error", reject);
@@ -150,6 +161,10 @@ const downloadCloudBackup = async (key, destinationPath) => {
 };
 
 const createLocalBackupOnly = async (backupDir) => {
+  const encKey = process.env.BACKUP_ENC_KEY || null;
+  validateBackupEncryptionKey(encKey);
+  ensurePrivateDirectory(backupDir);
+
   const dbPath = path.join(__dirname, "../database/database.sqlite");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const tarName = `full_backup_${timestamp}.tar.gz`;
@@ -163,15 +178,6 @@ const createLocalBackupOnly = async (backupDir) => {
   if (fs.existsSync(frontendMenuImages)) toInclude.push(frontendMenuImages);
   if (fs.existsSync(frontendFeedbackImages)) toInclude.push(frontendFeedbackImages);
 
-  const backendLogs = path.resolve(__dirname, "../../logs");
-  if (fs.existsSync(backendLogs)) toInclude.push(backendLogs);
-
-  const backendDir = path.resolve(__dirname, "../..");
-  const envFile = path.join(backendDir, ".env");
-  const envLocal = path.join(backendDir, ".env.local");
-  if (fs.existsSync(envFile)) toInclude.push(envFile);
-  if (fs.existsSync(envLocal)) toInclude.push(envLocal);
-
   const uploadsDir = path.resolve(__dirname, "../../uploads");
   if (fs.existsSync(uploadsDir)) toInclude.push(uploadsDir);
 
@@ -180,19 +186,19 @@ const createLocalBackupOnly = async (backupDir) => {
     return;
   }
 
-  const args = ["-czf", tarPath, ...toInclude];
-  const tar = spawnSync("tar", args, { stdio: "inherit" });
-  if (tar.error) throw tar.error;
-  if (tar.status !== 0) throw new Error(`tar exited with code ${tar.status}`);
+  try {
+    const args = ["-czf", tarPath, ...toInclude];
+    const tar = spawnSync("tar", args, { stdio: "inherit" });
+    if (tar.error) throw tar.error;
+    if (tar.status !== 0) throw new Error(`tar exited with code ${tar.status}`);
 
-  const encKey = process.env.BACKUP_ENC_KEY || null;
-  if (encKey) {
+    if (process.platform !== "win32") fs.chmodSync(tarPath, 0o600);
     const encPath = `${tarPath}.enc`;
     encryptFile(tarPath, encPath, encKey);
-    try { fs.unlinkSync(tarPath); } catch (e) {}
+    cleanupOldBackups(backupDir);
+  } finally {
+    if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
   }
-
-  cleanupOldBackups(backupDir);
 };
 
 const uploadLatestLocalBackupToCloud = async (backupDir) => {
@@ -210,6 +216,9 @@ const uploadLatestLocalBackupToCloud = async (backupDir) => {
   if (!fs.existsSync(filePath)) return;
 
   const encKey = process.env.BACKUP_ENC_KEY || null;
+  if (filePath.endsWith(".tar.gz") && process.platform !== "win32") {
+    fs.chmodSync(filePath, 0o600);
+  }
   if (!encKey && filePath.endsWith(".tar.gz")) {
     console.error("[Cloud Backup] BACKUP_ENC_KEY not configured; refusing to upload an unencrypted backup.");
     return;
@@ -218,21 +227,80 @@ const uploadLatestLocalBackupToCloud = async (backupDir) => {
   if (filePath.endsWith(".tar.gz")) {
     const encPath = `${filePath}.enc`;
     encryptFile(filePath, encPath, encKey);
-    await uploadToCloud(encPath);
+    const uploaded = await uploadToCloud(encPath);
+    if (uploaded === true) await pruneExpiredCloudBackups();
     try { fs.unlinkSync(encPath); } catch (e) {}
     return;
   }
 
-  await uploadToCloud(filePath);
+  const uploaded = await uploadToCloud(filePath);
+  if (uploaded === true) await pruneExpiredCloudBackups();
+};
+
+const pruneExpiredCloudBackups = async (s3Client, now = Date.now()) => {
+  const configuredDays = process.env.B2_BACKUP_RETENTION_DAYS?.trim();
+  if (!configuredDays) return 0;
+  if (!/^\d+$/.test(configuredDays) || Number(configuredDays) < 1 || Number(configuredDays) > 3650) {
+    throw new Error("B2_BACKUP_RETENTION_DAYS must be a whole number between 1 and 3650.");
+  }
+
+  const bucket = process.env.B2_BUCKET_NAME;
+  const s3 = s3Client || createS3Client();
+  const backups = [];
+  let continuationToken;
+  do {
+    const page = await s3.listObjectsV2({
+      Bucket: bucket,
+      Prefix: "full_backup_",
+      ContinuationToken: continuationToken,
+    }).promise();
+    backups.push(...(page.Contents || []).filter((item) =>
+      item.Key &&
+      item.Key.startsWith("full_backup_") &&
+      (item.Key.endsWith(".tar.gz.enc") || item.Key.endsWith(".tar.gz")) &&
+      item.LastModified
+    ));
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  if (backups.length < 2) return 0;
+
+  const newest = backups.reduce((latest, item) =>
+    new Date(item.LastModified).getTime() > new Date(latest.LastModified).getTime() ? item : latest
+  );
+  const cutoff = now - Number(configuredDays) * 24 * 60 * 60 * 1000;
+  const expiredKeys = backups
+    .filter((item) => item.Key !== newest.Key && new Date(item.LastModified).getTime() < cutoff)
+    .map((item) => ({ Key: item.Key }));
+
+  for (let index = 0; index < expiredKeys.length; index += 1000) {
+    const response = await s3.deleteObjects({
+      Bucket: bucket,
+      Delete: { Objects: expiredKeys.slice(index, index + 1000), Quiet: true },
+    }).promise();
+    if (response.Errors?.length) {
+      throw new Error(`Cloud backup retention failed to delete ${response.Errors.length} expired object(s).`);
+    }
+  }
+
+  if (expiredKeys.length) {
+    console.log(`[Cloud Backup] Removed ${expiredKeys.length} remote backup(s) older than ${configuredDays} days.`);
+  }
+  return expiredKeys.length;
 };
 
 const executeNightlyCloudBackup = async () => {
+  const encKey = process.env.BACKUP_ENC_KEY || null;
+  if (!encKey) {
+    console.error("[Cloud Backup] BACKUP_ENC_KEY not configured; refusing to create an unencrypted backup.");
+    return;
+  }
+  validateBackupEncryptionKey(encKey);
+
   const dbPath = path.join(__dirname, "../database/database.sqlite");
   const backupDir = path.join(__dirname, "../../../full-auto-backup");
 
-  if (!fs.existsSync(backupDir)) {
-    fs.mkdirSync(backupDir, { recursive: true });
-  }
+  ensurePrivateDirectory(backupDir);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const tarName = `full_backup_${timestamp}.tar.gz`;
@@ -249,17 +317,6 @@ const executeNightlyCloudBackup = async () => {
   const frontendFeedbackImages = path.resolve(__dirname, "../../../frontend/public/feedback-images");
   if (fs.existsSync(frontendMenuImages)) toInclude.push(frontendMenuImages);
   if (fs.existsSync(frontendFeedbackImages)) toInclude.push(frontendFeedbackImages);
-
-  // Backend logs
-  const backendLogs = path.resolve(__dirname, "../../logs");
-  if (fs.existsSync(backendLogs)) toInclude.push(backendLogs);
-
-  // Env files (sensitive) - these will be included and encrypted
-  const backendDir = path.resolve(__dirname, "../..");
-  const envFile = path.join(backendDir, ".env");
-  const envLocal = path.join(backendDir, ".env.local");
-  if (fs.existsSync(envFile)) toInclude.push(envFile);
-  if (fs.existsSync(envLocal)) toInclude.push(envLocal);
 
   // Any additional data directories that look relevant
   const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -282,28 +339,21 @@ const executeNightlyCloudBackup = async () => {
     if (tar.status !== 0) {
       throw new Error(`tar exited with code ${tar.status}`);
     }
+    if (process.platform !== "win32") fs.chmodSync(tarPath, 0o600);
 
-    // Encrypt archive using AES-256-GCM if BACKUP_ENC_KEY provided
-    const encKey = process.env.BACKUP_ENC_KEY || null;
-    if (!encKey) {
-      console.error("[Cloud Backup] BACKUP_ENC_KEY not configured; refusing to upload unencrypted backup.");
-      // Keep local tar but do not upload unencrypted
-      cleanupOldBackups(backupDir);
-      return;
-    }
-
+    // Never leave an unencrypted backup on disk.
     encryptFile(tarPath, encPath, encKey);
 
     // Upload encrypted archive
-    await uploadToCloud(encPath);
-
-    // Optionally remove plaintext tar
-    try { fs.unlinkSync(tarPath); } catch (e) {}
+    const uploaded = await uploadToCloud(encPath);
+    if (uploaded === true) await pruneExpiredCloudBackups();
 
     // Clean up old local backups (both .tar.gz.enc and older patterns)
     cleanupOldBackups(backupDir);
   } catch (error) {
     console.error("[Cloud Backup] Failed to execute nightly cloud backup:", error);
+  } finally {
+    if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
   }
 };
 
@@ -419,6 +469,7 @@ module.exports = {
   encryptFile,
   createLocalBackupOnly,
   uploadLatestLocalBackupToCloud,
+  pruneExpiredCloudBackups,
   downloadAndDecryptBackup: async (keyName, destinationPath) => {
     const tmpDir = path.join(__dirname, "../../../full-auto-backup");
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });

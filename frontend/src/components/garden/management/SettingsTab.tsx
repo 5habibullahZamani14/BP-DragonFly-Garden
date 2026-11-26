@@ -846,6 +846,7 @@ export const SettingsTab = ({
     if (showLoading || !hasLoadedPrinterJobsRef.current) setPrinterJobsLoading(true);
     try {
       const response = await fetch("/management/printers/jobs/review", {
+        cache: "no-store",
         credentials: "include",
         headers: { "Content-Type": "application/json" }
       });
@@ -890,6 +891,7 @@ export const SettingsTab = ({
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch("/management/printers/discover?refresh=true", {
+        cache: "no-store",
         credentials: "include",
         headers: {
           "Content-Type": "application/json"

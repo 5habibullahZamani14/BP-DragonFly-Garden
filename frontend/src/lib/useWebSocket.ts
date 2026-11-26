@@ -181,8 +181,37 @@ export const useWebSocket = (
     let reconnectAttempts = 0;
     let hasConnectedBefore = false;
     let cleanupRequested = false;
+    let lastRefreshSignalAt: number | null = null;
+    let wasVisible = document.visibilityState === "visible";
     let currentWs: WebSocket | null = null;
     const connection = registerConnection();
+
+    const notifyConnectionRestored = (reason: "reconnected" | "page_resumed" | "network_online") => {
+      if (
+        !hasConnectedBefore ||
+        (reason !== "reconnected" && currentWs?.readyState !== WebSocket.OPEN) ||
+        !eventTypesRef.current.includes("CONNECTION_RESTORED")
+      ) return;
+
+      const now = Date.now();
+      if (
+        reason !== "reconnected" &&
+        lastRefreshSignalAt !== null &&
+        now - lastRefreshSignalAt < 1000
+      ) return;
+      lastRefreshSignalAt = now;
+      callbackRef.current({ type: "CONNECTION_RESTORED", payload: { reason } });
+    };
+
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === "visible";
+      if (isVisible && !wasVisible) notifyConnectionRestored("page_resumed");
+      wasVisible = isVisible;
+    };
+
+    const handleOnline = () => {
+      if (document.visibilityState === "visible") notifyConnectionRestored("network_online");
+    };
 
     const scheduleReconnect = () => {
       if (cleanupRequested) return;
@@ -210,9 +239,7 @@ export const useWebSocket = (
           }
           connection.setConnected(true);
           setIsConnected(true);
-          if (hasConnectedBefore && eventTypesRef.current.includes("CONNECTION_RESTORED")) {
-            callbackRef.current({ type: "CONNECTION_RESTORED", payload: null });
-          }
+          if (hasConnectedBefore) notifyConnectionRestored("reconnected");
           hasConnectedBefore = true;
           if (stableConnectionTimeout !== undefined) clearTimeout(stableConnectionTimeout);
           stableConnectionTimeout = setTimeout(() => {
@@ -254,11 +281,15 @@ export const useWebSocket = (
       }
     };
 
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
     connect();
 
     /* Cleanup: cancel the reconnect timer and close the socket on unmount. */
     return () => {
       cleanupRequested = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
       clearTimeout(reconnectTimeout);
       if (stableConnectionTimeout !== undefined) clearTimeout(stableConnectionTimeout);
       connection.unregister();

@@ -334,6 +334,70 @@
     background-color: hsl(var(--card));
   }
 
+  .garden-ink-flow {
+    position: absolute;
+    width: min(64vw, 56rem);
+    height: min(50vw, 42rem);
+    border-radius: 50%;
+    opacity: 0.12;
+    filter: blur(72px);
+    mix-blend-mode: multiply;
+    pointer-events: none;
+    will-change: transform;
+  }
+  .garden-ink-flow--jade {
+    top: -12vh;
+    left: -20vw;
+    background:
+      radial-gradient(ellipse at 36% 42%, hsl(149 48% 42% / 0.42), transparent 68%),
+      radial-gradient(ellipse at 70% 62%, hsl(160 40% 35% / 0.22), transparent 64%);
+    animation: garden-ink-drift 88s ease-in-out infinite alternate;
+  }
+  .garden-ink-flow--amber {
+    right: -22vw;
+    bottom: -22vh;
+    background:
+      radial-gradient(ellipse at 40% 45%, hsl(34 78% 58% / 0.34), transparent 68%),
+      radial-gradient(ellipse at 70% 60%, hsl(8 52% 56% / 0.18), transparent 64%);
+    animation: garden-ink-drift 104s ease-in-out -48s infinite alternate-reverse;
+  }
+  .card-shell {
+    border-color: hsl(var(--border) / 0.72);
+    background-image: linear-gradient(148deg, hsl(var(--card)) 8%, hsl(var(--secondary) / 0.72) 100%);
+    box-shadow: var(--shadow-card);
+    transition: border-color 240ms ease, box-shadow 280ms ease, transform 280ms var(--ease-out);
+  }
+  .card-shell:hover {
+    border-color: hsl(var(--accent) / 0.42);
+    box-shadow: var(--shadow-pop);
+  }
+  .garden-toolbar {
+    position: relative;
+    isolation: isolate;
+    border: 1px solid hsl(40 32% 80% / 0.82);
+    border-radius: 1.75rem;
+    background: linear-gradient(118deg, hsl(var(--card) / 0.96), hsl(43 48% 95% / 0.92) 58%, hsl(151 28% 93% / 0.94));
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(16px) saturate(115%);
+    -webkit-backdrop-filter: blur(16px) saturate(115%);
+  }
+  .garden-tooltray {
+    border: 1px solid hsl(var(--border) / 0.52);
+    border-radius: 1.25rem;
+    background: hsl(var(--card) / 0.64);
+    box-shadow: var(--shadow-inset-light);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .garden-command-rail {
+    border: 1px solid hsl(40 32% 80% / 0.75);
+    border-radius: 1.35rem;
+    background: linear-gradient(110deg, hsl(var(--card) / 0.85), hsl(var(--secondary) / 0.8));
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
   .popup-media {
     background-color: rgb(0 0 0 / 90%);
     background-image: none;
@@ -809,6 +873,11 @@
 }
 
 /* ============== Keyframes ============== */
+@keyframes garden-ink-drift {
+  0% { transform: translate3d(-2%, -1%, 0) rotate(-5deg) scale(0.96); }
+  50% { transform: translate3d(4%, 3%, 0) rotate(4deg) scale(1.04); }
+  100% { transform: translate3d(-1%, 5%, 0) rotate(-2deg) scale(1); }
+}
 @keyframes ink-drift {
   0%, 100% { transform: translate(-6%, -4%) scale(1); }
   25%      { transform: translate(8%, 3%)  scale(1.08); }
@@ -1057,6 +1126,7 @@ body { overflow-wrap: anywhere; word-break: break-word; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .garden-ink-flow { animation: none !important; }
   .connection-outage-panel,
   .connection-robot-head,
   .connection-robot-arm-left,
@@ -1083,5 +1153,124 @@ body { overflow-wrap: anywhere; word-break: break-word; }
     align-items: center;
     margin: 0;
     padding: 0;
+  }
+}
+
+.popup-dialog-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid hsl(40 85% 78% / 0.75);
+  border-radius: 1rem;
+  padding: 1.25rem 3.25rem 1.25rem 1.5rem;
+  background: linear-gradient(110deg, hsl(46 100% 91%), hsl(12 100% 97%) 55%, hsl(147 62% 94%));
+}
+.popup-dialog-header::after {
+  position: absolute;
+  z-index: -1;
+  top: -2.5rem;
+  right: -2rem;
+  width: 10rem;
+  height: 10rem;
+  border-radius: 9999px;
+  background: hsl(0 0% 100% / 0.65);
+  content: "";
+  filter: blur(1.5rem);
+  pointer-events: none;
+}
+.popup-dialog-footer {
+  border-top: 1px solid hsl(40 85% 78% / 0.65);
+  border-radius: 0 0 1rem 1rem;
+  padding: 1rem 1.25rem;
+  background-color: hsl(var(--card));
+}
+.popup-frame-header .popup-dialog-header {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+.popup-frame-header .popup-dialog-header::after {
+  content: none;
+}
+.popup-frame-footer.popup-dialog-footer {
+  border-radius: 0;
+  padding: 1rem 1.5rem;
+}
+
+.garden-button {
+  transform-style: preserve-3d;
+  transition:
+    transform 280ms var(--ease-spring),
+    box-shadow 320ms var(--ease-out),
+    filter 280ms ease,
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.garden-button::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 50% 0%, hsl(0 0% 100% / 0.34), transparent 68%),
+    linear-gradient(108deg, transparent 30%, hsl(0 0% 100% / 0.24) 48%, transparent 66%);
+  background-size: 100% 100%, 220% 100%;
+  background-position: center, 100% center;
+  content: "";
+  opacity: 0.18;
+  pointer-events: none;
+  transition: background-position 650ms var(--ease-out), opacity 260ms ease;
+}
+.garden-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  transform: perspective(600px) translateY(-2px) rotateX(1deg);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.3) inset,
+    0 12px 22px -14px hsl(156 34% 10% / 0.55),
+    0 3px 7px -4px hsl(156 34% 10% / 0.28);
+}
+.garden-button:hover:not(:disabled):not([aria-disabled="true"])::before {
+  background-position: center, 0% center;
+  opacity: 0.75;
+}
+.garden-button:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: perspective(600px) translateY(1px) scale(0.975) rotateX(-1deg);
+  box-shadow:
+    0 2px 6px hsl(156 34% 10% / 0.2) inset,
+    0 1px 2px hsl(156 34% 10% / 0.12);
+  transition-duration: 90ms;
+}
+.garden-button:active:not(:disabled):not([aria-disabled="true"])::before {
+  opacity: 0.28;
+  transition-duration: 90ms;
+}
+.garden-button:disabled,
+.garden-button[aria-disabled="true"] {
+  filter: none;
+  transform: none;
+}
+.garden-button:disabled::before,
+.garden-button[aria-disabled="true"]::before {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .garden-ink-flow {
+    width: 90vw;
+    height: 70vw;
+    filter: blur(52px);
+    opacity: 0.09;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .garden-button:hover:not(:disabled):not([aria-disabled="true"]),
+  .garden-button:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+  .garden-button::before {
+    transition: none !important;
   }
 }

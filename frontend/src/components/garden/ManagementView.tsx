@@ -29,10 +29,10 @@
  *      every administrative task, from adding tables to managing inventory.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { formatDateTime12Hour } from "@/lib/timeFormat";
+import { LiveDateTime } from "@/components/garden/LiveDateTime";
 import type { TFunction } from "i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,14 +40,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogOut, Settings, Users, PackageOpen, FileText, Grid3X3, ArrowLeft, Loader2, Mail, DollarSign, Utensils, MessageSquare, Image as ImageIcon, Power, Home } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { FeedbackTab } from "./management/FeedbackTab";
-import { SettingsTab } from "./management/SettingsTab";
-import { MenuTab } from "./management/MenuTab";
-import { EmployeesTab } from "./management/EmployeesTab";
-import { InventoryTab } from "./management/InventoryTab";
-import { LogsTab } from "./management/LogsTab";
-import { TablesTab } from "./management/TablesTab";
-import { FinanceTab } from "./management/FinanceTab";
 import { HelpModal, HelpSection } from "./HelpModal";
 import { SettingsModal } from "./SettingsModal";
 import { managerAuth, logoutManager, getManagerSession, sendPasswordResetEmail, fetchInventory, checkSystemVersion, requestSystemShutdown } from "@/lib/api";
@@ -66,6 +58,14 @@ interface ManagementViewProps {
 
 const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
+const FeedbackTab = lazy(() => import("./management/FeedbackTab").then(({ FeedbackTab }) => ({ default: FeedbackTab })));
+const SettingsTab = lazy(() => import("./management/SettingsTab").then(({ SettingsTab }) => ({ default: SettingsTab })));
+const MenuTab = lazy(() => import("./management/MenuTab").then(({ MenuTab }) => ({ default: MenuTab })));
+const EmployeesTab = lazy(() => import("./management/EmployeesTab").then(({ EmployeesTab }) => ({ default: EmployeesTab })));
+const InventoryTab = lazy(() => import("./management/InventoryTab").then(({ InventoryTab }) => ({ default: InventoryTab })));
+const LogsTab = lazy(() => import("./management/LogsTab").then(({ LogsTab }) => ({ default: LogsTab })));
+const TablesTab = lazy(() => import("./management/TablesTab").then(({ TablesTab }) => ({ default: TablesTab })));
+const FinanceTab = lazy(() => import("./management/FinanceTab").then(({ FinanceTab }) => ({ default: FinanceTab })));
 const MANAGER_NAV_ITEMS: { tab: ManagerTab; labelKey: string; icon: LucideIcon }[] = [
   { tab: "overview", labelKey: "manager.overview", icon: Home },
   { tab: "settings", labelKey: "manager.settings", icon: Settings },
@@ -152,13 +152,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     } catch { return "overview"; }
   });
 
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [appVersion, setAppVersion] = useState<string>("");
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -245,7 +239,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
     let missedNotifications: ManagerNotification[] = [];
     try {
-      const response = await fetch("/management/printers/daily-sales-report/status", { credentials: "include" });
+      const response = await fetch("/management/printers/daily-sales-report/status", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const data = await response.json();
       if (response.ok && data.success) {
         missedNotifications = (data.reports || [])
@@ -299,7 +296,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
     let printerNotifications: ManagerNotification[] = [];
     try {
-      const response = await fetch("/management/printers/jobs/review", { credentials: "include" });
+      const response = await fetch("/management/printers/jobs/review", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const data: { success: boolean; jobs?: PrinterJobAlert[] } = await response.json();
       if (!response.ok || !data.success) throw new Error(`Request failed (HTTP ${response.status})`);
       printerNotifications = (data.jobs || []).map((job) => ({
@@ -319,7 +319,10 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
     let systemIssueNotifications: ManagerNotification[] = [];
     try {
-      const response = await fetch("/management/system-issues", { credentials: "include" });
+      const response = await fetch("/management/system-issues", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const data: { success: boolean; issues?: ManagerSystemIssue[] } = await response.json();
       if (!response.ok || !data.success) throw new Error(`Request failed (HTTP ${response.status})`);
       systemIssueNotifications = (data.issues || []).map((issue) => ({
@@ -687,7 +690,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         <div className="fixed inset-0 bg-red-600 z-[9999] pointer-events-none red-flash-overlay" />
       )}
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-8 gap-3 sm:gap-4">
+        <div className="garden-toolbar flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-8 gap-3 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <SettingsModal restrictLanguages={true} />
             {activeTab !== "overview" && (
@@ -696,7 +699,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
               </Button>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2 sm:gap-3 management-header-title">
+              <h1 className="management-header-title font-1 text-xl sm:text-3xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
                 <Settings className="h-6 w-6 sm:h-8 sm:w-8 text-green-700 shrink-0" />
                 <span className="truncate">{t("manager.dashboardTitle")}</span>
               </h1>
@@ -704,9 +707,9 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 bg-white/60 px-3 py-2 sm:px-4 rounded-2xl sm:rounded-full shadow-sm">
+          <div className="garden-tooltray flex flex-wrap items-center gap-2 sm:gap-4 px-3 py-2 sm:px-4 rounded-2xl sm:rounded-full">
             <span className="text-xs sm:text-sm font-semibold text-gray-800">
-              {formatDateTime12Hour(currentTime, true)}
+              <LiveDateTime />
             </span>
             <span className="text-sm font-medium text-gray-700 hidden sm:inline border-l border-gray-300 pl-4">
               {t("manager.userLabel")} <span className="text-green-700 font-bold">{t("manager.userAdmin")}</span>
@@ -812,7 +815,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
         {activeTab !== "overview" && (
           <nav
             aria-label={t("manager.sectionNavigation")}
-            className="mb-4 overflow-x-auto rounded-2xl border border-white/70 bg-white/50 p-1.5 shadow-sm backdrop-blur sm:mb-6"
+            className="garden-command-rail mb-4 overflow-x-auto p-1.5 sm:mb-6"
           >
             <div className="flex min-w-max gap-1">
               {MANAGER_NAV_ITEMS.map(({ tab, labelKey, icon: Icon }) => {
@@ -825,8 +828,8 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                     onClick={() => goToTab(tab)}
                     className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-700 focus-visible:ring-offset-2 ${
                       isActive
-                        ? "bg-green-700 text-white shadow-sm"
-                        : "text-gray-600 hover:bg-white/80 hover:text-green-800"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-foreground/60 hover:bg-card/80 hover:text-primary"
                     }`}
                   >
                     <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -958,19 +961,28 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           </div>
         )}
 
-        {activeTab === "settings" && (
-          <SettingsTab
-            alertRequest={settingsAlertRequest}
-            onUpdateInProgressChange={setSettingsUpdateInProgress}
-          />
-        )}
-        {activeTab === "employees" && <EmployeesTab />}
-        {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} onInventoryChanged={loadNotifications} />}
-        {activeTab === "tables" && <TablesTab />}
-        {activeTab === "logs" && <LogsTab />}
-        {activeTab === "finance" && <FinanceTab />}
-        {activeTab === "menu" && <MenuTab />}
-        {activeTab === "feedback" && <FeedbackTab notify={notify} />}
+        <Suspense
+          fallback={
+            <div className="flex min-h-40 items-center justify-center" role="status">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="sr-only">Loading management section</span>
+            </div>
+          }
+        >
+          {activeTab === "settings" && (
+            <SettingsTab
+              alertRequest={settingsAlertRequest}
+              onUpdateInProgressChange={setSettingsUpdateInProgress}
+            />
+          )}
+          {activeTab === "employees" && <EmployeesTab />}
+          {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} onInventoryChanged={loadNotifications} />}
+          {activeTab === "tables" && <TablesTab />}
+          {activeTab === "logs" && <LogsTab />}
+          {activeTab === "finance" && <FinanceTab />}
+          {activeTab === "menu" && <MenuTab />}
+          {activeTab === "feedback" && <FeedbackTab notify={notify} />}
+        </Suspense>
       </div>
     </div>
   );

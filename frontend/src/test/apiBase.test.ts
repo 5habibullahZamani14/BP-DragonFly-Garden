@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 describe("API_BASE", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.resetModules();
   });
 
@@ -22,5 +23,19 @@ describe("API_BASE", () => {
     const { API_BASE } = await import("@/lib/api");
 
     expect(API_BASE).toBe("");
+  });
+
+  it("does not cache API reads so event-triggered refreshes get current data", async () => {
+    vi.stubEnv("PROD", false);
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { fetchTables } = await import("@/lib/api");
+
+    await fetchTables();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/tables",
+      expect.objectContaining({ cache: "no-store" })
+    );
   });
 });

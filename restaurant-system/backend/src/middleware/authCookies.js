@@ -6,11 +6,11 @@ const COOKIE_NAMES = Object.freeze({
 });
 
 const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+const PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 const FEEDBACK_SESSION_MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
 const CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
-const isSecureRequest = req =>
-  req.secure === true || req.headers?.["x-forwarded-proto"]?.split(",")[0]?.trim() === "https";
+const isSecureRequest = req => req.secure === true || req.socket?.encrypted === true;
 
 const getCookieName = role => {
   const name = COOKIE_NAMES[role];
@@ -63,6 +63,7 @@ const clearAuthCookie = (res, req, role) => {
 module.exports = {
   COOKIE_NAMES,
   SESSION_MAX_AGE_SECONDS,
+  PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS,
   FEEDBACK_SESSION_MAX_AGE_SECONDS,
   CUSTOMER_TABLE_SESSION_MAX_AGE_SECONDS,
   getAuthCookieValue,

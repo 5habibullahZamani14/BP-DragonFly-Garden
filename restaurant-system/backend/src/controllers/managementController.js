@@ -30,7 +30,11 @@ const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { setAuthCookie } = require("../middleware/authCookies");
+const {
+  setAuthCookie,
+  PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS,
+} = require("../middleware/authCookies");
+const { deriveEmployeeJwtRole } = require("../utils/employeeRole");
 const { listCloudBackups, downloadCloudBackup } = require("../services/cloudBackupService");
 const { redactText } = require("../middleware/secretRedaction");
 const { createSystemUpdateService } = require("../services/systemUpdateService");
@@ -168,12 +172,6 @@ const createLog = async (category, action, actorId, actorName, targetId, targetN
     [category, action, actorId, actorName, targetId, targetName, details]
   );
   broadcastManagementEvent("LOG_UPDATE", { category, action });
-};
-
-const deriveEmployeeJwtRole = (department) => {
-  const normalized = String(department || "").trim().toLowerCase();
-  if (/payment|cashier|counter/.test(normalized)) return "payment_counter";
-  return "payment_counter";
 };
 
 /* getFinanceData returns comprehensive financial data for the dashboard (P&L, Revenue, Cost of Goods Sold) */
@@ -851,12 +849,16 @@ const verifyEmployee = async (req, res, next) => {
     );
 
     if (employee) {
+      const role = deriveEmployeeJwtRole(employee.department);
+      if (!role) {
+        return res.status(401).json({ success: false, message: "Invalid employee credentials" });
+      }
+
       if (!process.env.JWT_SECRET) {
         console.error("JWT_SECRET not configured. Refusing to issue employee auth token.");
         return res.status(500).json({ success: false, message: "Server misconfiguration: missing JWT secret" });
       }
 
-      const role = deriveEmployeeJwtRole(employee.department);
       const sessionId = crypto.randomBytes(16).toString("hex");
       const token = jwt.sign(
         {
@@ -867,20 +869,20 @@ const verifyEmployee = async (req, res, next) => {
           sessionId,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "7d" }
+        { expiresIn: `${PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS / 60 / 60}h` }
       );
 
       const sessionPayload = {
         sessionId,
         employee_id: employee.employee_id,
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        expiresAt: Date.now() + PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS * 1000,
       };
       await run(
         "INSERT INTO restaurant_settings (key, value) VALUES ('payment_counter_session', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [JSON.stringify(sessionPayload)]
       );
 
-      setAuthCookie(res, req, "payment_counter", token);
+      setAuthCookie(res, req, "payment_counter", token, PAYMENT_COUNTER_SESSION_MAX_AGE_SECONDS);
       res.json({
         success: true,
         employee: {

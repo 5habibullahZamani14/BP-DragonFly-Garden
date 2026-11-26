@@ -15,18 +15,19 @@
  * as an authentication shortcut.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { GardenAtmosphere } from "@/components/garden/GardenAtmosphere";
-import { LandingView } from "@/components/garden/LandingView";
-import { CustomerView } from "@/components/garden/CustomerView";
-import { PaymentCounterView } from "@/components/garden/PaymentCounterView";
-import { ManagementView } from "@/components/garden/ManagementView";
 import { ServerConnectionNotice } from "@/components/ServerConnectionNotice";
 import {
   isServerConnectionOutage,
   useServerConnectionNotice,
 } from "@/lib/useServerConnectionNotice";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+
+const LandingView = lazy(() => import("@/components/garden/LandingView").then(({ LandingView }) => ({ default: LandingView })));
+const CustomerView = lazy(() => import("@/components/garden/CustomerView").then(({ CustomerView }) => ({ default: CustomerView })));
+const PaymentCounterView = lazy(() => import("@/components/garden/PaymentCounterView").then(({ PaymentCounterView }) => ({ default: PaymentCounterView })));
+const ManagementView = lazy(() => import("@/components/garden/ManagementView").then(({ ManagementView }) => ({ default: ManagementView })));
 
 const TABLE_QR_PATTERN = /^table-[a-f0-9]{64}$/i;
 const LEGACY_PRIVILEGED_QR_PATTERN = /^(payment-counter|manager)-[a-z0-9_-]+$/i;
@@ -137,10 +138,19 @@ const Index = () => {
       )}
 
       {/* Render exactly one view based on the detected role. */}
-      {role === "manager" && <ManagementView qrCode={qr} notify={notify} />}
-      {role === "payment" && <PaymentCounterView qrCode={qr} notify={notify} />}
-      {role === "customer" && <CustomerView qrCode={qr} tableStorageKey={tableStorageKey} notify={notify} />}
-      {role === "landing" && <LandingView />}
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center" role="status">
+            <Loader2 className="h-7 w-7 animate-spin text-primary" />
+            <span className="sr-only">Loading application view</span>
+          </div>
+        }
+      >
+        {role === "manager" && <ManagementView qrCode={qr} notify={notify} />}
+        {role === "payment" && <PaymentCounterView qrCode={qr} notify={notify} />}
+        {role === "customer" && <CustomerView qrCode={qr} tableStorageKey={tableStorageKey} notify={notify} />}
+        {role === "landing" && <LandingView />}
+      </Suspense>
     </main>
   );
 };

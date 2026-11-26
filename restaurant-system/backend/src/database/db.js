@@ -8,6 +8,7 @@
  */
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const fs = require("fs");
 
 const dbPath = path.resolve(__dirname, "database.sqlite");
 
@@ -26,6 +27,20 @@ const open = () => {
           if (pragErr) {
             console.error("Failed to set journal_mode WAL:", pragErr);
             // Not fatal — resolve anyway with warning
+          }
+          if (process.platform !== "win32") {
+            try {
+              for (const suffix of ["", "-wal", "-shm"]) {
+                const filePath = `${dbPath}${suffix}`;
+                if (fs.existsSync(filePath)) fs.chmodSync(filePath, 0o600);
+              }
+            } catch (permissionError) {
+              console.error("Failed to restrict SQLite file permissions:", permissionError);
+              return _db.close((closeError) => {
+                _db = null;
+                reject(closeError || permissionError);
+              });
+            }
           }
           console.log("Connected to SQLite database");
           resolve(true);
