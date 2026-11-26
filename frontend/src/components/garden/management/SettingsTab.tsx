@@ -59,7 +59,9 @@ type DiscoveredPrinter = {
 type PrinterApiResponse = { success: boolean; message?: string };
 type ReceiptLayout = {
   columns: number;
+  paperWidthMm: number;
   fontFamily: string;
+  boldFontFamily: string;
   brandFontFamily: string;
   numericFontFamily: string;
   baseFontSizePt: number;
@@ -99,7 +101,7 @@ type SampleTicketLine =
   | { kind: "qr"; url: string }
   | { kind: "rule"; weight: "thin" | "thick" }
   | { kind: "spacer" }
-  | { kind: "text"; text: string; alignment: "left" | "center" | "right"; emphasis?: "bold" | "brand" | "total" }
+  | { kind: "text" | "checkItem" | "itemDetail"; text: string; alignment: "left" | "center" | "right"; emphasis?: "bold" | "brand" | "total" }
   | { kind: "row"; label: string; amount: string; emphasis?: "bold" | "brand" | "total" };
 
 type SettingsAlertRequest = {
@@ -125,6 +127,8 @@ const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
     let alignment: "left" | "center" | "right" = "left";
     let emphasis: "bold" | "brand" | "total" | undefined;
     let isRow = false;
+    let isCheckItem = false;
+    let isItemDetail = false;
 
     while (text.startsWith("[")) {
       if (text.startsWith("[LOGO]")) return [{ kind: "logo" }];
@@ -156,6 +160,12 @@ const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
         text = text.slice(text.startsWith("[BOLD]") ? 6 : 4).trimStart();
       } else if (text.startsWith("[SQUARE]")) {
         text = `[ ] ${text.slice(8).trimStart()}`;
+      } else if (text.startsWith("[CHECKITEM]")) {
+        isCheckItem = true;
+        text = text.slice(11).trimStart();
+      } else if (text.startsWith("[ITEMDETAIL]")) {
+        isItemDetail = true;
+        text = text.slice(12).trimStart();
       } else {
         break;
       }
@@ -165,7 +175,7 @@ const parseSampleTicketLines = (ticket: string): SampleTicketLine[] =>
       const tabIndex = text.indexOf("\t");
       return [{ kind: "row", label: text.slice(0, tabIndex), amount: text.slice(tabIndex + 1), emphasis }];
     }
-    return [{ kind: "text", text, alignment, emphasis }];
+    return [{ kind: isCheckItem ? "checkItem" : isItemDetail ? "itemDetail" : "text", text, alignment, emphasis }];
   });
 
 const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
@@ -174,7 +184,9 @@ const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
   const margins = layout.marginsMm;
   return typeof layout.columns === "number" && Number.isInteger(layout.columns) &&
     layout.columns > 0 &&
+    typeof layout.paperWidthMm === "number" &&
     typeof layout.fontFamily === "string" &&
+    typeof layout.boldFontFamily === "string" &&
     typeof layout.brandFontFamily === "string" &&
     typeof layout.numericFontFamily === "string" &&
     typeof layout.baseFontSizePt === "number" &&
@@ -193,11 +205,14 @@ const isReceiptLayout = (value: unknown): value is ReceiptLayout => {
     );
 };
 
-const getReceiptContentStyle = (layout: ReceiptLayout): CSSProperties => ({
-  marginLeft: `${layout.marginsMm.left}mm`,
-  marginRight: `${layout.marginsMm.right}mm`,
-  marginTop: `${layout.marginsMm.top}mm`,
-  marginBottom: `${layout.marginsMm.bottom}mm`,
+const getReceiptPaperStyle = (layout: ReceiptLayout): CSSProperties => ({
+  width: `${layout.paperWidthMm}mm`,
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  paddingTop: `${layout.marginsMm.top}mm`,
+  paddingBottom: `${layout.marginsMm.bottom}mm`,
+  backgroundColor: "#fff",
+  color: "#000",
 });
 
 const getReceiptTextStyle = (
@@ -209,16 +224,22 @@ const getReceiptTextStyle = (
     : emphasis === "total"
       ? layout.totalFontSizePt
       : layout.baseFontSizePt;
+  const isBold = emphasis === "bold" || emphasis === "total";
   return {
-    fontFamily: emphasis === "brand" ? layout.brandFontFamily : layout.fontFamily,
+    fontFamily: emphasis === "brand"
+      ? layout.brandFontFamily
+      : isBold
+        ? layout.boldFontFamily
+        : layout.fontFamily,
     fontSize: `${fontSize}pt`,
     fontWeight: emphasis === "brand"
       ? layout.brandFontWeight
-      : emphasis
+      : isBold
         ? layout.boldFontWeight
         : layout.fontWeight,
+    fontSynthesis: "none",
     lineHeight: 1.2,
-    overflowWrap: "anywhere",
+    whiteSpace: "pre-wrap",
   };
 };
 
@@ -238,8 +259,12 @@ const renderReceiptText = (
       <span
         key={`number-${match.index}`}
         style={{
-          fontFamily: layout.numericFontFamily,
-          fontWeight: emphasis ? layout.numericBoldFontWeight : layout.numericFontWeight,
+          fontFamily: emphasis === "brand" ? layout.brandFontFamily : layout.numericFontFamily,
+          fontWeight: emphasis === "brand"
+            ? layout.brandFontWeight
+            : emphasis
+              ? layout.numericBoldFontWeight
+              : layout.numericFontWeight,
         }}
       >
         {match[0]}
@@ -251,6 +276,138 @@ const renderReceiptText = (
   if (cursor < text.length) runs.push(text.slice(cursor));
   return runs;
 };
+
+const renderReceiptPreview = (ticket: string, layout: ReceiptLayout): ReactNode => (
+  <div style={getReceiptPaperStyle(layout)}>
+    {parseSampleTicketLines(ticket).map((line, index) => {
+      const contentMargins: CSSProperties = {
+        marginLeft: `${layout.marginsMm.left}mm`,
+        marginRight: `${layout.marginsMm.right}mm`,
+      };
+      if (line.kind === "logo") {
+        return (
+          <div key={index} style={{ ...contentMargins, display: "flex", justifyContent: "center" }}>
+            <img
+              src={bpDragonflyGardenLogo}
+              alt="BP Dragonfly Garden"
+              style={{
+                width: `${layout.logoSizeMm}mm`,
+                maxWidth: "100%",
+                height: "auto",
+                display: "block",
+                filter: "grayscale(1) contrast(1000%)",
+              }}
+            />
+          </div>
+        );
+      }
+      if (line.kind === "qr") {
+        return (
+          <div key={index} style={{ ...contentMargins, display: "flex", justifyContent: "center" }}>
+            <QRCodeSVG
+              value={line.url}
+              size={512}
+              level="M"
+              includeMargin
+              title="Facebook page QR code"
+              style={{
+                width: `${layout.qrCodeSizeMm}mm`,
+                maxWidth: "100%",
+                height: "auto",
+                imageRendering: "pixelated",
+              }}
+            />
+          </div>
+        );
+      }
+      if (line.kind === "rule") {
+        return (
+          <div
+            key={index}
+            aria-hidden="true"
+            style={{
+              marginLeft: `${-layout.marginsMm.left}mm`,
+              marginRight: `${-layout.marginsMm.right}mm`,
+              height: "1.2em",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{
+                width: "100%",
+                borderTop: `${line.weight === "thick" ? "0.2mm" : "0.1mm"} solid #111`,
+              }}
+            />
+          </div>
+        );
+      }
+      if (line.kind === "spacer") {
+        return <div key={index} style={{ ...contentMargins, height: "1mm" }} />;
+      }
+      if (line.kind === "row") {
+        return (
+          <div
+            key={index}
+            style={{
+              ...contentMargins,
+              ...getReceiptTextStyle(layout, line.emphasis),
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "2mm",
+            }}
+          >
+            <span>{renderReceiptText(line.label, layout, line.emphasis)}</span>
+            <span style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+              {renderReceiptText(line.amount, layout, line.emphasis)}
+            </span>
+          </div>
+        );
+      }
+      if (line.kind === "checkItem") {
+        return (
+          <div
+            key={index}
+            style={{
+              ...contentMargins,
+              ...getReceiptTextStyle(layout, line.emphasis),
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                flex: "none",
+                width: "1.2em",
+                height: "1.2em",
+                marginRight: "2px",
+                boxSizing: "border-box",
+                border: "0.7px solid #111",
+                borderRadius: "0.2em",
+              }}
+            />
+            <span>{renderReceiptText(line.text || "\u00a0", layout, line.emphasis)}</span>
+          </div>
+        );
+      }
+      const isItemDetail = line.kind === "itemDetail";
+      return (
+        <div
+          key={index}
+          style={{
+            ...contentMargins,
+            ...(isItemDetail ? { paddingLeft: "calc(1.2em + 2px)", boxSizing: "border-box" } : {}),
+            ...getReceiptTextStyle(layout, line.emphasis),
+            textAlign: line.alignment,
+          }}
+        >
+          {renderReceiptText(line.text || "\u00a0", layout, line.emphasis)}
+        </div>
+      );
+    })}
+  </div>
+);
 
 const DEFAULT_TEST_TICKET = [
   "BP DRAGONFLY GARDEN",
@@ -367,6 +524,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
   const [sampleTicket, setSampleTicket] = useState("");
   const [sampleTicketLoading, setSampleTicketLoading] = useState(false);
   const [sampleTicketError, setSampleTicketError] = useState<string | null>(null);
+  const [sampleTicketRefreshVersion, setSampleTicketRefreshVersion] = useState(0);
   const [printingSampleTicket, setPrintingSampleTicket] = useState(false);
   const [receiptCopiesSaving, setReceiptCopiesSaving] = useState(false);
   const [receiptCopiesSaved, setReceiptCopiesSaved] = useState(false);
@@ -409,9 +567,9 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
 
   useEffect(() => {
     const preview = ticketPreviewContentRef.current;
-    if (!preview) return;
+    if (!preview || !editingTicketPreview) return;
     preview.textContent = ticketPreviewValueRef.current;
-    if (editingTicketPreview) preview.focus();
+    preview.focus();
   }, [editingTicketPreview, receiptLayout]);
 
   useEffect(() => {
@@ -438,6 +596,14 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
       event.type === "CONNECTION_RESTORED"
     ) {
       void loadPrinterSettings();
+    }
+    if (
+      event.type === "SETTINGS_UPDATE" ||
+      event.type === "PRINTER_SETTINGS_UPDATE" ||
+      event.type === "DATA_REFRESH" ||
+      event.type === "CONNECTION_RESTORED"
+    ) {
+      setSampleTicketRefreshVersion((version) => version + 1);
     }
     if (event.type === "MENU_UPDATE") {
       const payload = event.payload as { reason?: string };
@@ -774,6 +940,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
     if (!hasLoadedPrinterSettingsRef.current) setPrinterSettingsLoading(true);
     try {
       const response = await fetch("/management/printers/settings", {
+        cache: "no-store",
         credentials: "include",
         headers: {
           "Content-Type": "application/json"
@@ -1185,7 +1352,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
       try {
         const response = await fetch(
           `/management/printers/sample-ticket?type=${encodeURIComponent(sampleTicketType)}`,
-          { credentials: "include", signal: controller.signal }
+          { cache: "no-store", credentials: "include", signal: controller.signal }
         );
         const data: SampleTicketResponse = await response.json();
         if (!response.ok || !data.success || typeof data.ticket !== "string") {
@@ -1209,7 +1376,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
 
     void loadSampleTicket();
     return () => controller.abort();
-  }, [sampleTicketType]);
+  }, [sampleTicketType, sampleTicketRefreshVersion]);
 
   // Don't reload printer settings when switching printers - use local state
   // Only reload on initial mount
@@ -2065,53 +2232,41 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
                         )}
                       </div>
 
-                      <div className="mt-3 w-full border bg-white">
+                      <div className="mt-3 flex w-full justify-center overflow-x-auto border bg-gray-100 p-2">
                         {receiptLayout ? (
-                          <div style={getReceiptContentStyle(receiptLayout)}>
-                            <pre
-                              ref={ticketPreviewContentRef}
-                              contentEditable={editingTicketPreview}
-                              suppressContentEditableWarning
-                              role={editingTicketPreview ? "textbox" : undefined}
-                              aria-label={editingTicketPreview ? t("m.editableTestTicketText") : undefined}
-                              aria-multiline={editingTicketPreview || undefined}
-                              spellCheck={false}
-                              onInput={(event) => {
-                                const enteredText = event.currentTarget.innerText.replace(/\r\n?/g, "\n");
-                                const nextText = enteredText.slice(0, 4000);
-                                if (nextText !== enteredText) {
-                                  event.currentTarget.textContent = nextText;
-                                  const range = document.createRange();
-                                  range.selectNodeContents(event.currentTarget);
-                                  range.collapse(false);
-                                  const selection = window.getSelection();
-                                  selection?.removeAllRanges();
-                                  selection?.addRange(range);
-                                }
-                                setTicketPreview(nextText);
-                              }}
-                              className="m-0 w-full whitespace-pre-wrap break-all bg-white font-mono focus:outline-none"
-                              style={getReceiptTextStyle(receiptLayout)}
-                            >
-                              {editingTicketPreview
-                                ? null
-                                : ticketPreview.split(/\r?\n/).map((line, index) => {
-                                    const isBrand = line.trim().toUpperCase() === "BP DRAGONFLY GARDEN";
-                                    const displayLine = isBrand ? "BP DRAGONFLY GARDEN" : line;
-                                    return (
-                                      <span
-                                        key={index}
-                                        style={{
-                                          ...getReceiptTextStyle(receiptLayout, isBrand ? "brand" : undefined),
-                                          display: "block",
-                                          textAlign: isBrand ? "center" : "left",
-                                        }}
-                                      >
-                                        {renderReceiptText(displayLine, receiptLayout, isBrand ? "brand" : undefined)}
-                                      </span>
-                                    );
-                                  })}
-                            </pre>
+                          <div className="w-fit border bg-white shadow-sm">
+                            {editingTicketPreview ? (
+                              <pre
+                                ref={ticketPreviewContentRef}
+                                contentEditable
+                                suppressContentEditableWarning
+                                role="textbox"
+                                aria-label={t("m.editableTestTicketText")}
+                                aria-multiline
+                                spellCheck={false}
+                                onInput={(event) => {
+                                  const enteredText = event.currentTarget.innerText.replace(/\r\n?/g, "\n");
+                                  const nextText = enteredText.slice(0, 4000);
+                                  if (nextText !== enteredText) {
+                                    event.currentTarget.textContent = nextText;
+                                    const range = document.createRange();
+                                    range.selectNodeContents(event.currentTarget);
+                                    range.collapse(false);
+                                    const selection = window.getSelection();
+                                    selection?.removeAllRanges();
+                                    selection?.addRange(range);
+                                  }
+                                  setTicketPreview(nextText);
+                                }}
+                                className="m-0 whitespace-pre-wrap bg-white focus:outline-none"
+                                style={{
+                                  ...getReceiptPaperStyle(receiptLayout),
+                                  ...getReceiptTextStyle(receiptLayout),
+                                  paddingLeft: `${receiptLayout.marginsMm.left}mm`,
+                                  paddingRight: `${receiptLayout.marginsMm.right}mm`,
+                                }}
+                              />
+                            ) : renderReceiptPreview(ticketPreview, receiptLayout)}
                           </div>
                         ) : (
                           <p role={receiptLayoutError ? "alert" : "status"} className="p-3 text-sm text-muted-foreground">
@@ -2156,7 +2311,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
                         </Select>
                       </div>
 
-                      <div className="mt-3 w-full border bg-white">
+                      <div className="mt-3 flex w-full justify-center overflow-x-auto border bg-gray-100 p-2">
                         {sampleTicketLoading ? (
                           <p role="status" className="p-3 text-sm text-muted-foreground">{t("m.loadingSample")}</p>
                         ) : sampleTicketError ? (
@@ -2166,85 +2321,7 @@ export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequ
                             {receiptLayoutError || t("m.loadingPrinterLayout")}
                           </p>
                         ) : (
-                          <div style={getReceiptContentStyle(receiptLayout)}>
-                            <div className="font-mono">
-                              {parseSampleTicketLines(sampleTicket).map((line, index) => {
-                                if (line.kind === "logo") {
-                                  return (
-                                    <div key={index} className="flex justify-center">
-                                      <img
-                                        src={bpDragonflyGardenLogo}
-                                        alt="BP Dragonfly Garden"
-                                        style={{
-                                          width: `${receiptLayout.logoSizeMm}mm`,
-                                          maxWidth: "100%",
-                                          height: "auto",
-                                          display: "block",
-                                          filter: "grayscale(1)",
-                                        }}
-                                      />
-                                    </div>
-                                  );
-                                }
-                                if (line.kind === "qr") {
-                                  return (
-                                    <div key={index} className="flex justify-center">
-                                      <QRCodeSVG
-                                        value={line.url}
-                                        size={512}
-                                        level="M"
-                                        includeMargin
-                                        title="Facebook page QR code"
-                                        style={{
-                                          width: `${receiptLayout.qrCodeSizeMm}mm`,
-                                          maxWidth: "100%",
-                                          height: "auto",
-                                        }}
-                                      />
-                                    </div>
-                                  );
-                                }
-                                if (line.kind === "rule") {
-                                  return (
-                                    <div
-                                      key={index}
-                                      aria-hidden="true"
-                                      style={{
-                                        borderTop: `${line.weight === "thick" ? 2 : 1}px solid #111`,
-                                        margin: `${(receiptLayout.baseFontSizePt * 25.4 * 1.2) / 144}mm 0`,
-                                      }}
-                                    />
-                                  );
-                                }
-                                if (line.kind === "spacer") {
-                                  return <div key={index} style={{ height: "1mm" }} />;
-                                }
-                                if (line.kind === "row") {
-                                  return (
-                                    <div
-                                      key={index}
-                                      className="flex justify-between gap-2"
-                                      style={getReceiptTextStyle(receiptLayout, line.emphasis)}
-                                    >
-                                      <span>{renderReceiptText(line.label, receiptLayout, line.emphasis)}</span>
-                                      <span className="whitespace-nowrap text-right">{renderReceiptText(line.amount, receiptLayout, line.emphasis)}</span>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <div
-                                    key={index}
-                                    style={{
-                                      ...getReceiptTextStyle(receiptLayout, line.emphasis),
-                                      textAlign: line.alignment,
-                                    }}
-                                  >
-                                    {renderReceiptText(line.text || "\u00a0", receiptLayout, line.emphasis)}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
+                          renderReceiptPreview(sampleTicket, receiptLayout)
                         )}
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-3">

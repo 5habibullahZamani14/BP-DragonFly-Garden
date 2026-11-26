@@ -4,36 +4,33 @@ const db = require("../database/db");
 const { formatChecklistTicket, formatFinalReceipt, formatSampleTicket, printSampleTicket } = require("./printerService");
 const {
   RECEIPT_LAYOUT,
-  RECEIPT_MARGIN_HUNDREDTHS_INCH,
-  RECEIPT_RIGHT_MARGIN_HUNDREDTHS_INCH
+  RECEIPT_MARGINS_HUNDREDTHS_INCH
 } = require("./receiptLayout");
 
 test.after(async () => {
   await db.close();
 });
 
-test("receipt layout keeps the right margin independently configurable", () => {
+test("receipt layout keeps each margin independently configurable", () => {
   const { marginsMm } = RECEIPT_LAYOUT;
   assert.equal(RECEIPT_LAYOUT.columns, 40);
-  assert.equal(RECEIPT_LAYOUT.fontFamily, "Oranienbaum");
+  assert.equal(RECEIPT_LAYOUT.paperWidthMm, 80);
+  assert.equal(RECEIPT_LAYOUT.fontFamily, "Roboto Condensed");
+  assert.equal(RECEIPT_LAYOUT.boldFontFamily, "Roboto Condensed");
   assert.equal(RECEIPT_LAYOUT.brandFontFamily, "Cinzel");
   assert.equal(RECEIPT_LAYOUT.numericFontFamily, "Bodoni Moda");
-  assert.equal(RECEIPT_LAYOUT.fontWeight, 400);
+  assert.equal(RECEIPT_LAYOUT.fontWeight, 300);
   assert.equal(RECEIPT_LAYOUT.boldFontWeight, 700);
-  assert.equal(RECEIPT_LAYOUT.brandFontWeight, 700);
+  assert.equal(RECEIPT_LAYOUT.brandFontWeight, 400);
   assert.equal(RECEIPT_LAYOUT.numericFontWeight, 400);
   assert.equal(RECEIPT_LAYOUT.numericBoldFontWeight, 700);
-  assert.equal(RECEIPT_LAYOUT.baseFontSizePt, 10);
+  assert.equal(RECEIPT_LAYOUT.baseFontSizePt, 9);
   assert.equal(RECEIPT_LAYOUT.brandFontSizePt, 20);
   assert.equal(RECEIPT_LAYOUT.totalFontSizePt, 13);
-  assert.equal(RECEIPT_LAYOUT.logoSizeMm, 30);
-  assert.equal(RECEIPT_LAYOUT.qrCodeSizeMm, 40);
-  assert.equal(marginsMm.left, marginsMm.top);
-  assert.equal(marginsMm.left, marginsMm.bottom);
-  assert.equal(RECEIPT_MARGIN_HUNDREDTHS_INCH, 7);
-  assert.equal(RECEIPT_RIGHT_MARGIN_HUNDREDTHS_INCH, 16);
-  assert.ok(Math.abs(marginsMm.left - 1.75) < 0.05);
-  assert.ok(Math.abs(marginsMm.right - 4.0) < 0.07);
+  assert.equal(RECEIPT_LAYOUT.logoSizeMm, 35);
+  assert.equal(RECEIPT_LAYOUT.qrCodeSizeMm, 30);
+  assert.deepEqual(marginsMm, { left: 0.0, right: 6.0, top: 1.75, bottom: 1.75 });
+  assert.deepEqual(RECEIPT_MARGINS_HUNDREDTHS_INCH, { left: 0, right: 24, top: 7, bottom: 7 });
 });
 
 test("sample order and add-on tickets use the real checklist formatter", () => {

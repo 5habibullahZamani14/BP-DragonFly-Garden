@@ -6,8 +6,7 @@ const QRCode = require("qrcode");
 const sharp = require("sharp");
 const {
   RECEIPT_LAYOUT,
-  RECEIPT_MARGIN_HUNDREDTHS_INCH,
-  RECEIPT_RIGHT_MARGIN_HUNDREDTHS_INCH,
+  RECEIPT_MARGINS_HUNDREDTHS_INCH,
 } = require("./receiptLayout");
 
 const SUBMITTED_MARKER = "DRAGONFLY_PRINT_JOB_SUBMITTED";
@@ -16,11 +15,12 @@ const RECEIPT_FONT_DIRECTORY = path.resolve(__dirname, "../../../../frontend/pub
 const RECEIPT_FONT_FILES = Object.freeze({
   brandRegular: path.join(RECEIPT_FONT_DIRECTORY, "Cinzel-Regular.ttf"),
   brandBold: path.join(RECEIPT_FONT_DIRECTORY, "Cinzel-Bold.ttf"),
-  textLight: path.join(RECEIPT_FONT_DIRECTORY, "Oranienbaum-Regular.ttf"),
-  textBold: path.join(RECEIPT_FONT_DIRECTORY, "AbhayaLibre-Bold.ttf"),
+  textLight: path.join(RECEIPT_FONT_DIRECTORY, "RobotoCondensed-Light.ttf"),
+  textBold: path.join(RECEIPT_FONT_DIRECTORY, "RobotoCondensed-Bold.ttf"),
   numericRegular: path.join(RECEIPT_FONT_DIRECTORY, "BodoniModa-Regular.ttf"),
   numericBold: path.join(RECEIPT_FONT_DIRECTORY, "BodoniModa-Bold.ttf"),
 });
+const brandFontStyle = RECEIPT_LAYOUT.brandFontWeight >= 700 ? "Bold" : "Regular";
 
 const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}) => {
   if (!printerName || !String(printerName).trim()) {
@@ -89,17 +89,17 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "  $document.DocumentName = 'Dragonfly Garden receipt'",
     "  $document.PrintController = New-Object System.Drawing.Printing.StandardPrintController",
     "  $margins = New-Object System.Drawing.Printing.Margins",
-    `  $margins.Left = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
-    `  $margins.Right = ${RECEIPT_RIGHT_MARGIN_HUNDREDTHS_INCH}`,
-    `  $margins.Top = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
-    `  $margins.Bottom = ${RECEIPT_MARGIN_HUNDREDTHS_INCH}`,
+    `  $margins.Left = ${RECEIPT_MARGINS_HUNDREDTHS_INCH.left}`,
+    `  $margins.Right = ${RECEIPT_MARGINS_HUNDREDTHS_INCH.right}`,
+    `  $margins.Top = ${RECEIPT_MARGINS_HUNDREDTHS_INCH.top}`,
+    `  $margins.Bottom = ${RECEIPT_MARGINS_HUNDREDTHS_INCH.bottom}`,
     "  $document.DefaultPageSettings.Margins = $margins",
     "  $document.OriginAtMargins = $false",
     "  $script:sourceLines = @($content.Trim([char[]]\"`r`n\") -split \"`r?`n\")",
     "  $script:printLineIndex = 0",
     `  $script:baseFontSize = ${RECEIPT_LAYOUT.baseFontSizePt}`,
-    "  $script:bodyLightFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Oranienbaum' } | Select-Object -First 1",
-    "  $script:bodyBoldFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Abhaya Libre' } | Select-Object -First 1",
+    "  $script:bodyLightFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Roboto Condensed Light' } | Select-Object -First 1",
+    "  $script:bodyBoldFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Roboto Condensed' } | Select-Object -First 1",
     "  $script:brandFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Cinzel' } | Select-Object -First 1",
     "  $script:numericFontFamily = $script:receiptFonts.Families | Where-Object { $_.Name -eq 'Bodoni Moda 11pt' } | Select-Object -First 1",
     "  if (-not $script:bodyLightFontFamily -or -not $script:bodyBoldFontFamily -or -not $script:brandFontFamily -or -not $script:numericFontFamily) { throw 'A bundled receipt font could not be loaded' }",
@@ -214,7 +214,7 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "          elseif ($line.StartsWith('[THIN_RULE]')) { $ruleThickness = 1; $line = $line.Substring(11).TrimStart() }",
     "          elseif ($line.StartsWith('[THICK_RULE]')) { $ruleThickness = 2; $line = $line.Substring(12).TrimStart() }",
     "          elseif ($line.StartsWith('[SPACER]')) { $isSpacer = $true; $line = $line.Substring(8).TrimStart() }",
-    "          elseif ($line.StartsWith('[BRAND]')) { $isBrand = $true; $fontFamily = $script:brandFontFamily; $lineFontSize = [single]($script:brandFontSize * $fontSize / $script:baseFontSize); $fontStyle = [System.Drawing.FontStyle]::Bold; $alignment = [System.Drawing.StringAlignment]::Center; $line = $line.Substring(7).TrimStart() }",
+    `          elseif ($line.StartsWith('[BRAND]')) { $isBrand = $true; $fontFamily = $script:brandFontFamily; $lineFontSize = [single]($script:brandFontSize * $fontSize / $script:baseFontSize); $fontStyle = [System.Drawing.FontStyle]::${brandFontStyle}; $alignment = [System.Drawing.StringAlignment]::Center; $line = $line.Substring(7).TrimStart() }`,
     "          elseif ($line.StartsWith('[TOTAL]')) { $lineFontSize = [single]($script:totalFontSize * $fontSize / $script:baseFontSize); $fontStyle = [System.Drawing.FontStyle]::Bold; $line = $line.Substring(7).TrimStart() }",
     "          elseif ($line.StartsWith('[ROW]')) { $isRow = $true; $line = $line.Substring(5).TrimStart() }",
     "          elseif ($line.StartsWith('[H1]')) { $fontStyle = [System.Drawing.FontStyle]::Bold; $line = $line.Substring(4).TrimStart() }",
@@ -235,8 +235,13 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "          if ($logoHeight -gt $contentHeight) { throw 'The logo is taller than the printable area' }",
     "          if ($y + $logoHeight -gt ($contentY + $contentHeight)) { $eventArgs.HasMorePages = $true; return }",
     "          $logoBounds = [System.Drawing.RectangleF]::new([single]($contentX + (($contentWidth - $logoWidth) / 2)), [single]$y, $logoWidth, $logoHeight)",
-    "          $eventArgs.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor",
-    "          $eventArgs.Graphics.DrawImage($logo, $logoBounds)",
+    "          $graphicsState = $eventArgs.Graphics.Save()",
+    "          try {",
+    "            $eventArgs.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic",
+    "            $eventArgs.Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality",
+    "            $eventArgs.Graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality",
+    "            $eventArgs.Graphics.DrawImage($logo, $logoBounds)",
+    "          } finally { $eventArgs.Graphics.Restore($graphicsState) }",
     "          $y += $logoHeight",
     "        } finally { $logo.Dispose() }",
     "        $script:printLineIndex++",
@@ -323,8 +328,6 @@ const submitWindowsPrintJob = async (ticket, printerName, filename, options = {}
     "            } finally { $checkBoxFont.Dispose() }",
     "          }",
     "          Draw-ReceiptTextMetrics $lineMetrics $lineContentX $y $lineContentWidth $drawHeight $alignment $eventArgs.Graphics",
-    "          # A one-dot overprint gives the Cinzel heading a heavier thermal-print weight.",
-    `          if ($isBrand) { Draw-ReceiptTextMetrics $lineMetrics ($contentX + [single]${RECEIPT_LAYOUT.brandOverprintOffsetHundredthsInch}) $y $contentWidth $drawHeight $alignment $eventArgs.Graphics }`,
     "        } finally { Dispose-ReceiptTextMetrics $lineMetrics }",
     "      }",
     "      $y += $drawHeight",
