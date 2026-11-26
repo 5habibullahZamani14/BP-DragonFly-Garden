@@ -19,9 +19,9 @@ const RECEIPT_LAYOUT = Object.freeze({
   numericBoldFontWeight: 700,
   marginsMm: Object.freeze({
     left: 0.0,
-    right: 6.0,
+    right: 12.0,
     top: 0.0,
-    bottom: 1.75,
+    bottom: 2.0,
   }),
 });
 

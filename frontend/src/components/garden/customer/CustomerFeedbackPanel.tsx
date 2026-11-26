@@ -503,7 +503,7 @@ export const CustomerFeedbackPanel = ({ qrCode, tableId, orders, notify, onSucce
       </Dialog>
 
       <Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
+        <DialogContent className="popup-media max-w-4xl border-none bg-black/90 p-1 flex items-center justify-center rounded-[28px] overflow-hidden [&>button]:text-white [&>button]:opacity-100 [&>button]:bg-transparent [&>button]:hover:bg-transparent [&>button]:data-[state=open]:bg-transparent [&>button_svg]:h-7 [&>button_svg]:w-7 [&>button]:focus:ring-0 [&>button]:focus:ring-offset-0 [&>button]:right-6 [&>button]:top-6 [&>button]:border-none [&>button_span]:hidden">
           <DialogTitle className="sr-only">{t("customer.feedback.imagePreview")}</DialogTitle>
           <DialogDescription className="sr-only">{t("customer.feedback.uploadedPhotoAlt")}</DialogDescription>
           {previewImage && (

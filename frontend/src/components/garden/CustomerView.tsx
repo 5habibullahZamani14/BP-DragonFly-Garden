@@ -1013,8 +1013,8 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
 
       {/* ══ DUPLICATE ORDER WARNING DIALOG ══════════════════════════════════ */}
       {showDuplicateWarning && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-5 backdrop-blur-md" style={{ background: "rgba(2,6,23,0.72)" }}>
-          <div className="w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up" style={{ background: "hsl(44,70%,97%)", boxShadow: "0 24px 60px rgba(0,0,0,0.35)" }}>
+        <div className="popup-backdrop fixed inset-0 z-[100] flex items-center justify-center px-5">
+          <div className="popup-surface w-full max-w-sm rounded-[28px] overflow-hidden animate-fade-up">
             <div className="px-6 pt-6 pb-4" style={{ background: "var(--gradient-hero)" }}>
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 mb-3">
                 <span className="text-2xl">⚠️</span>
@@ -2087,8 +2087,8 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
       {/* ============ CART SHEET ============ */}
       {cartOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog">
-          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-fade-up" onClick={() => setCartOpen(false)} />
-          <div className="relative w-full max-w-2xl h-[88vh] rounded-t-[32px] border border-white/60 bg-background/98 shadow-2xl backdrop-blur-2xl animate-slide-down md:rounded-[32px] md:mb-4 overflow-hidden">
+          <div className="popup-backdrop absolute inset-0 animate-fade-up" onClick={() => setCartOpen(false)} />
+          <div className="popup-surface relative w-full max-w-2xl h-[88vh] rounded-t-[32px] border border-white/60 animate-slide-down md:rounded-[32px] md:mb-4 overflow-hidden">
             <div className="relative flex h-full flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-5 pb-[calc(10rem+env(safe-area-inset-bottom))]">
                 <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-foreground/15" />
@@ -2243,12 +2243,11 @@ export const CustomerView = ({ qrCode, tableStorageKey, notify }: Props) => {
       {/* ── OPTION SELECTION BOTTOM SHEET ─────────────────────────────── */}
       {optionSheetItem && (
         <div
-          className="fixed inset-0 z-[200] flex items-end justify-center"
-          style={{ background: "rgba(2,6,23,0.72)", backdropFilter: "blur(14px)" }}
+          className="popup-backdrop fixed inset-0 z-[200] flex items-end justify-center"
           onClick={(e) => { if (e.target === e.currentTarget) setOptionSheetItem(null); }}
         >
           <div
-            className="w-full max-w-lg rounded-t-[32px] border border-white/60 bg-background/98 backdrop-blur-2xl overflow-hidden"
+            className="popup-surface w-full max-w-lg rounded-t-[32px] border border-white/60 overflow-hidden"
             style={{ boxShadow: "0 -8px 40px rgba(0,0,0,0.25)", maxHeight: "88dvh", display: "flex", flexDirection: "column" }}
           >
             {/* Sheet handle */}
