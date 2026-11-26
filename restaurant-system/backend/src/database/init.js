@@ -402,6 +402,19 @@ const initializeDatabase = async () => {
       reviewed_at DATETIME
     )
   `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS manager_system_issues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fingerprint TEXT NOT NULL UNIQUE,
+      source TEXT NOT NULL,
+      message TEXT NOT NULL,
+      action_tab TEXT NOT NULL DEFAULT 'logs',
+      occurrence_count INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      acknowledged_at DATETIME
+    )
+  `);
   if (!printerJobsReconciled) {
     await run(`
       UPDATE printer_jobs

@@ -28,6 +28,8 @@ const helmet = require("helmet");
 const { getAuthCookieValue } = require("./middleware/authCookies");
 const { verifyJwtToken, verifyCustomerTableToken } = require("./middleware/jwt-auth");
 const { redactSensitiveData, redactText } = require("./middleware/secretRedaction");
+const { createManagerIssueCaptureMiddleware } = require("./middleware/managerIssueCapture");
+const managerIssueService = require("./services/managerIssueService");
 const {
   isTrustedOrigin,
   isMicrosoftConnectivityOrigin,
@@ -231,6 +233,7 @@ const broadcast = (data) => {
     }
   });
 };
+managerIssueService.setBroadcast(broadcast);
 
 /*
  * Path to the compiled frontend. When the frontend is built with
@@ -272,6 +275,7 @@ app.use((req, res, next) => {
   res.json = body => json(redactSensitiveData(body));
   next();
 });
+app.use(createManagerIssueCaptureMiddleware(managerIssueService.reportManagerIssue));
 
 app.use((req, res, next) => {
   if (!isShuttingDown) return next();
@@ -432,6 +436,14 @@ const trackScheduledTask = (task) => {
     (err) => {
       scheduledTasks.inFlight.delete(taskPromise);
       console.error("Scheduled background task failed:", err);
+      void managerIssueService.reportManagerIssue({
+        fingerprint: "scheduled-background-task",
+        source: "Scheduled background task",
+        message: redactText(err && err.message ? err.message : "A scheduled task failed."),
+        actionTab: "logs",
+      }).catch((reportError) => {
+        console.error("Could not save manager alert for a scheduled task failure:", reportError);
+      });
     }
   );
 };
@@ -512,14 +524,30 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Handle uncaught exceptions to prevent zombie processes
+const reportFatalProcessIssueAndShutdown = async (signal, error) => {
+  const message = error instanceof Error ? error.message : String(error || "Unknown process error");
+  try {
+    await managerIssueService.reportManagerIssue({
+      fingerprint: `process:${signal}`,
+      source: signal === "UNCAUGHT_EXCEPTION" ? "Uncaught server exception" : "Unhandled server rejection",
+      message: redactText(message),
+      actionTab: "logs",
+    });
+  } catch (reportError) {
+    console.error("Could not save manager alert for a fatal server error:", reportError);
+  }
+  await gracefulShutdown(signal);
+};
+
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  gracefulShutdown('UNCAUGHT_EXCEPTION');
+  console.error('Uncaught Exception:', redactText(err && err.message ? err.message : "Unknown error"));
+  void reportFatalProcessIssueAndShutdown('UNCAUGHT_EXCEPTION', err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  gracefulShutdown('UNHANDLED_REJECTION');
+  const message = reason instanceof Error ? reason.message : String(reason || "Unknown rejection");
+  console.error('Unhandled Rejection at:', promise, 'reason:', redactText(message));
+  void reportFatalProcessIssueAndShutdown('UNHANDLED_REJECTION', reason);
 });
 
 /*

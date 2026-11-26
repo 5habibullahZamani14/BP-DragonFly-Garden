@@ -102,6 +102,11 @@ type SampleTicketLine =
   | { kind: "text"; text: string; alignment: "left" | "center" | "right"; emphasis?: "bold" | "brand" | "total" }
   | { kind: "row"; label: string; amount: string; emphasis?: "bold" | "brand" | "total" };
 
+type SettingsAlertRequest = {
+  section: "printers" | "printer-job-review";
+  sequence: number;
+};
+
 const SAMPLE_TICKET_TYPES: { value: SampleTicketType; labelKey: string }[] = [
   { value: "order_customer", labelKey: "m.orderReceiptCustomer" },
   { value: "order_kitchen", labelKey: "m.orderReceiptKitchen" },
@@ -265,7 +270,7 @@ const getErrorStatus = (error: unknown) =>
 const isCardSize = (value: string): value is "normal" | "large" | "extra_large" =>
   value === "normal" || value === "large" || value === "extra_large";
 
-export const SettingsTab = () => {
+export const SettingsTab = ({ alertRequest }: { alertRequest?: SettingsAlertRequest | null }) => {
   const { t } = useTranslation();
   const [hours, setHours] = useState({
     start: "09:00",
@@ -375,7 +380,20 @@ export const SettingsTab = () => {
   const [dailySalesReportCopies, setDailySalesReportCopies] = useState(1);
   const [printingDailyReport, setPrintingDailyReport] = useState(false);
   const [printingTestTicket, setPrintingTestTicket] = useState(false);
-  const [activeAccordion, setActiveAccordion] = useState<string | undefined>();
+  const [activeAccordion, setActiveAccordion] = useState<string | undefined>(
+    alertRequest ? "printers" : undefined
+  );
+  const [activePrinterAccordion, setActivePrinterAccordion] = useState<string[]>(
+    alertRequest?.section === "printer-job-review" ? ["printer-job-review"] : []
+  );
+
+  useEffect(() => {
+    if (!alertRequest) return;
+    setActiveAccordion("printers");
+    setActivePrinterAccordion([
+      alertRequest.section === "printer-job-review" ? "printer-job-review" : "printer-settings",
+    ]);
+  }, [alertRequest]);
 
   // Confirmation dialog state
 
@@ -1721,7 +1739,12 @@ export const SettingsTab = () => {
           </div>
         </AccordionTrigger>
         <AccordionContent className="px-4 pt-3 pb-5 sm:px-6 sm:pt-4 sm:pb-6 border-t">
-          <Accordion type="multiple" className="w-full">
+          <Accordion
+            type="multiple"
+            className="w-full"
+            value={activePrinterAccordion}
+            onValueChange={setActivePrinterAccordion}
+          >
             {/* ── Printer Settings ───────────────────────────────────────────── */}
             <AccordionItem value="printer-settings" className="border rounded-lg bg-card mb-4">
               <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">

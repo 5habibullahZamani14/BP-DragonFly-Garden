@@ -22,6 +22,7 @@ test("customers receive public data changes and only their own table events", ()
   assert.equal(clientShouldReceive(client, { type: "FEEDBACK_RESPONSE", payload: { table_id: 8 } }), false);
   assert.equal(clientShouldReceive(client, { type: "NEW_PAYMENT", payload: { table_id: 7, payments: [{ amount_paid: 20 }] } }), false);
   assert.equal(clientShouldReceive(client, { type: "MANAGER_SECRET_EVENT", payload: { table_id: 7 } }), false);
+  assert.equal(clientShouldReceive(client, { type: "MANAGER_ISSUE_UPDATED" }), false);
 });
 
 test("customer realtime order payloads exclude private fields and feedback details", () => {
@@ -63,6 +64,7 @@ test("payment counters receive workflow and public data updates, not manager-onl
   assert.equal(clientShouldReceive(client, { type: "FEEDBACK_UPDATE" }), false);
   assert.equal(clientShouldReceive(client, { type: "MENU_ADMIN_UPDATE" }), false);
   assert.equal(clientShouldReceive(client, { type: "PRINTER_SETTINGS_UPDATE" }), false);
+  assert.equal(clientShouldReceive(client, { type: "MANAGER_ISSUE_UPDATED" }), false);
   assert.equal(clientShouldReceive(client, { type: "EMPLOYEE_UPDATE" }), false);
 });
 
@@ -86,5 +88,6 @@ test("manager sockets receive all events while closed sockets receive none", () 
   assert.equal(clientShouldReceive(manager, { type: "FEEDBACK_UPDATE" }), true);
   assert.equal(clientShouldReceive(manager, { type: "MENU_ADMIN_UPDATE" }), true);
   assert.equal(clientShouldReceive(manager, { type: "PRINTER_SETTINGS_UPDATE" }), true);
+  assert.equal(clientShouldReceive(manager, { type: "MANAGER_ISSUE_UPDATED" }), true);
   assert.equal(clientShouldReceive(closedManager, { type: "EMPLOYEE_UPDATE" }), false);
 });

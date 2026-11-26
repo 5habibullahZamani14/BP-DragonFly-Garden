@@ -34,6 +34,7 @@ const { ROLES } = require("../middleware/role-based-access");
 const { clearAuthCookie } = require("../middleware/authCookies");
 const { revokeStoredSession } = require("../services/sessionRevocation");
 const { RECEIPT_LAYOUT } = require("../services/receiptLayout");
+const managerIssueService = require("../services/managerIssueService");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const fs = require("fs");
@@ -885,6 +886,54 @@ router.get("/printers/jobs/review", requireManagerToken, async (_req, res) => {
   } catch (error) {
     console.error("Could not load printer jobs needing review:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get("/system-issues", requireManagerToken, async (_req, res) => {
+  try {
+    const issues = await managerIssueService.listManagerIssues();
+    res.json({ success: true, issues });
+  } catch (error) {
+    console.error("Could not load manager system alerts:", error);
+    res.status(500).json({ success: false, message: "Could not load system alerts." });
+  }
+});
+
+router.post("/system-issues/client", requireManagerToken, async (req, res) => {
+  const { kind, message } = req.body || {};
+  if (!["runtime_error", "unhandled_rejection"].includes(kind) || typeof message !== "string" || !message.trim()) {
+    return res.status(400).json({ success: false, message: "A valid manager interface error is required." });
+  }
+
+  try {
+    const issue = await managerIssueService.reportManagerIssue({
+      fingerprint: `manager-interface:${kind}`,
+      source: kind === "runtime_error" ? "Manager interface runtime error" : "Manager interface async error",
+      message: message.trim().slice(0, 500),
+      actionTab: "logs",
+    });
+    res.status(201).json({ success: true, issue });
+  } catch (error) {
+    console.error("Could not save manager interface alert:", error);
+    res.status(500).json({ success: false, message: "Could not save the system alert." });
+  }
+});
+
+router.post("/system-issues/:id/acknowledge", requireManagerToken, async (req, res) => {
+  const issueId = Number(req.params.id);
+  if (!Number.isSafeInteger(issueId) || issueId < 1) {
+    return res.status(400).json({ success: false, message: "Invalid system alert ID." });
+  }
+
+  try {
+    const acknowledged = await managerIssueService.acknowledgeManagerIssue(issueId);
+    if (!acknowledged) {
+      return res.status(404).json({ success: false, message: "System alert was not found or was already reviewed." });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`Could not acknowledge manager system alert ${issueId}:`, error);
+    res.status(500).json({ success: false, message: "Could not acknowledge the system alert." });
   }
 });
 

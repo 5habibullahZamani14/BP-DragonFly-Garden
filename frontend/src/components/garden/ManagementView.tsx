@@ -62,14 +62,31 @@ interface ManagementViewProps {
 
 const MANAGER_TABS = ["overview", "settings", "employees", "inventory", "logs", "tables", "finance", "menu", "feedback"] as const;
 type ManagerTab = typeof MANAGER_TABS[number];
+type ManagerSystemIssue = {
+  id: number;
+  source: string;
+  message: string;
+  actionTab: ManagerTab;
+  occurrenceCount: number;
+};
+type PrinterJobAlert = {
+  id: number;
+  orderId: number | null;
+  jobType: string;
+  printerName: string;
+  status: "submitting" | "uncertain";
+  errorMessage: string | null;
+};
 type ManagerNotification = {
   id: string;
-  type: "low_stock" | "daily_sales_missed";
+  type: "low_stock" | "daily_sales_missed" | "printer_issue" | "system_issue";
   title: string;
   message: string;
   action?: () => void;
   printAction?: () => void;
   ignoreAction?: () => void;
+  reviewAction?: () => void;
+  occurrenceCount?: number;
 };
 
 const MANAGER_SESSION_LOCK_KEY = "managerSessionLock";
@@ -180,15 +197,20 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
 
   const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
   const [inventoryAction, setInventoryAction] = useState<{subTab?: "overview" | "stock" | "recipes", editItemId?: number} | null>(null);
+  const [settingsAlertRequest, setSettingsAlertRequest] = useState<{
+    section: "printers" | "printer-job-review";
+    sequence: number;
+  } | null>(null);
 
   const loadNotifications = async () => {
+    let lowStockNotifications: ManagerNotification[] = [];
     try {
       const invData = await fetchInventory();
       const lowStock = (invData || []).filter((item: InventoryItem) => {
         const percent = Math.min(100, Math.max(0, (item.current_stock / item.max_stock) * 100));
         return percent <= item.low_stock_threshold_percent;
       });
-      const lowStockNotifications: ManagerNotification[] = lowStock.map((item: InventoryItem) => ({
+      lowStockNotifications = lowStock.map((item: InventoryItem) => ({
         id: `inv-${item.id}`,
         type: "low_stock",
         title: t("manager.lowStockTitle"),
@@ -198,68 +220,127 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           goToTab("inventory");
         }
       }));
-
-      let missedNotifications: ManagerNotification[] = [];
-      try {
-        const response = await fetch("/management/printers/daily-sales-report/status", { credentials: "include" });
-        const data = await response.json();
-        if (response.ok && data.success) {
-          missedNotifications = (data.reports || [])
-            .filter((report: { status: string }) => report.status === "missed")
-            .map((report: { sales_date: string; order_count?: number; total_sales?: number; error_message?: string }) => ({
-              id: `daily-sales-${report.sales_date}`,
-              type: "daily_sales_missed" as const,
-              title: t("manager.dailySales.missedTitle", { date: report.sales_date }),
-              message: t("manager.dailySales.missedMessage"),
-              printAction: () => {
-                void (async () => {
-                  try {
-                    const printResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/print`, {
-                      method: "POST",
-                      credentials: "include",
-                    });
-                    const printData = await printResponse.json();
-                    if (!printResponse.ok || !printData.success) throw new Error(printData.message || "Print failed");
-                    notify("success", t("manager.dailySales.printSuccess"));
-                  } catch (error) {
-                    console.error("Failed to print missed daily sales receipt:", error);
-                    notify("error", t("manager.dailySales.printFailure"));
-                  } finally {
-                    void loadNotifications();
-                  }
-                })();
-              },
-              ignoreAction: () => {
-                void (async () => {
-                  try {
-                    const ignoreResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/ignore`, {
-                      method: "POST",
-                      credentials: "include",
-                    });
-                    const ignoreData = await ignoreResponse.json();
-                    if (!ignoreResponse.ok || !ignoreData.success) throw new Error(ignoreData.message || "Could not dismiss the alert");
-                    notify("success", t("manager.dailySales.ignoreSuccess"));
-                  } catch (error) {
-                    console.error("Failed to dismiss missed daily sales notification:", error);
-                    notify("error", t("manager.dailySales.ignoreFailure"));
-                  } finally {
-                    void loadNotifications();
-                  }
-                })();
-              },
-            }));
-        }
-      } catch (error) {
-        safeConsoleError("Failed to load missed daily sales receipts", error);
-      }
-
-      const combined = [...missedNotifications, ...lowStockNotifications];
-      setNotifications(combined);
-      return combined.length > 0;
-    } catch (e) {
-      safeConsoleError("Failed to load manager notifications", e);
-      return false;
+    } catch (error) {
+      safeConsoleError("Failed to load low stock notifications", error);
     }
+
+    let missedNotifications: ManagerNotification[] = [];
+    try {
+      const response = await fetch("/management/printers/daily-sales-report/status", { credentials: "include" });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        missedNotifications = (data.reports || [])
+          .filter((report: { status: string }) => report.status === "missed")
+          .map((report: { sales_date: string; order_count?: number; total_sales?: number; error_message?: string }) => ({
+            id: `daily-sales-${report.sales_date}`,
+            type: "daily_sales_missed" as const,
+            title: t("manager.dailySales.missedTitle", { date: report.sales_date }),
+            message: t("manager.dailySales.missedMessage"),
+            printAction: () => {
+              void (async () => {
+                try {
+                  const printResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/print`, {
+                    method: "POST",
+                    credentials: "include",
+                  });
+                  const printData = await printResponse.json();
+                  if (!printResponse.ok || !printData.success) throw new Error(printData.message || "Print failed");
+                  notify("success", t("manager.dailySales.printSuccess"));
+                } catch (error) {
+                  safeConsoleError("Failed to print missed daily sales receipt", error);
+                  notify("error", t("manager.dailySales.printFailure"));
+                } finally {
+                  void loadNotifications();
+                }
+              })();
+            },
+            ignoreAction: () => {
+              void (async () => {
+                try {
+                  const ignoreResponse = await fetch(`/management/printers/daily-sales-report/${encodeURIComponent(report.sales_date)}/ignore`, {
+                    method: "POST",
+                    credentials: "include",
+                  });
+                  const ignoreData = await ignoreResponse.json();
+                  if (!ignoreResponse.ok || !ignoreData.success) throw new Error(ignoreData.message || "Could not dismiss the alert");
+                  notify("success", t("manager.dailySales.ignoreSuccess"));
+                } catch (error) {
+                  safeConsoleError("Failed to dismiss missed daily sales notification", error);
+                  notify("error", t("manager.dailySales.ignoreFailure"));
+                } finally {
+                  void loadNotifications();
+                }
+              })();
+            },
+          }));
+      }
+    } catch (error) {
+      safeConsoleError("Failed to load missed daily sales receipts", error);
+    }
+
+    let printerNotifications: ManagerNotification[] = [];
+    try {
+      const response = await fetch("/management/printers/jobs/review", { credentials: "include" });
+      const data: { success: boolean; jobs?: PrinterJobAlert[] } = await response.json();
+      if (!response.ok || !data.success) throw new Error(`Request failed (HTTP ${response.status})`);
+      printerNotifications = (data.jobs || []).map((job) => ({
+        id: `printer-job-${job.id}`,
+        type: "printer_issue",
+        title: t("manager.printerIssueTitle"),
+        message: [
+          job.orderId ? `Order #${job.orderId}` : job.jobType.replace(/_/g, " "),
+          job.printerName,
+          job.errorMessage || t("manager.printerIssueFallback"),
+        ].filter(Boolean).join(" · "),
+        action: () => openSettingsAlert("printer-job-review"),
+      }));
+    } catch (error) {
+      safeConsoleError("Failed to load printer alerts", error);
+    }
+
+    let systemIssueNotifications: ManagerNotification[] = [];
+    try {
+      const response = await fetch("/management/system-issues", { credentials: "include" });
+      const data: { success: boolean; issues?: ManagerSystemIssue[] } = await response.json();
+      if (!response.ok || !data.success) throw new Error(`Request failed (HTTP ${response.status})`);
+      systemIssueNotifications = (data.issues || []).map((issue) => ({
+        id: `system-issue-${issue.id}`,
+        type: "system_issue",
+        title: t("manager.systemIssueTitle"),
+        message: `${issue.source}: ${issue.message}`,
+        occurrenceCount: issue.occurrenceCount,
+        action: () => {
+          if (issue.actionTab === "settings") openSettingsAlert("printers");
+          else goToTab(issue.actionTab);
+        },
+        reviewAction: () => {
+          void (async () => {
+            try {
+              const reviewResponse = await fetch(`/management/system-issues/${issue.id}/acknowledge`, {
+                method: "POST",
+                credentials: "include",
+              });
+              if (!reviewResponse.ok) throw new Error(`Request failed (HTTP ${reviewResponse.status})`);
+              void loadNotifications();
+            } catch (error) {
+              safeConsoleError(`Failed to review system alert ${issue.id}`, error);
+              notify("error", t("manager.issueReviewFailed"));
+            }
+          })();
+        },
+      }));
+    } catch (error) {
+      safeConsoleError("Failed to load system alerts", error);
+    }
+
+    const combined = [
+      ...systemIssueNotifications,
+      ...printerNotifications,
+      ...missedNotifications,
+      ...lowStockNotifications,
+    ];
+    setNotifications(combined);
+    return combined.length > 0;
   };
 
   useEffect(() => {
@@ -286,6 +367,8 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     "DATA_REFRESH",
     "DAILY_SALES_REPORT_UPDATE",
     "PRINT_JOB_REVIEW_REQUIRED",
+    "PRINT_JOB_REVIEW_UPDATED",
+    "MANAGER_ISSUE_UPDATED",
     "CONNECTION_RESTORED",
   ], (event) => {
     if (!isLoggedIn) return;
@@ -296,11 +379,14 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
       event.type === "INVENTORY_UPDATE" ||
       event.type === "DATA_REFRESH" ||
       event.type === "DAILY_SALES_REPORT_UPDATE" ||
+      event.type === "PRINT_JOB_REVIEW_UPDATED" ||
+      event.type === "MANAGER_ISSUE_UPDATED" ||
       event.type === "CONNECTION_RESTORED"
     ) {
       void loadNotifications();
     }
     if (event.type === "PRINT_JOB_REVIEW_REQUIRED") {
+      void loadNotifications();
       const payload = event.payload as { orderId?: number; submissionStarted?: boolean };
       const orderLabel = payload.orderId ? ` for order #${payload.orderId}` : "";
       const notification = payload.submissionStarted
@@ -374,6 +460,51 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
     setActiveTab(tab);
     sessionStorage.setItem("mgr_active_tab", tab);
   };
+
+  const openSettingsAlert = (section: "printers" | "printer-job-review") => {
+    setSettingsAlertRequest((current) => ({
+      section,
+      sequence: (current?.sequence || 0) + 1,
+    }));
+    goToTab("settings");
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const reportClientIssue = (kind: "runtime_error" | "unhandled_rejection", message: string) => {
+      void fetch("/management/system-issues/client", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, message: message.slice(0, 500) }),
+      }).then((response) => {
+        if (!response.ok) throw new Error(`Request failed (HTTP ${response.status})`);
+      }).catch((error) => {
+        safeConsoleError("Failed to report a manager interface error", error);
+      });
+    };
+
+    const handleRuntimeError = (event: ErrorEvent) => {
+      reportClientIssue("runtime_error", event.message || "Unhandled browser runtime error.");
+    };
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message = reason instanceof Error
+        ? reason.message
+        : typeof reason === "string"
+          ? reason
+          : "Unhandled asynchronous error.";
+      reportClientIssue("unhandled_rejection", message);
+    };
+
+    window.addEventListener("error", handleRuntimeError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", handleRuntimeError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
+  }, [isLoggedIn]);
 
   if (!isLoggedIn) {
     return (
@@ -577,9 +708,27 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                                 </div>
                               </div>
                             </div>
+                          ) : notif.type === "system_issue" ? (
+                            <div className="flex gap-3 items-start">
+                              <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                              <div className="min-w-0 flex-1">
+                                <button onClick={notif.action} className="w-full text-left">
+                                  <p className="text-sm font-medium text-gray-800">{notif.title}</p>
+                                  <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
+                                  {notif.occurrenceCount && notif.occurrenceCount > 1 && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {t("manager.issueOccurrences", { count: notif.occurrenceCount })}
+                                    </p>
+                                  )}
+                                </button>
+                                <Button size="sm" variant="outline" className="h-8 mt-2" onClick={notif.reviewAction}>
+                                  {t("manager.markIssueReviewed")}
+                                </Button>
+                              </div>
+                            </div>
                           ) : (
                             <button onClick={notif.action} className="w-full text-left flex gap-3 items-start">
-                              <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                              <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${notif.type === "printer_issue" ? "text-red-500" : "text-orange-500"}`} />
                               <div>
                                 <p className="text-sm font-medium text-gray-800">{notif.title}</p>
                                 <p className="text-xs text-gray-500 mt-1 leading-snug">{notif.message}</p>
@@ -669,7 +818,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           </div>
         )}
 
-        {activeTab === "settings" && <SettingsTab />}
+        {activeTab === "settings" && <SettingsTab alertRequest={settingsAlertRequest} />}
         {activeTab === "employees" && <EmployeesTab />}
         {activeTab === "inventory" && <InventoryTab initialSubTab={inventoryAction?.subTab} initialEditItemId={inventoryAction?.editItemId} onInventoryChanged={loadNotifications} />}
         {activeTab === "tables" && <TablesTab />}

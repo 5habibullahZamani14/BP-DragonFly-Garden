@@ -138,10 +138,9 @@ test("Windows receipt jobs render final-receipt logo, QR, and aligned amount row
     assert.ok(script.includes("System.Drawing.StringAlignment]::Center"));
     assert.ok(script.includes("System.Drawing.StringAlignment]::Far"));
     assert.ok(script.includes("System.Drawing.FontStyle]::Bold"));
-    assert.ok(script.includes("$eventArgs.Graphics.DrawImage($logo, $logoBounds, 0, 0"));
-    assert.ok(script.includes("System.Drawing.Imaging.ColorMatrix"));
-    assert.ok(script.includes("$logoAttributes.SetColorMatrix($colorMatrix)"));
-    assert.ok(script.includes("$logoBounds = [System.Drawing.Rectangle]::new"));
+    assert.ok(script.includes("$eventArgs.Graphics.DrawImage($logo, $logoBounds)"));
+    assert.ok(script.includes("$logoBounds = [System.Drawing.RectangleF]::new"));
+    assert.ok(!script.includes("$logoAttributes"));
     assert.ok(script.includes("InterpolationMode]::NearestNeighbor"));
     assert.ok(script.includes("$eventArgs.Graphics.DrawLine($pen"));
     assert.ok(script.includes("$logoPath = '"));
