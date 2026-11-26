@@ -325,9 +325,10 @@ const orderRoutes = (broadcast) => {
       return res.status(404).json({ error: "Order not found" });
     }
     
+    let finalReceiptCopies;
     try {
       const copyCounts = await printerService.getReceiptCopyCounts();
-      const finalReceiptCopies = copyCounts.final_receipt;
+      finalReceiptCopies = copyCounts.final_receipt;
       
       await printCopies(finalReceiptCopies, async () => {
         const printResult = await printerService.printFinalReceipt(order, cashierName || "Cashier");

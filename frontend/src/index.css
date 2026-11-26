@@ -309,6 +309,31 @@
     -webkit-backdrop-filter: blur(22px) saturate(115%);
   }
 
+  .popup-frame-header {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-bottom: 1px solid hsl(40 85% 78% / 0.75);
+    background: linear-gradient(110deg, hsl(46 100% 91%), hsl(12 100% 97%) 55%, hsl(147 62% 94%));
+  }
+  .popup-frame-header::after {
+    position: absolute;
+    z-index: -1;
+    top: -2.5rem;
+    right: -2rem;
+    width: 10rem;
+    height: 10rem;
+    border-radius: 9999px;
+    background: hsl(0 0% 100% / 0.65);
+    content: "";
+    filter: blur(1.5rem);
+    pointer-events: none;
+  }
+  .popup-frame-footer {
+    border-top: 1px solid hsl(40 85% 78% / 0.65);
+    background-color: hsl(var(--card));
+  }
+
   .popup-media {
     background-color: rgb(0 0 0 / 90%);
     background-image: none;

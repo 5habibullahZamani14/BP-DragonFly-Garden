@@ -845,8 +845,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
           }}
         >
           <DialogContent className="!h-auto !max-h-[90vh] !w-[min(94vw,36rem)] !max-w-none flex flex-col gap-0 overflow-y-auto rounded-2xl border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50 !p-0 sm:!p-0 shadow-2xl">
-            <div className="relative overflow-hidden rounded-t-2xl border-b border-amber-200 bg-gradient-to-r from-amber-100 via-rose-50 to-emerald-100 p-6 pr-14">
-              <div aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/60 blur-2xl" />
+            <div className="popup-frame-header p-6 pr-14">
               <DialogHeader className="relative flex-row items-start gap-4 space-y-0 text-left">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-200 bg-white/80 text-rose-600 shadow-sm">
                   <Power className="h-6 w-6" />
@@ -867,7 +866,7 @@ export const ManagementView = ({ notify }: ManagementViewProps) => {
                 </p>
               </div>
             </div>
-            <DialogFooter className="sticky bottom-0 mt-auto flex flex-col gap-2 border-t border-amber-200/70 bg-white/90 px-6 py-4 sm:flex-row sm:justify-end sm:space-x-0">
+            <DialogFooter className="popup-frame-footer sticky bottom-0 mt-auto flex flex-col gap-2 px-6 py-4 sm:flex-row sm:justify-end sm:space-x-0">
               <Button
                 variant="outline"
                 className="w-full rounded-full border-amber-200 px-5 hover:bg-amber-50 sm:w-auto"

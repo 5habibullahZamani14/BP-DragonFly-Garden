@@ -137,12 +137,19 @@ export const SettingsModal = ({ restrictLanguages = false }: { restrictLanguages
 
       <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] rounded-2xl p-0 overflow-hidden flex flex-col">
         {/* Header — stays fixed */}
-        <div className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0" style={{ background: "var(--gradient-soft)" }}>
-          <DialogHeader>
-            <DialogTitle className="font-1 text-2xl">{t("settings.displayTitle")}</DialogTitle>
-            <DialogDescription className="text-sm text-foreground/60 mt-1">
-              {t("settings.displayDesc")}
-            </DialogDescription>
+        <div className="popup-frame-header shrink-0 px-6 py-5 pr-14">
+          <DialogHeader className="relative flex-row items-start gap-4 space-y-0 text-left">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-200 bg-white/80 text-emerald-800 shadow-sm">
+              <Settings className="h-6 w-6" />
+            </div>
+            <div className="space-y-2">
+              <DialogTitle className="font-1 text-xl font-bold text-slate-900">
+                {t("settings.displayTitle")}
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-6 text-slate-600">
+                {t("settings.displayDesc")}
+              </DialogDescription>
+            </div>
           </DialogHeader>
         </div>
 
